@@ -32,19 +32,26 @@ gor-mobile init
 
 ## What the wizard does
 
-11 idempotent steps (re-run anytime to repair drift):
+`gor-mobile init` runs 11 idempotent steps. Re-run anytime to repair drift — every step checks current state first, and nothing outside the managed sections is ever touched.
 
-1. Checks `git / curl / jq / brew`
-2. Installs Android platform tools (optional)
-3. Installs LM Studio + pulls default models: Qwen3-Coder-30B-A3B, Gemma-4-26B-A4B
-4. Creates `~/.config/gor-mobile/secrets.env` (chmod 600)
-5. Clones the rules pack to `~/.gor-mobile/rules/` (default or your fork)
-6. Merges a SessionStart hook into `~/.claude/settings.json` (preserves existing hooks)
-7. Copies `/brainstorm /plan /implement /tdd /review /test-ui /verify /debug /finishing-branch` into `~/.claude/commands/`
-8. Copies `gor-mobile-advisor` + `code-reviewer` agents
-9. Registers `google-dev-knowledge` in `~/.claude/mcp.json`
-10. Adds a managed section to `~/.claude/CLAUDE.md` (between markers — nothing else touched)
-11. Sanity check: round-trip to LM Studio
+Flags: `--dry-run` prints what would change; `--yes` / `-y` assumes yes to every prompt (non-interactive); `--skip-sanity` skips step 11; `--rules <git-url>` overrides the default rules pack URL.
+
+1. **Base dependencies.** Verifies `git`, `curl`, `jq` are on PATH; warns if `brew` is missing. Missing hard deps abort the wizard.
+2. **Google Android CLI agent** (https://developer.android.com/tools/agents). Detects the `android` binary. If absent, prints a short explanation of what the CLI is and why `gor-mobile` needs it, then offers to open the install page in your default browser and waits for you to finish the install before re-detecting.
+3. **LM Studio + local models.** Installs LM Studio via `brew --cask` if missing. Then snapshots the installed LLMs (`lms ls --json`) and — unless `--yes` — offers an interactive per-role picker: `impl`, `review`, `deep`. Each choice is shown as a numbered menu of installed models with the current default marked, plus an "enter custom model id" option. Non-default picks are saved to `~/.config/gor-mobile/config.json → .models`, expanded into role groups:
+    - `impl` → `{impl, tdd-red, routine-debug}`
+    - `review` → `{review, analyze}`
+    - `deep` → `{review-deep, vision}`
+
+    Any selected or default model that isn't yet installed is offered for `lms get`.
+4. **Secrets template.** Creates `~/.config/gor-mobile/secrets.env` with `chmod 600` (skipped if it already exists — never overwrites your keys).
+5. **Rules pack.** Clones the default rules pack (or your `--rules <url>`) to `~/.gor-mobile/rules/`. If the directory already has `.git`, runs `git pull --ff-only` instead. Falls back to the minimal bundled `rules-default/` if the clone fails. Records the source URL + ref in `~/.config/gor-mobile/config.json`.
+6. **SessionStart hook.** Copies `session-start-hook.sh` + the snippet to `~/.gor-mobile/templates/`, then `jq`-merges a `SessionStart` entry into `~/.claude/settings.json` — your existing `Stop` / `PermissionRequest` / `Notification` / other `SessionStart` matchers are preserved untouched.
+7. **Slash commands.** Copies `/brainstorm`, `/plan`, `/implement`, `/tdd`, `/review`, `/test-ui`, `/verify`, `/debug`, `/finishing-branch` into `~/.claude/commands/`. Each file carries a managed marker so `repair` / `uninstall` can identify them.
+8. **Agents.** Copies `gor-mobile-advisor` (proactive workflow router) and `code-reviewer` (invoked by `/review`) into `~/.claude/agents/`.
+9. **MCP registration.** Adds a `google-dev-knowledge` entry to `~/.claude/mcp.json` via `jq`-merge (idempotent — won't duplicate an existing entry).
+10. **CLAUDE.md managed section.** Writes a short "Android Mobile Dev (managed by gor-mobile)" block between `<!-- BEGIN gor-mobile managed section -->` / `<!-- END ... -->` markers in `~/.claude/CLAUDE.md`. Content outside the markers is never modified; re-running replaces only the content between them.
+11. **Sanity check.** Skipped under `--skip-sanity`. Otherwise pings LM Studio at `http://127.0.0.1:1234/v1/models`; if reachable, lists up to five loaded models and confirms the round-trip works.
 
 ## Commands
 
