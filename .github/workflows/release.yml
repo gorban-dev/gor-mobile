@@ -28,6 +28,10 @@ jobs:
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/gorban-dev/homebrew-gor-mobile.git" tap
           cp /tmp/gor-mobile.rb tap/Formula/gor-mobile.rb
           cd tap
+          if git diff --quiet; then
+              echo "Formula already up-to-date for v${{ steps.version.outputs.version }} — nothing to commit"
+              exit 0
+          fi
           git -c user.email=ci@gor-mobile -c user.name="gor-mobile CI" \
               commit -am "gor-mobile ${{ steps.version.outputs.version }}"
           git push
