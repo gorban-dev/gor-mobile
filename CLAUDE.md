@@ -1,7 +1,9 @@
-# gor-mobile — instructions for Claude
+# gor-mobile — Android Dev CLI — Contributor Guide for Claude
 
-Rules to follow when working on this repo.
-For every change — run through the checklist at the bottom.
+Bash CLI that wires a superpowers-style Android workflow into Claude Code and offloads routine codegen to local LLMs (LM Studio) with an Opus fallback.
+
+This file lists the conventions Claude must follow when modifying this repo.
+Run through the checklist at the bottom before every commit.
 
 ## Architecture (short)
 
