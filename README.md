@@ -1,4 +1,4 @@
-# gor-mobile — Android Dev CLI with local-LLM offload
+# Android Dev CLI with local-LLM offload
 
 [![release](https://img.shields.io/github/v/release/gorban-dev/gor-mobile?label=release&color=blue)](https://github.com/gorban-dev/gor-mobile/releases)
 [![license](https://img.shields.io/github/license/gorban-dev/gor-mobile)](./LICENSE)
