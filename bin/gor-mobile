@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# gor-mobile — Android development CLI (superpowers-like workflow + local-LLM delegation).
+# See: https://github.com/gorban/gor-mobile
+
+set -euo pipefail
+
+# Resolve install root (handles symlinks from /usr/local/bin).
+_resolve_root() {
+    local src="${BASH_SOURCE[0]}"
+    while [[ -L "$src" ]]; do
+        local dir; dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
+        src="$(readlink "$src")"
+        [[ "$src" != /* ]] && src="$dir/$src"
+    done
+    cd -P "$(dirname "$src")/.." >/dev/null 2>&1 && pwd
+}
+
+GOR_MOBILE_ROOT="$(_resolve_root)"
+export GOR_MOBILE_ROOT
+
+# shellcheck source=../lib/constants.sh
+source "$GOR_MOBILE_ROOT/lib/constants.sh"
+
+usage() {
+    cat <<EOF
+${C_BOLD}gor-mobile${C_RESET} — Android dev CLI with local-LLM delegation
+
+${C_BOLD}Usage:${C_RESET}
+  gor-mobile <command> [args...]
+
+${C_BOLD}Setup:${C_RESET}
+  init              Run the install wizard (brew, Android CLI, LM Studio, hooks)
+  doctor            Check environment (deps, hooks, models, MCP)
+  repair            Restore managed files in ~/.claude/
+  update            Pull latest rules + repair
+  self-update       Update the CLI itself (curl-install path)
+  uninstall         Remove everything gor-mobile installed
+
+${C_BOLD}Rules:${C_RESET}
+  rules list        Show installed pack + known forks
+  rules use <url>   Switch to a different pack
+  rules update      git pull the current pack
+  rules diff        Show diff vs upstream
+  rules validate    Verify manifest.json + compat
+
+${C_BOLD}LLM:${C_RESET}
+  llm <role> [--input <f>] [--force-cloud]
+                    Dispatch to LM Studio. role ∈ {impl, tdd-red, routine-debug,
+                    review, review-deep, vision, analyze}
+  llm status        Show loaded models + LM Studio health
+  llm routing       Show current preset + per-role resolution
+  llm preset <name> aggressive-local | balanced | cloud-only
+
+${C_BOLD}Docs:${C_RESET}
+  docs <query>      Search Android docs (android CLI → google-dev-knowledge fallback)
+
+${C_BOLD}Meta:${C_RESET}
+  version           Print version
+  help [<command>]  Help for a specific command
+
+See 'gor-mobile help <command>' for details on a specific command.
+EOF
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+    init)         source "$GOR_MOBILE_ROOT/lib/commands/init.sh";         cmd_init "$@" ;;
+    doctor)       source "$GOR_MOBILE_ROOT/lib/commands/doctor.sh";       cmd_doctor "$@" ;;
+    repair)       source "$GOR_MOBILE_ROOT/lib/commands/repair.sh";       cmd_repair "$@" ;;
+    update)       source "$GOR_MOBILE_ROOT/lib/commands/update.sh";       cmd_update "$@" ;;
+    self-update)  source "$GOR_MOBILE_ROOT/lib/commands/self-update.sh";  cmd_self_update "$@" ;;
+    uninstall)    source "$GOR_MOBILE_ROOT/lib/commands/uninstall.sh";    cmd_uninstall "$@" ;;
+    rules)        source "$GOR_MOBILE_ROOT/lib/commands/rules.sh";        cmd_rules "$@" ;;
+    llm)          source "$GOR_MOBILE_ROOT/lib/commands/llm.sh";          cmd_llm "$@" ;;
+    docs)         source "$GOR_MOBILE_ROOT/lib/commands/docs.sh";         cmd_docs "$@" ;;
+    android)      source "$GOR_MOBILE_ROOT/lib/commands/android.sh";      cmd_android "$@" ;;
+    version|-v|--version)
+        printf "gor-mobile %s\n" "$GOR_MOBILE_VERSION"
+        ;;
+    help|-h|--help|"")
+        if [[ -n "${1:-}" ]]; then
+            topic="$1"
+            man_file="$GOR_MOBILE_ROOT/lib/help/$topic.txt"
+            if [[ -f "$man_file" ]]; then
+                cat "$man_file"
+            else
+                log_warn "No help for '$topic'. Run 'gor-mobile help'."
+                exit 1
+            fi
+        else
+            usage
+        fi
+        ;;
+    *)
+        log_err "Unknown command: $cmd"
+        usage
+        exit 1
+        ;;
+esac
