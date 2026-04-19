@@ -88,12 +88,21 @@ step_2_android_cli() {
     log_step "2/11 Android CLI"
     if dep_android_cli_path >/dev/null 2>&1; then
         log_ok "android CLI → $(dep_android_cli_path)"
+    else
+        log_warn "Google Android CLI agent not found."
+        log_info "Install manually from: https://developer.android.com/tools/agents"
+        log_info "After install, run 'android update' then re-run 'gor-mobile init'."
+    fi
+
+    # adb (platform-tools) is separate — needed for device workflows like claude-in-mobile.
+    if dep_has adb; then
+        log_ok "adb → $(command -v adb)"
         return
     fi
-    if dep_has brew && _confirm "Install Google Android CLI via 'brew install --cask android-platform-tools'?"; then
+    if dep_has brew && _confirm "Install Android platform-tools (adb/fastboot) via 'brew install --cask android-platform-tools'?"; then
         _run "brew install --cask android-platform-tools"
     else
-        log_warn "Skipping Android CLI install (optional)"
+        log_warn "Skipping platform-tools install (optional — needed for device/UI testing)"
     fi
 }
 
