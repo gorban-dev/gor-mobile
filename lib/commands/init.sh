@@ -108,7 +108,7 @@ step_3_lm_studio() {
         return
     fi
 
-    if ! _confirm "Pull default local models ($MODEL_QWEN_CODER, $MODEL_GEMMA_A4B)? [~50 GB total]"; then
+    if ! _confirm "Pull default local models ($MODEL_DEFAULT_IMPL, $MODEL_DEFAULT_REVIEW)? [~50 GB total]"; then
         log_warn "Skipping model download. You can pull later via: lms get <model-id>"
         return
     fi
@@ -117,8 +117,8 @@ step_3_lm_studio() {
         log_warn "lms CLI not available — skip model download. Install LM Studio and rerun 'gor-mobile init'."
         return
     fi
-    _run "\"$lms_bin\" get \"$MODEL_QWEN_CODER\" --yes || true"
-    _run "\"$lms_bin\" get \"$MODEL_GEMMA_A4B\"    --yes || true"
+    _run "\"$lms_bin\" get \"$MODEL_DEFAULT_IMPL\"   --yes || true"
+    _run "\"$lms_bin\" get \"$MODEL_DEFAULT_REVIEW\" --yes || true"
 }
 
 step_4_secrets() {

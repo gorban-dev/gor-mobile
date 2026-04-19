@@ -34,10 +34,12 @@ LLM_MAX_TOKENS="${LLM_MAX_TOKENS:-4096}"
 DEFAULT_RULES_URL="https://github.com/gorban-dev/gor-mobile-rules-default.git"
 DEFAULT_RULES_REF="main"
 
-# Model IDs (LM Studio tags).
-MODEL_QWEN_CODER="qwen/qwen3-coder-30b"
-MODEL_GEMMA_A4B="gemma-4-26b-a4b-it"
-MODEL_GEMMA_31B="gemma-4-31b-it"
+# Default model per role (LM Studio tags).
+# Users can override per role in ~/.config/gor-mobile/config.json → .models.<role>
+# without touching this file.
+MODEL_DEFAULT_IMPL="qwen/qwen3-coder-30b"
+MODEL_DEFAULT_REVIEW="gemma-4-26b-a4b-it"
+MODEL_DEFAULT_DEEP="gemma-4-31b-it"
 
 # Colors.
 if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then

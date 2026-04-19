@@ -19,15 +19,17 @@ source "$GOR_MOBILE_ROOT/lib/helpers/lm-studio.sh"
 # ──── Routing config ──────────────────────────────────────────────────────
 
 # role → target (local|cloud) @ model
+# The model column is the DEFAULT — actual model is resolved via _resolve_model()
+# which reads config.json → .models.<role> first, then falls back to this default.
 _routing_table_balanced() {
     cat <<EOF
-impl:local:$MODEL_QWEN_CODER
-tdd-red:local:$MODEL_QWEN_CODER
-routine-debug:local:$MODEL_QWEN_CODER
-review:local:$MODEL_GEMMA_A4B
-review-deep:local:$MODEL_GEMMA_31B
-vision:local:$MODEL_GEMMA_31B
-analyze:local:$MODEL_GEMMA_A4B
+impl:local:$MODEL_DEFAULT_IMPL
+tdd-red:local:$MODEL_DEFAULT_IMPL
+routine-debug:local:$MODEL_DEFAULT_IMPL
+review:local:$MODEL_DEFAULT_REVIEW
+review-deep:local:$MODEL_DEFAULT_DEEP
+vision:local:$MODEL_DEFAULT_DEEP
+analyze:local:$MODEL_DEFAULT_REVIEW
 brainstorm:cloud:-
 plan:cloud:-
 verify:cloud:-
@@ -36,11 +38,27 @@ EOF
 }
 
 _routing_table_aggressive_local() {
-    _routing_table_balanced | sed 's/cloud:-/local:'"$MODEL_GEMMA_31B"'/'
+    _routing_table_balanced | sed 's/cloud:-/local:'"$MODEL_DEFAULT_DEEP"'/'
 }
 
 _routing_table_cloud_only() {
     _routing_table_balanced | awk -F: '{print $1":cloud:-"}'
+}
+
+# Resolve effective model for a role:
+#   1) user override from config.json → .models[<role>]
+#   2) fallback to the default supplied by the caller (from routing table)
+_resolve_model() {
+    local role="$1" default="$2"
+    if [[ -f "$GOR_MOBILE_CONFIG" ]]; then
+        local override
+        override=$(jq -r --arg r "$role" '.models[$r] // empty' "$GOR_MOBILE_CONFIG" 2>/dev/null || true)
+        if [[ -n "$override" ]]; then
+            echo "$override"
+            return
+        fi
+    fi
+    echo "$default"
 }
 
 _current_preset() {
@@ -125,10 +143,14 @@ _llm_routing() {
     local roles=(impl tdd-red routine-debug review review-deep vision analyze brainstorm plan verify finishing)
     for role in "${roles[@]}"; do
         local line; line="$(_resolve_routing "$role" "$preset")"
-        local target model
+        local target default_model model
         target="$(echo "$line" | awk -F: '{print $2}')"
-        model="$(echo "$line" | awk -F: '{print $3}')"
-        [[ "$model" == "-" || -z "$model" ]] && model="—"
+        default_model="$(echo "$line" | awk -F: '{print $3}')"
+        if [[ "$default_model" == "-" || -z "$default_model" ]]; then
+            model="—"
+        else
+            model="$(_resolve_model "$role" "$default_model")"
+        fi
         printf "%-18s  %-7s  %s\n" "$role" "$target" "$model"
     done
 }
@@ -181,9 +203,9 @@ _llm_run() {
 
     local preset; preset="$(_current_preset)"
     local line; line="$(_resolve_routing "$role" "$preset")"
-    local target model
+    local target default_model model
     target="$(echo "$line" | awk -F: '{print $2}')"
-    model="$(echo "$line" | awk -F: '{print $3}')"
+    default_model="$(echo "$line" | awk -F: '{print $3}')"
 
     if [[ -z "$target" ]]; then
         _emit BLOCKED "" "" 0 0 0 "unknown role: $role"
@@ -198,6 +220,8 @@ _llm_run() {
         _emit BLOCKED "" "" 0 0 0 "role=$role routes to cloud under preset=$preset — caller should use Opus"
         return 2
     fi
+
+    model="$(_resolve_model "$role" "$default_model")"
 
     if ! dep_lms_path >/dev/null 2>&1; then
         _emit ERROR "" "" 0 0 0 "lms CLI not installed"
