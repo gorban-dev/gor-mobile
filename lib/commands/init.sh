@@ -90,9 +90,51 @@ step_2_android_cli() {
         log_ok "android CLI → $(dep_android_cli_path)"
         return
     fi
-    log_warn "Google Android CLI agent not found."
-    log_info "Install manually from: https://developer.android.com/tools/agents"
-    log_info "After install, run 'android update' then re-run 'gor-mobile init'."
+
+    cat >&2 <<EOF
+
+  Google Android CLI agent is not installed.
+
+  What it is:
+    An official Google CLI that gives AI agents structured access to the
+    Android toolchain — build, install, run, inspect, manage SDK — without
+    the agent needing to shell out to adb/gradle directly.
+
+  Why gor-mobile needs it:
+    Slash-commands like /implement and /test-ui call through to this CLI
+    for anything that touches the project or a connected device. Missing
+    it means those commands will fail or degrade to a gradle fallback.
+
+  Install page:
+    https://developer.android.com/tools/agents
+
+EOF
+
+    if [[ $ASSUME_YES -eq 1 ]]; then
+        log_warn "Skipping Android CLI install (--yes). Install manually and re-run 'gor-mobile init'."
+        return
+    fi
+
+    if ! _confirm "Open the install page in your browser now?"; then
+        log_warn "Install manually from https://developer.android.com/tools/agents, then re-run 'gor-mobile init'."
+        return
+    fi
+
+    if command -v open >/dev/null 2>&1; then
+        _run "open 'https://developer.android.com/tools/agents'"
+    elif command -v xdg-open >/dev/null 2>&1; then
+        _run "xdg-open 'https://developer.android.com/tools/agents'"
+    else
+        log_info "Couldn't auto-open a browser — visit the URL above manually."
+    fi
+
+    printf "\n  Press Enter once the installer finishes (Ctrl-C to abort)..." >&2
+    read -r _
+    if dep_android_cli_path >/dev/null 2>&1; then
+        log_ok "android CLI → $(dep_android_cli_path)"
+    else
+        log_warn "Still not detected. You may need a new shell (PATH not picked up yet). Re-run 'gor-mobile init' later."
+    fi
 }
 
 step_3_lm_studio() {
