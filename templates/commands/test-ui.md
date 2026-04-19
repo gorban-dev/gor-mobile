@@ -1,5 +1,5 @@
 ---
-description: Android — UI testing on a device via claude-in-mobile + vision LLM
+description: Android — UI testing on a device via Android CLI + vision LLM
 ---
 
 # /test-ui — UI test on device
@@ -7,7 +7,7 @@ description: Android — UI testing on a device via claude-in-mobile + vision LL
 Target: **$ARGUMENTS** (feature to exercise, e.g., "login flow")
 
 <EXTREMELY_IMPORTANT>
-- Device installation and interaction MUST go through the `claude-in-mobile` skill. Never `adb install` or `gradle installDebug` yourself.
+- Device build, install, launch, and interaction MUST go through the Google Android CLI (https://developer.android.com/tools/agents), invoked as `gor-mobile android <subcommand>`.
 - Vision analysis of screenshots MUST go through the local vision model:
 
   ```sh
@@ -17,7 +17,7 @@ Target: **$ARGUMENTS** (feature to exercise, e.g., "login flow")
 
 ## Flow
 
-1. Invoke `claude-in-mobile` to build, install, launch the app, and drive it through the target flow.
+1. Use `gor-mobile android` to build, install, launch the app, and drive it through the target flow.
 2. Capture screenshots at each meaningful state.
 3. For each screenshot, compose a vision prompt including:
    - The screenshot (as a base64 data URL attached to the message content)

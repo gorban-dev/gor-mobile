@@ -10,7 +10,7 @@
 /implement    → per-task, delegating code gen via `gor-mobile llm impl`
 /tdd          → for UseCase/Mapper business logic (RED→GREEN→REFACTOR)
 /review       → two-pass (spec + architecture) via code-reviewer agent + `gor-mobile llm review`
-/test-ui      → if Compose UI is touched (claude-in-mobile + `gor-mobile llm vision`)
+/test-ui      → if Compose UI is touched (`gor-mobile android` + `gor-mobile llm vision`)
 /verify       → evidence-based final check (Opus)
 /finishing-branch → merge/PR
 ```
