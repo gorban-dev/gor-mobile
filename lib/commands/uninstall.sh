@@ -37,7 +37,6 @@ cmd_uninstall() {
           "$CLAUDE_COMMANDS_DIR/implement.md" \
           "$CLAUDE_COMMANDS_DIR/tdd.md" \
           "$CLAUDE_COMMANDS_DIR/review.md" \
-          "$CLAUDE_COMMANDS_DIR/test-ui.md" \
           "$CLAUDE_COMMANDS_DIR/verify.md" \
           "$CLAUDE_COMMANDS_DIR/debug.md" \
           "$CLAUDE_COMMANDS_DIR/finishing-branch.md"

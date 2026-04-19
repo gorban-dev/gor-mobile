@@ -101,9 +101,9 @@ step_2_android_cli() {
     the agent needing to shell out to adb/gradle directly.
 
   Why gor-mobile needs it:
-    Slash-commands like /implement and /test-ui call through to this CLI
-    for anything that touches the project or a connected device. Missing
-    it means those commands will fail or degrade to a gradle fallback.
+    Slash-commands like /implement call through to this CLI for anything
+    that touches the project or a connected device. Missing it means those
+    commands will fail or degrade to a gradle fallback.
 
   Install page:
     https://developer.android.com/tools/agents

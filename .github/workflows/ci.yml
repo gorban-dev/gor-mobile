@@ -1,0 +1,30 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats
+        run: brew install bats-core
+
+      - name: Bats tests
+        run: bats tests/
+
+      - name: Smoke — CLI boots
+        env:
+          GOR_MOBILE_ROOT: ${{ github.workspace }}
+        run: |
+          ./bin/gor-mobile version
+          ./bin/gor-mobile help
+
+      - name: Smoke — init --dry-run
+        env:
+          GOR_MOBILE_ROOT: ${{ github.workspace }}
+        run: ./bin/gor-mobile init --dry-run --yes --skip-sanity
