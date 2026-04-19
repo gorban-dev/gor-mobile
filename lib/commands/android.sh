@@ -24,6 +24,6 @@ cmd_android() {
             ;;
     esac
     log_err "Android CLI not installed and no gradle fallback available."
-    log_info "Install: brew install --cask android-platform-tools"
+    log_info "Install Google Android CLI from: https://developer.android.com/tools/agents"
     exit 1
 }
