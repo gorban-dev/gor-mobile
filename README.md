@@ -1,4 +1,4 @@
-# gor-mobile
+# gor-mobile — Android Dev CLI with local-LLM offload
 
 [![release](https://img.shields.io/github/v/release/gorban-dev/gor-mobile?label=release&color=blue)](https://github.com/gorban-dev/gor-mobile/releases)
 [![license](https://img.shields.io/github/license/gorban-dev/gor-mobile)](./LICENSE)
@@ -6,7 +6,7 @@
 [![homebrew](https://img.shields.io/badge/homebrew-gorban--dev%2Fgor--mobile-orange)](https://github.com/gorban-dev/homebrew-gor-mobile)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)]()
 
-**Android dev CLI** — superpowers-style workflow (`brainstorm → plan → implement → review → verify`) with routine code generation delegated to **local LLMs** via LM Studio. Opus only where judgment is needed.
+A bash CLI that wires a superpowers-style Android workflow (`brainstorm → plan → implement → review → verify`) into Claude Code, offloading routine code generation to **local LLMs** via LM Studio. Opus runs only where judgment is needed.
 
 > Status: `v0.1.0` — core CLI, rules-pack loader, local-LLM dispatcher, full wizard. See `CHANGELOG.md`.
 
