@@ -94,7 +94,7 @@ step_2_android_cli() {
         log_info "After install, run 'android update' then re-run 'gor-mobile init'."
     fi
 
-    # adb (platform-tools) is separate — needed for device workflows like claude-in-mobile.
+    # adb (platform-tools) is a separate dependency — needed when interacting with real devices.
     if dep_has adb; then
         log_ok "adb → $(command -v adb)"
         return
@@ -102,7 +102,7 @@ step_2_android_cli() {
     if dep_has brew && _confirm "Install Android platform-tools (adb/fastboot) via 'brew install --cask android-platform-tools'?"; then
         _run "brew install --cask android-platform-tools"
     else
-        log_warn "Skipping platform-tools install (optional — needed for device/UI testing)"
+        log_warn "Skipping platform-tools install (optional)"
     fi
 }
 
