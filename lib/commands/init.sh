@@ -196,35 +196,42 @@ step_3_lm_studio() {
         "$choice_review" "$default_review" \
         "$choice_deep"   "$default_deep"
 
-    # Identify models we need but don't have installed
-    local wanted=() missing=() seen=()
-    wanted+=("$choice_impl" "$choice_review" "$choice_deep")
-    local w
-    for w in "${wanted[@]}"; do
-        [[ -z "$w" ]] && continue
-        local already=0 s
-        for s in "${seen[@]}"; do [[ "$s" == "$w" ]] && already=1; done
-        (( already )) && continue
-        seen+=("$w")
-        local found=0 i
-        for i in "${installed[@]}"; do [[ "$i" == "$w" ]] && found=1; done
-        (( found )) || missing+=("$w")
+    # Identify models we need but don't have installed. Using newline-delimited
+    # strings instead of arrays keeps us compatible with bash 3.2 strict mode,
+    # which errors out on "${empty_array[@]}" expansions.
+    local wanted="$choice_impl"$'\n'"$choice_review"$'\n'"$choice_deep"
+    local installed_nl=""
+    local i
+    for i in "${installed[@]}"; do
+        installed_nl+="$i"$'\n'
     done
 
-    if (( ${#missing[@]} == 0 )); then
+    local seen="" missing=""
+    local w
+    while IFS= read -r w; do
+        [[ -z "$w" ]] && continue
+        # dedup
+        case $'\n'"$seen"$'\n' in *$'\n'"$w"$'\n'*) continue ;; esac
+        seen+="$w"$'\n'
+        # installed?
+        case $'\n'"$installed_nl" in *$'\n'"$w"$'\n'*) continue ;; esac
+        missing+="$w"$'\n'
+    done <<< "$wanted"
+
+    if [[ -z "$missing" ]]; then
         log_ok "All selected models are already installed."
         return
     fi
 
-    log_info "Missing models: ${missing[*]}"
+    log_info "Missing models: $(echo "$missing" | tr '\n' ' ')"
     if ! _confirm "Pull missing models via 'lms get'? [~15-30 GB each]"; then
         log_warn "Skipping model download. You can pull later via: lms get <model-id>"
         return
     fi
-    local mm
-    for mm in "${missing[@]}"; do
+    while IFS= read -r mm; do
+        [[ -z "$mm" ]] && continue
         _run "\"$lms_bin\" get \"$mm\" --yes || true"
-    done
+    done <<< "$missing"
 }
 
 # _pick_model_for_role <role> <default> <installed-model...>
