@@ -36,8 +36,8 @@ DEFAULT_RULES_REF="main"
 
 # Model IDs (LM Studio tags).
 MODEL_QWEN_CODER="qwen/qwen3-coder-30b"
-MODEL_GEMMA_A4B="google/gemma-4-26b-a4b"
-MODEL_GEMMA_31B="google/gemma-4-31b"
+MODEL_GEMMA_A4B="gemma-4-26b-a4b-it"
+MODEL_GEMMA_31B="gemma-4-31b-it"
 
 # Colors.
 if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
@@ -53,8 +53,8 @@ else
     C_RESET="" C_BOLD="" C_DIM="" C_RED="" C_GREEN="" C_YELLOW="" C_BLUE="" C_CYAN=""
 fi
 
-log_info()  { printf "${C_CYAN}[info]${C_RESET} %s\n" "$*"; }
-log_ok()    { printf "${C_GREEN}[ok]${C_RESET}   %s\n" "$*"; }
-log_warn()  { printf "${C_YELLOW}[warn]${C_RESET} %s\n" "$*"; }
+log_info()  { printf "${C_CYAN}[info]${C_RESET} %s\n" "$*" >&2; }
+log_ok()    { printf "${C_GREEN}[ok]${C_RESET}   %s\n" "$*" >&2; }
+log_warn()  { printf "${C_YELLOW}[warn]${C_RESET} %s\n" "$*" >&2; }
 log_err()   { printf "${C_RED}[err]${C_RESET}  %s\n" "$*" >&2; }
-log_step()  { printf "\n${C_BOLD}${C_BLUE}▸ %s${C_RESET}\n" "$*"; }
+log_step()  { printf "\n${C_BOLD}${C_BLUE}▸ %s${C_RESET}\n" "$*" >&2; }

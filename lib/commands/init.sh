@@ -112,8 +112,13 @@ step_3_lm_studio() {
         log_warn "Skipping model download. You can pull later via: lms get <model-id>"
         return
     fi
-    _run "lms get \"$MODEL_QWEN_CODER\" --yes || true"
-    _run "lms get \"$MODEL_GEMMA_A4B\"    --yes || true"
+    local lms_bin
+    if ! lms_bin="$(dep_lms_path 2>/dev/null)"; then
+        log_warn "lms CLI not available — skip model download. Install LM Studio and rerun 'gor-mobile init'."
+        return
+    fi
+    _run "\"$lms_bin\" get \"$MODEL_QWEN_CODER\" --yes || true"
+    _run "\"$lms_bin\" get \"$MODEL_GEMMA_A4B\"    --yes || true"
 }
 
 step_4_secrets() {
