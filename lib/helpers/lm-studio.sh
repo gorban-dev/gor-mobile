@@ -38,6 +38,11 @@ lm_loaded_identifier() {
     _lms ps --json 2>/dev/null | jq -r '.[0].identifier // .[0].modelKey // empty'
 }
 
+# List modelKey values of installed LLMs (excluding embedding models).
+lm_list_installed_llms() {
+    _lms ls --json 2>/dev/null | jq -r '.[] | select(.type=="llm") | .modelKey' 2>/dev/null || true
+}
+
 lm_ensure_model_loaded() {
     local model_id="$1" ctx="${2:-$LLM_CONTEXT_LENGTH}"
     local current; current="$(lm_loaded_identifier 2>/dev/null || true)"

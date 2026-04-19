@@ -108,17 +108,166 @@ step_3_lm_studio() {
         return
     fi
 
-    if ! _confirm "Pull default local models ($MODEL_DEFAULT_IMPL, $MODEL_DEFAULT_REVIEW)? [~50 GB total]"; then
+    local lms_bin
+    if ! lms_bin="$(dep_lms_path 2>/dev/null)"; then
+        log_warn "lms CLI not available — skip model setup. Install LM Studio and rerun 'gor-mobile init'."
+        return
+    fi
+
+    # Snapshot installed LLMs
+    local installed=()
+    local raw; raw="$(lm_list_installed_llms)"
+    if [[ -n "$raw" ]]; then
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && installed+=("$line")
+        done <<< "$raw"
+    fi
+
+    # Role → default mapping (kept in sync with constants.sh)
+    local -a role_keys=(impl review deep)
+    local -A role_defaults=(
+        [impl]="$MODEL_DEFAULT_IMPL"
+        [review]="$MODEL_DEFAULT_REVIEW"
+        [deep]="$MODEL_DEFAULT_DEEP"
+    )
+    local -A role_choice=(
+        [impl]="$MODEL_DEFAULT_IMPL"
+        [review]="$MODEL_DEFAULT_REVIEW"
+        [deep]="$MODEL_DEFAULT_DEEP"
+    )
+
+    if (( ${#installed[@]} > 0 )); then
+        log_ok "Found ${#installed[@]} installed LLM(s):"
+        local m
+        for m in "${installed[@]}"; do
+            printf "    • %s\n" "$m" >&2
+        done
+    else
+        log_info "No LLMs installed yet — will pull defaults."
+    fi
+
+    # Interactive per-role selection if installed models exist and user confirms
+    if (( ${#installed[@]} > 0 )) && [[ $ASSUME_YES -eq 0 ]] && \
+       _confirm "Customize per-role model assignment from installed LLMs?"; then
+        local r
+        for r in "${role_keys[@]}"; do
+            role_choice[$r]="$(_pick_model_for_role "$r" "${role_defaults[$r]}" "${installed[@]}")"
+        done
+    fi
+
+    # Persist non-default choices to config.json
+    _save_model_overrides \
+        "${role_choice[impl]}"   "${role_defaults[impl]}" \
+        "${role_choice[review]}" "${role_defaults[review]}" \
+        "${role_choice[deep]}"   "${role_defaults[deep]}"
+
+    # Identify models we need but don't have installed
+    local -a wanted=() missing=() seen=()
+    wanted+=("${role_choice[impl]}" "${role_choice[review]}" "${role_choice[deep]}")
+    local w
+    for w in "${wanted[@]}"; do
+        [[ -z "$w" ]] && continue
+        local already=0 s
+        for s in "${seen[@]}"; do [[ "$s" == "$w" ]] && already=1; done
+        (( already )) && continue
+        seen+=("$w")
+        local found=0 i
+        for i in "${installed[@]}"; do [[ "$i" == "$w" ]] && found=1; done
+        (( found )) || missing+=("$w")
+    done
+
+    if (( ${#missing[@]} == 0 )); then
+        log_ok "All selected models are already installed."
+        return
+    fi
+
+    log_info "Missing models: ${missing[*]}"
+    if ! _confirm "Pull missing models via 'lms get'? [~15-30 GB each]"; then
         log_warn "Skipping model download. You can pull later via: lms get <model-id>"
         return
     fi
-    local lms_bin
-    if ! lms_bin="$(dep_lms_path 2>/dev/null)"; then
-        log_warn "lms CLI not available — skip model download. Install LM Studio and rerun 'gor-mobile init'."
+    local mm
+    for mm in "${missing[@]}"; do
+        _run "\"$lms_bin\" get \"$mm\" --yes || true"
+    done
+}
+
+# _pick_model_for_role <role> <default> <installed-model...>
+# Prints the chosen model id to stdout. Logs go to stderr.
+_pick_model_for_role() {
+    local role="$1" default="$2"
+    shift 2
+    local -a models=("$@")
+
+    printf "\n  Role: %s (default: %s)\n" "$role" "$default" >&2
+    local idx=1 m default_idx=0
+    for m in "${models[@]}"; do
+        local marker=""
+        if [[ "$m" == "$default" ]]; then
+            marker=" [default]"
+            default_idx=$idx
+        fi
+        printf "    %2d) %s%s\n" "$idx" "$m" "$marker" >&2
+        idx=$((idx + 1))
+    done
+    local custom_idx=$idx
+    printf "    %2d) enter custom model id\n" "$custom_idx" >&2
+
+    local prompt_default="${default_idx:-$custom_idx}"
+    local reply
+    read -r -p "  Choose [1-$custom_idx, default=$prompt_default]: " reply
+    reply="${reply:-$prompt_default}"
+
+    if [[ "$reply" =~ ^[0-9]+$ ]] && (( reply >= 1 && reply <= ${#models[@]} )); then
+        echo "${models[$((reply - 1))]}"
         return
     fi
-    _run "\"$lms_bin\" get \"$MODEL_DEFAULT_IMPL\"   --yes || true"
-    _run "\"$lms_bin\" get \"$MODEL_DEFAULT_REVIEW\" --yes || true"
+    if [[ "$reply" == "$custom_idx" ]]; then
+        local custom
+        read -r -p "  Custom model id: " custom
+        if [[ -n "$custom" ]]; then
+            echo "$custom"
+            return
+        fi
+    fi
+    echo "$default"
+}
+
+# _save_model_overrides <impl> <impl_default> <review> <review_default> <deep> <deep_default>
+# Writes non-default role→model overrides to config.json, expanding each group role.
+_save_model_overrides() {
+    local impl="$1" impl_d="$2" review="$3" review_d="$4" deep="$5" deep_d="$6"
+
+    local overrides="{}"
+    if [[ "$impl" != "$impl_d" ]]; then
+        overrides=$(jq -n --arg v "$impl" '{impl: $v, "tdd-red": $v, "routine-debug": $v}')
+    fi
+    if [[ "$review" != "$review_d" ]]; then
+        overrides=$(jq -n --argjson base "$overrides" --arg v "$review" '$base + {review: $v, analyze: $v}')
+    fi
+    if [[ "$deep" != "$deep_d" ]]; then
+        overrides=$(jq -n --argjson base "$overrides" --arg v "$deep" '$base + {"review-deep": $v, vision: $v}')
+    fi
+
+    local count; count=$(echo "$overrides" | jq 'length')
+    if [[ "$count" == "0" ]]; then
+        return
+    fi
+
+    if [[ $DRY_RUN -eq 1 ]]; then
+        printf "  [dry-run] write model overrides to %s: %s\n" "$GOR_MOBILE_CONFIG" "$overrides"
+        return
+    fi
+
+    mkdir -p "$GOR_MOBILE_CONFIG_DIR"
+    local tmp; tmp="$(mktemp)"
+    if [[ -f "$GOR_MOBILE_CONFIG" ]]; then
+        jq --argjson m "$overrides" '.models = ((.models // {}) + $m)' "$GOR_MOBILE_CONFIG" > "$tmp"
+    else
+        jq -n --argjson m "$overrides" '{models: $m}' > "$tmp"
+    fi
+    mv "$tmp" "$GOR_MOBILE_CONFIG"
+    log_ok "Saved model overrides: $(echo "$overrides" | jq -c .)"
 }
 
 step_4_secrets() {
