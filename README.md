@@ -9,13 +9,13 @@
 Homebrew (recommended):
 
 ```sh
-brew install gorban/gor-mobile/gor-mobile
+brew install gorban-dev/gor-mobile/gor-mobile
 ```
 
 Or curl:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/gorban/gor-mobile/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/gorban-dev/gor-mobile/main/install.sh | bash
 ```
 
 Then run the wizard once:
@@ -92,7 +92,7 @@ On `BLOCKED`/`ERROR` the agent falls back to Opus. Presets change which roles ro
 
 A rules pack is a git repo with `manifest.json` + `rules/*.md` + `examples/<layer>/*.kt`.
 The default pack lives at
-[gor-mobile-rules-default](https://github.com/gorban/gor-mobile-rules-default). Fork it
+[gor-mobile-rules-default](https://github.com/gorban-dev/gor-mobile-rules-default). Fork it
 to impose company-specific patterns:
 
 ```sh
@@ -112,7 +112,7 @@ are preserved.
 ## Development
 
 ```sh
-git clone https://github.com/gorban/gor-mobile.git
+git clone https://github.com/gorban-dev/gor-mobile.git
 cd gor-mobile
 brew install bats-core
 bats tests/

@@ -26,7 +26,7 @@ SHA="$(shasum -a 256 "$TMP/tarball.tgz" | awk '{print $1}')"
 cat <<EOF
 class GorMobile < Formula
   desc     "Android development CLI — superpowers-style workflow with local-LLM delegation"
-  homepage "https://github.com/gorban/gor-mobile"
+  homepage "https://github.com/gorban-dev/gor-mobile"
   url      "$TARBALL_URL"
   sha256   "$SHA"
   version  "$VERSION"

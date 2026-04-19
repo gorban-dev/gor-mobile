@@ -31,7 +31,7 @@ LLM_TEMPERATURE="${LLM_TEMPERATURE:-0.1}"
 LLM_MAX_TOKENS="${LLM_MAX_TOKENS:-4096}"
 
 # Rules pack defaults.
-DEFAULT_RULES_URL="https://github.com/gorban/gor-mobile-rules-default.git"
+DEFAULT_RULES_URL="https://github.com/gorban-dev/gor-mobile-rules-default.git"
 DEFAULT_RULES_REF="main"
 
 # Model IDs (LM Studio tags).

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # gor-mobile — Android development CLI (superpowers-like workflow + local-LLM delegation).
-# See: https://github.com/gorban/gor-mobile
+# See: https://github.com/gorban-dev/gor-mobile
 
 set -euo pipefail
 

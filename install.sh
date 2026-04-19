@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # gor-mobile curl installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/gorban/gor-mobile/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/gorban-dev/gor-mobile/main/install.sh | bash
 #
 # Clones the CLI to ~/.gor-mobile/core/ and symlinks the binary.
 
 set -euo pipefail
 
-GOR_MOBILE_REPO="${GOR_MOBILE_REPO:-https://github.com/gorban/gor-mobile.git}"
+GOR_MOBILE_REPO="${GOR_MOBILE_REPO:-https://github.com/gorban-dev/gor-mobile.git}"
 GOR_MOBILE_REF="${GOR_MOBILE_REF:-main}"
 GOR_MOBILE_HOME="${GOR_MOBILE_HOME:-$HOME/.gor-mobile}"
 GOR_MOBILE_CORE="$GOR_MOBILE_HOME/core"

@@ -35,7 +35,7 @@ git add lib/constants.sh
 git commit -m "chore: release v$NEW"
 git tag "v$NEW"
 
-TARBALL="https://github.com/gorban/gor-mobile/archive/refs/tags/v${NEW}.tar.gz"
+TARBALL="https://github.com/gorban-dev/gor-mobile/archive/refs/tags/v${NEW}.tar.gz"
 echo
 echo "Tagged v$NEW. Push with:"
 echo "  git push && git push --tags"

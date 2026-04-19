@@ -17,5 +17,5 @@ cmd_self_update() {
         return
     fi
     log_warn "Unable to self-update: not a git repo and not a brew install."
-    log_info "Reinstall via: curl -fsSL https://raw.githubusercontent.com/gorban/gor-mobile/main/install.sh | bash"
+    log_info "Reinstall via: curl -fsSL https://raw.githubusercontent.com/gorban-dev/gor-mobile/main/install.sh | bash"
 }
