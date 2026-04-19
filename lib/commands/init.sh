@@ -163,18 +163,14 @@ step_3_lm_studio() {
         done <<< "$raw"
     fi
 
-    # Role → default mapping (kept in sync with constants.sh)
-    local -a role_keys=(impl review deep)
-    local -A role_defaults=(
-        [impl]="$MODEL_DEFAULT_IMPL"
-        [review]="$MODEL_DEFAULT_REVIEW"
-        [deep]="$MODEL_DEFAULT_DEEP"
-    )
-    local -A role_choice=(
-        [impl]="$MODEL_DEFAULT_IMPL"
-        [review]="$MODEL_DEFAULT_REVIEW"
-        [deep]="$MODEL_DEFAULT_DEEP"
-    )
+    # Role defaults (kept in sync with constants.sh). We use plain variables
+    # instead of associative arrays to stay compatible with bash 3.2 on macOS.
+    local default_impl="$MODEL_DEFAULT_IMPL"
+    local default_review="$MODEL_DEFAULT_REVIEW"
+    local default_deep="$MODEL_DEFAULT_DEEP"
+    local choice_impl="$default_impl"
+    local choice_review="$default_review"
+    local choice_deep="$default_deep"
 
     if (( ${#installed[@]} > 0 )); then
         log_ok "Found ${#installed[@]} installed LLM(s):"
@@ -189,21 +185,20 @@ step_3_lm_studio() {
     # Interactive per-role selection if installed models exist and user confirms
     if (( ${#installed[@]} > 0 )) && [[ $ASSUME_YES -eq 0 ]] && \
        _confirm "Customize per-role model assignment from installed LLMs?"; then
-        local r
-        for r in "${role_keys[@]}"; do
-            role_choice[$r]="$(_pick_model_for_role "$r" "${role_defaults[$r]}" "${installed[@]}")"
-        done
+        choice_impl="$(_pick_model_for_role   "impl"   "$default_impl"   "${installed[@]}")"
+        choice_review="$(_pick_model_for_role "review" "$default_review" "${installed[@]}")"
+        choice_deep="$(_pick_model_for_role   "deep"   "$default_deep"   "${installed[@]}")"
     fi
 
     # Persist non-default choices to config.json
     _save_model_overrides \
-        "${role_choice[impl]}"   "${role_defaults[impl]}" \
-        "${role_choice[review]}" "${role_defaults[review]}" \
-        "${role_choice[deep]}"   "${role_defaults[deep]}"
+        "$choice_impl"   "$default_impl" \
+        "$choice_review" "$default_review" \
+        "$choice_deep"   "$default_deep"
 
     # Identify models we need but don't have installed
-    local -a wanted=() missing=() seen=()
-    wanted+=("${role_choice[impl]}" "${role_choice[review]}" "${role_choice[deep]}")
+    local wanted=() missing=() seen=()
+    wanted+=("$choice_impl" "$choice_review" "$choice_deep")
     local w
     for w in "${wanted[@]}"; do
         [[ -z "$w" ]] && continue
