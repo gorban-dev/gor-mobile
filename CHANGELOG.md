@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 — 2026-04-20
+## 0.2.5 — 2026-04-20
 
 Major overlay rewrite — full superpowers fidelity.
 
