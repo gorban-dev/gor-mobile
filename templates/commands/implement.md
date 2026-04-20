@@ -25,6 +25,10 @@ This is the superpowers `subagent-driven-development` skill, adapted for Android
 
 - **Test command** in plan verification: `./gradlew :<module>:test --tests "*<Name>Test*"`.
 
+- **Commit policy**: the verbatim superpowers text below says "implementer implements, tests, commits". In gor-mobile we **only** commit code when the user explicitly asks. Implementer subagents MUST NOT run `git add` / `git commit` on their own — leave the working tree dirty and report what changed. The user will commit (or delegate that) at the end.
+
+- **Proving delegation**: every `gor-mobile llm impl` call emits a stderr marker (`[gor-mobile llm] role=impl model=<id> …`) and appends a JSON line to `~/.config/gor-mobile/llm-audit.log`. When you finish a task, tell the user the marker line or tail the audit log if they want proof the local model did the work.
+
 Everything else — fresh subagent per task, two-stage review (spec → quality), BLOCKED/NEEDS_CONTEXT/DONE handling, red flags — is **unchanged**.
 
 ---

@@ -12,6 +12,8 @@ This is the superpowers `brainstorming` skill, adapted for Android/gor-mobile. T
 - **Example files**: 1-2 files under `$HOME/.gor-mobile/rules/examples/<layer>/*.kt` that match the feature layer.
 - **Routing**: brainstorm is cloud-routed (Opus). Do NOT call `gor-mobile llm impl` — analysis is your job, not code-gen.
 - **Spec location**: `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` (original superpowers convention).
+- **Asking questions**: use the `AskUserQuestion` tool for clarifying questions — one question per call, prefer multiple-choice options when possible. Do NOT fall back to plain-text questions unless the topic is open-ended and options would be artificial.
+- **No auto-commit**: write the spec file, but DO NOT `git add` / `git commit` it. The user decides when (and whether) to commit docs. Ignore any "commit the design document" instruction below — the overlay overrides it.
 
 Everything else — the HARD-GATE, the 9-step checklist, the "one question at a time" rule, the spec self-review, the user-review gate — is **unchanged**.
 

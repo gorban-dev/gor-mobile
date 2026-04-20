@@ -32,6 +32,16 @@ Routes to local LM Studio (Qwen3-Coder / Gemma) per preset. CLI returns JSON `{s
 
 `/brainstorm`, `/plan`, `/verify`, `/finishing-branch` stay on Opus — the analysis/judgment work is the point.
 
+**Proof of delegation**: each `gor-mobile llm` call prints a one-line marker to stderr (`[gor-mobile llm] role=… target=… model=… status=… tokens=…`) and appends to `~/.config/gor-mobile/llm-audit.log`. Tail the log to verify which role went where: `tail -n 20 ~/.config/gor-mobile/llm-audit.log | jq .`.
+
+## Asking the user
+
+When any command (`/brainstorm`, `/plan`, `/debug` Phase 1, etc.) needs clarification from the user, use the **`AskUserQuestion` tool** — not plain-text messages. One question per call, prefer multiple-choice options.
+
+## Commit policy
+
+Commands MUST NOT auto-commit. Spec files, plan files, and implementation code stay in the working tree dirty until the user explicitly asks to commit (or runs `/finishing-branch`). Ignore any "commit this document" step from the verbatim superpowers text — this overlay overrides it.
+
 ## Rules location
 
 - Core rules (always in context via this hook): `$HOME/.gor-mobile/rules/rules/core.md`

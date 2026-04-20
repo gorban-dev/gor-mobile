@@ -12,6 +12,8 @@ This is the superpowers `writing-plans` skill, adapted for Android/gor-mobile. T
 - **Example-driven specs**: when a task involves an Android layer, reference 1-2 files from `$HOME/.gor-mobile/rules/examples/<layer>/` in the task's "Files" section so the implementer knows the canonical shape.
 - **Test command**: use `./gradlew :<module>:test --tests "*<Name>Test*"` in RED/GREEN verification steps instead of `pytest`/`npm test`.
 - **Routing**: `/plan` is cloud-routed (Opus) — write the design yourself, do not call `gor-mobile llm impl`.
+- **No auto-commit**: write the plan file, but DO NOT `git add` / `git commit` it. The user decides when to commit.
+- **Asking questions**: if anything in the brief is unclear, use the `AskUserQuestion` tool — not plain text.
 
 Everything else — the plan header, task structure, bite-sized steps with real code, no-placeholders rule, self-review — is **unchanged** from superpowers.
 

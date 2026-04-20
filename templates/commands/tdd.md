@@ -29,6 +29,8 @@ This is the superpowers `test-driven-development` skill, adapted for Android/gor
 
 - **Scope**: TDD is MANDATORY for UseCase and Mapper business logic (pure Kotlin). For ViewModel state machines it is strongly recommended. Pure Compose UI does not have a forced RED phase.
 
+- **No auto-commit**: the verbatim text below mentions "commit after REFACTOR". In gor-mobile we leave all commits to the user — do NOT `git add` / `git commit`.
+
 Everything else — the Iron Law, Red-Green-Refactor flow, "verify RED" / "verify GREEN" gates, rationalizations table, red flags — is **unchanged** from superpowers.
 
 ---

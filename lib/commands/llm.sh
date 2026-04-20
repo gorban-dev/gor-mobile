@@ -106,6 +106,30 @@ _emit() {
         } + (if $r == "" then {} else {reason: $r} end)'
 }
 
+# Visible proof-of-delegation: one line to stderr + an append-only JSON audit log.
+# The stderr line surfaces in Claude Code transcripts so the user can see the
+# local LLM was really invoked (role + model + tokens + elapsed).
+_LLM_AUDIT_LOG="${GOR_MOBILE_CONFIG_DIR:-$HOME/.config/gor-mobile}/llm-audit.log"
+
+_log_invocation() {
+    local role="$1" target="$2" model="$3" status="$4" in_tok="$5" out_tok="$6" elapsed_ms="$7" reason="${8:-}"
+    printf >&2 "[gor-mobile llm] role=%s target=%s model=%s status=%s tokens=%s/%s elapsed=%sms%s\n" \
+        "$role" "$target" "${model:-none}" "$status" \
+        "${in_tok:-0}" "${out_tok:-0}" "${elapsed_ms:-0}" \
+        "${reason:+ reason=\"$reason\"}"
+    mkdir -p "$(dirname "$_LLM_AUDIT_LOG")" 2>/dev/null || true
+    jq -cn \
+        --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg role "$role" --arg target "$target" \
+        --arg model "$model" --arg status "$status" \
+        --argjson i "${in_tok:-0}" --argjson o "${out_tok:-0}" \
+        --argjson e "${elapsed_ms:-0}" --arg r "$reason" \
+        '{ts:$ts, role:$role, target:$target, model:$model, status:$status,
+          tokens:{input:$i, output:$o}, elapsed_ms:$e}
+         + (if $r == "" then {} else {reason:$r} end)' \
+        >> "$_LLM_AUDIT_LOG" 2>/dev/null || true
+}
+
 _exit_for_status() {
     case "$1" in
         OK) return 0 ;;
@@ -208,6 +232,7 @@ _llm_run() {
     default_model="$(echo "$line" | awk -F: '{print $3}')"
 
     if [[ -z "$target" ]]; then
+        _log_invocation "$role" "-" "" "BLOCKED" 0 0 0 "unknown role: $role"
         _emit BLOCKED "" "" 0 0 0 "unknown role: $role"
         return 2
     fi
@@ -217,6 +242,7 @@ _llm_run() {
     fi
 
     if [[ "$target" == "cloud" ]]; then
+        _log_invocation "$role" "cloud" "" "BLOCKED" 0 0 0 "routed to cloud under preset=$preset"
         _emit BLOCKED "" "" 0 0 0 "role=$role routes to cloud under preset=$preset — caller should use Opus"
         return 2
     fi
@@ -224,16 +250,19 @@ _llm_run() {
     model="$(_resolve_model "$role" "$default_model")"
 
     if ! dep_lms_path >/dev/null 2>&1; then
+        _log_invocation "$role" "local" "$model" "ERROR" 0 0 0 "lms CLI not installed"
         _emit ERROR "" "" 0 0 0 "lms CLI not installed"
         return 3
     fi
     if ! lm_server_up; then
         if ! lm_server_start 2>/dev/null; then
+            _log_invocation "$role" "local" "$model" "ERROR" 0 0 0 "LM Studio unreachable"
             _emit ERROR "" "" 0 0 0 "LM Studio server unreachable at $LLM_URL"
             return 3
         fi
     fi
     if ! lm_ensure_model_loaded "$model" "$LLM_CONTEXT_LENGTH"; then
+        _log_invocation "$role" "local" "$model" "BLOCKED" 0 0 0 "failed to load model"
         _emit BLOCKED "" "" 0 0 0 "failed to load model $model"
         return 2
     fi
@@ -246,6 +275,7 @@ _llm_run() {
 
     if echo "$raw_response" | jq -e '.error' >/dev/null 2>&1; then
         local err; err="$(echo "$raw_response" | jq -r '.error.message // .error | tostring')"
+        _log_invocation "$role" "local" "$model" "ERROR" 0 0 "$elapsed_ms" "LM Studio: $err"
         _emit ERROR "$model" "" 0 0 "$elapsed_ms" "LM Studio: $err"
         return 3
     fi
@@ -257,10 +287,12 @@ _llm_run() {
 
     # Context-overflow heuristic: response truncated with near-zero content.
     if [[ -z "$content" && "$in_tok" -gt 0 ]]; then
+        _log_invocation "$role" "local" "$model" "BLOCKED" "$in_tok" "$out_tok" "$elapsed_ms" "empty completion — possible context overflow"
         _emit BLOCKED "$model" "" "$in_tok" "$out_tok" "$elapsed_ms" "empty completion — possible context overflow"
         return 2
     fi
 
+    _log_invocation "$role" "local" "$model" "OK" "$in_tok" "$out_tok" "$elapsed_ms"
     _emit OK "$model" "$content" "$in_tok" "$out_tok" "$elapsed_ms"
 }
 

@@ -22,6 +22,10 @@ This is the superpowers `systematic-debugging` skill, adapted for Android/gor-mo
 
 - **Phase 4 step 1 "Create Failing Test Case"** uses `./gradlew :<module>:test --tests "*<Name>Test*"` and lives under the matching `src/test/kotlin/...` path.
 
+- **Asking the user for reproduction / context**: use the `AskUserQuestion` tool, not plain text. Multiple-choice when possible (which screen, which build, cold-start vs warm, etc.).
+
+- **No auto-commit**: fix code only — do NOT `git add` / `git commit` during debugging. Leave changes for the user to review and commit.
+
 Everything else — the Iron Law, four phases, "3+ fixes = architectural problem" rule, red flags, rationalizations — is **unchanged** from superpowers.
 
 ---
