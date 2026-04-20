@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.3.1 — 2026-04-20
+
+Closes a known upstream superpowers bug where `brainstorming` silently
+commits the spec on the current branch (usually `main`) because its
+checklist never invokes `using-git-worktrees`. See
+obra/superpowers#1080, #574 (open since March), PRs #675 / #1097
+stalled on mandatory-vs-opt-in disagreement.
+
+**Action required:** run `gor-mobile repair` after upgrading. Picks up
+the updated `brainstorming` overlay and the new line in the
+UserPromptSubmit reminder.
+
+- **Brainstorming overlay** now inserts a MANDATORY worktree-decision
+  step between "user reviews spec" (upstream step 8) and "invoke
+  writing-plans" (upstream step 9). Prompt-based, not auto-create
+  (per upstream #991): single multiple-choice message with A (create
+  worktree, recommended), B (stay on current branch), C (defer). The
+  choice is recorded in the spec header so downstream skills don't
+  re-ask.
+- **UserPromptSubmit reminder** gained one line pointing at the
+  worktree-decision step. Safety net against drift on long
+  conversations where the overlay signal fades.
+- **Skill bodies unchanged.** Upstream `brainstorming/SKILL.md`,
+  `writing-plans/SKILL.md`, `using-git-worktrees/SKILL.md` remain
+  byte-identical verbatim. All changes live in the overlay layer
+  appended on install, so `gor-mobile update` stays drop-in if/when
+  upstream merges #675 or #1097.
+
+## 0.3.0 — 2026-04-20
+
+Install wizard is now a proper gum-backed TUI — with a clean fallback to the
+previous plain-`read` prompts when gum isn't available.
+
+**Action required:** run `gor-mobile repair` (or `gor-mobile init`) after
+upgrading. No data migrations; this just picks up the new `ui.sh` helper
+and re-copies templates.
+
+- **Gum-backed wizard.** `lib/commands/init.sh` now delegates prompts, menus,
+  confirmations, banners, and spinners to `lib/helpers/ui.sh`. Bordered
+  banner, step headers (`Step N/12 │ …`), interactive arrow-key menus for
+  model-role assignment, branded colors.
+- **bats**: new `ui_test.bats` (12 cases) covers the plain-bash fallback
+  of every `ui_*` primitive; new `uninstall_test.bats` (5 cases) verifies
+  the cleanup actually removes `$GOR_MOBILE_HOME` including
+  `cache/bin/gum`, that secrets are kept by default, and that `--purge`
+  deletes them. Total 45 tests (was 28).
+- **Auto-bootstrap gum.** On first interactive run, the wizard fetches
+  `gum v0.14.5` from GitHub Releases into `~/.gor-mobile/cache/bin/`
+  (~3 MB, one-time, macOS + Linux / x86_64 + arm64). No `brew install`
+  prerequisite. If the download fails, unsupported arch, or running
+  non-TTY/`--yes`/`NO_TUI=1`, the wizard falls back to the previous
+  plain-bash prompts — the public `ui_*` API stays identical either way.
+- **New `--no-tui` flag** (and `NO_TUI=1` env) for users who prefer the
+  plain prompts or run in CI without a TTY.
+- **Legacy `log_*` helpers** still live in `lib/constants.sh`; the wizard
+  itself uses `ui_*` exclusively. Other commands continue to use `log_*`
+  until they gain a UI pass of their own.
+- **`gor-mobile uninstall` now actually uninstalls.** Previously only
+  `$GOR_MOBILE_HOME/scripts` was removed and the user was told in an
+  `log_info` to `rm -rf ~/.gor-mobile` manually — which left behind
+  templates, the cached `gum` binary, and the rules-pack git clone.
+  The command now wipes `$GOR_MOBILE_HOME` and `config.json` by default,
+  keeping only `secrets.env` (API keys — too dangerous to delete by
+  default). New `--purge` flag removes secrets too.
+
 ## 0.2.7 — 2026-04-20
 
 Skills-workflow fidelity fixes — close the gap between "hook fires" and "agent

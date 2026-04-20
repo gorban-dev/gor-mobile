@@ -3,6 +3,8 @@
 
 # shellcheck source=../constants.sh
 source "$GOR_MOBILE_ROOT/lib/constants.sh"
+# shellcheck source=./ui.sh
+source "$GOR_MOBILE_ROOT/lib/helpers/ui.sh"
 
 mcp_has_entry() {
     local name="$1"
@@ -16,7 +18,7 @@ mcp_register_google_dev_knowledge() {
     [[ -f "$CLAUDE_MCP" ]] || printf '{"mcpServers":{}}\n' > "$CLAUDE_MCP"
 
     if mcp_has_entry "google-dev-knowledge"; then
-        log_info "MCP google-dev-knowledge already registered"
+        ui_info "MCP google-dev-knowledge already registered"
         return 0
     fi
 
@@ -30,7 +32,7 @@ mcp_register_google_dev_knowledge() {
         }
     ' "$CLAUDE_MCP" > "$tmp"
     mv "$tmp" "$CLAUDE_MCP"
-    log_ok "MCP google-dev-knowledge registered"
+    ui_ok "MCP google-dev-knowledge registered"
 }
 
 mcp_unregister_managed() {

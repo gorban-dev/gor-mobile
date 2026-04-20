@@ -2,13 +2,13 @@
 
 [![release](https://img.shields.io/github/v/release/gorban-dev/gor-mobile?label=release&color=blue)](https://github.com/gorban-dev/gor-mobile/releases)
 [![license](https://img.shields.io/github/license/gorban-dev/gor-mobile)](./LICENSE)
-[![tests](https://img.shields.io/badge/bats-28%20passing-brightgreen)](./tests)
+[![tests](https://img.shields.io/badge/bats-45%20passing-brightgreen)](./tests)
 [![homebrew](https://img.shields.io/badge/homebrew-gorban--dev%2Fgor--mobile-orange)](https://github.com/gorban-dev/homebrew-gor-mobile)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)]()
 
 A bash CLI that wires a superpowers-style Android workflow (`brainstorm → plan → implement → review → verify`) into Claude Code, offloading routine code generation to **local LLMs** via LM Studio. Opus runs only where judgment is needed.
 
-> Status: `v0.2.7` — superpowers verbatim (14 skills, 1 agent, SessionStart + UserPromptSubmit hooks) + craft-skills-ported local-LLM delegation scripts. See `CHANGELOG.md`.
+> Status: `v0.3.1` — gum-backed TUI wizard (falls back to plain prompts without a TTY or with `--no-tui`); superpowers verbatim (14 skills, 1 agent, SessionStart + UserPromptSubmit hooks); craft-skills-ported local-LLM delegation scripts; brainstorming overlay closes upstream worktree-gap bug (obra/superpowers#1080). See `CHANGELOG.md`.
 
 ## Install
 
@@ -34,7 +34,7 @@ gor-mobile init
 
 `gor-mobile init` runs 12 idempotent steps. Re-run anytime to repair drift — every step checks current state first, and nothing outside the managed sections is ever touched.
 
-Flags: `--dry-run` prints what would change; `--yes` / `-y` assumes yes to every prompt (non-interactive); `--skip-sanity` skips step 12; `--rules <git-url>` overrides the default rules pack URL.
+Flags: `--dry-run` prints what would change; `--yes` / `-y` assumes yes to every prompt (non-interactive); `--skip-sanity` skips step 12; `--no-tui` (or `NO_TUI=1`) forces plain-text prompts even when the gum TUI is available; `--rules <git-url>` overrides the default rules pack URL.
 
 1. **Base dependencies.** Verifies `git`, `curl`, `jq` are on PATH; warns if `brew` is missing. Missing hard deps abort the wizard.
 2. **Google Android CLI agent** (https://developer.android.com/tools/agents). Detects the `android` binary. If absent, prints a short explanation of what the CLI is and why `gor-mobile` needs it, then offers to open the install page in your default browser and waits for you to finish the install before re-detecting.
@@ -47,7 +47,7 @@ Flags: `--dry-run` prints what would change; `--yes` / `-y` assumes yes to every
 4. **Secrets template.** Creates `~/.config/gor-mobile/secrets.env` with `chmod 600` (skipped if it already exists — never overwrites your keys).
 5. **Rules pack.** Clones the default rules pack (or your `--rules <url>`) to `~/.gor-mobile/rules/`. If the directory already has `.git`, runs `git pull --ff-only` instead. Falls back to the minimal bundled `rules-default/` if the clone fails. Records the source URL + ref in `~/.config/gor-mobile/config.json`.
 6. **SessionStart + UserPromptSubmit hooks.** Copies `session-start-hook.sh` and `user-prompt-submit-hook.sh` to `~/.gor-mobile/templates/`, then `jq`-merges matching entries into `~/.claude/settings.json` — your existing `Stop` / `PermissionRequest` / `Notification` / other matchers are preserved untouched. The SessionStart hook mirrors the superpowers hook shape: it reads `gor-mobile-using-superpowers/SKILL.md` on every session start and injects it as `additionalContext` (no Android project gate). The closing `</EXTREMELY_IMPORTANT>` tag sits directly after the skills-discipline rules; Android rules-pack/scripts context lives in a sibling `<gor-mobile-android-addendum>` block so it doesn't dilute the skills signal. The UserPromptSubmit hook fires on every user prompt and injects a short (~50-word) reminder — counters skills-discipline drift on long conversations where the single SessionStart injection fades.
-7. **Skills.** Copies 14 verbatim superpowers skills into `~/.claude/skills/gor-mobile-<skill>/`. Install-time transforms: `sed 's/superpowers:/gor-mobile-/g'` on cross-references, `sed 's/^name: /name: gor-mobile-/'` on the frontmatter id, and an optional overlay block appended from `templates/overlays/<skill>.md` for the 5 skills where local-LLM delegation makes sense (`subagent-driven-development`, `test-driven-development`, `systematic-debugging`, `requesting-code-review`, `brainstorming`).
+7. **Skills.** Copies 14 verbatim superpowers skills into `~/.claude/skills/gor-mobile-<skill>/`. Install-time transforms: `sed 's/superpowers:/gor-mobile-/g'` on cross-references, `sed 's/^name: /name: gor-mobile-/'` on the frontmatter id, and an optional overlay block appended from `templates/overlays/<skill>.md` for the 6 skills where Android rules, local-LLM delegation, or a fix to a known upstream bug applies (`brainstorming`, `subagent-driven-development`, `test-driven-development`, `executing-plans`, `systematic-debugging`, `requesting-code-review`).
 8. **LLM scripts.** Installs 7 craft-skills-ported scripts to `~/.gor-mobile/scripts/`: `llm-config`, `llm-agent`, `llm-implement`, `llm-review`, `llm-analyze`, `llm-check`, `llm-unload`. Overlay sections inside each `SKILL.md` direct main Claude to call these directly — they carry a rich JSON contract, a pre-check LOC-routing hint, and a scope-restricted `write_file` tool for the local model.
 9. **Agents.** Installs `gor-mobile-code-reviewer.md` (superpowers `code-reviewer` verbatim, name prefixed) into `~/.claude/agents/`.
 10. **MCP registration.** Adds a `google-dev-knowledge` entry to `~/.claude/mcp.json` via `jq`-merge (idempotent — won't duplicate an existing entry).

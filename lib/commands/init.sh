@@ -13,21 +13,26 @@ source "$GOR_MOBILE_ROOT/lib/helpers/claude-md-section.sh"
 source "$GOR_MOBILE_ROOT/lib/helpers/mcp-register.sh"
 # shellcheck source=../helpers/lm-studio.sh
 source "$GOR_MOBILE_ROOT/lib/helpers/lm-studio.sh"
+# shellcheck source=../helpers/ui.sh
+source "$GOR_MOBILE_ROOT/lib/helpers/ui.sh"
 
 DRY_RUN=0
 ASSUME_YES=0
 SKIP_SANITY=0
 RULES_URL=""
+NO_TUI="${NO_TUI:-0}"
+export ASSUME_YES NO_TUI
 
 _parse_init_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --dry-run)      DRY_RUN=1 ;;
-            --yes|-y)       ASSUME_YES=1 ;;
+            --yes|-y)       ASSUME_YES=1; export ASSUME_YES ;;
             --skip-sanity)  SKIP_SANITY=1 ;;
+            --no-tui)       NO_TUI=1; export NO_TUI ;;
             --rules)        RULES_URL="${2:-}"; shift ;;
             -h|--help)      _init_usage; exit 0 ;;
-            *) log_warn "Unknown arg: $1" ;;
+            *) ui_warn "Unknown arg: $1" ;;
         esac
         shift
     done
@@ -41,15 +46,13 @@ Options:
   --dry-run       Print planned actions; do not modify the filesystem
   --yes, -y       Assume 'yes' to all prompts (non-interactive)
   --skip-sanity   Skip the final LM Studio round-trip test
+  --no-tui        Force plain-text prompts (skip gum TUI even if available)
   --rules <url>   Use a custom rules-pack git URL (default: $DEFAULT_RULES_URL)
 EOF
 }
 
 _confirm() {
-    [[ $ASSUME_YES -eq 1 ]] && return 0
-    local prompt="$1 [y/N] " reply
-    read -r -p "$prompt" reply
-    [[ "$reply" =~ ^[yY]$ ]]
+    ui_confirm "$1" "N"
 }
 
 _run() {
@@ -63,31 +66,31 @@ _run() {
 # ──── Steps ────────────────────────────────────────────────────────────────
 
 step_1_deps() {
-    log_step "1/12 Checking base dependencies"
+    ui_header "1" "12" "Checking base dependencies"
     local missing=()
     for bin in git curl jq; do
         if dep_has "$bin"; then
-            log_ok "$bin → $(command -v "$bin")"
+            ui_ok "$bin → $(command -v "$bin")"
         else
             missing+=("$bin")
-            log_err "$bin not found"
+            ui_err "$bin not found"
         fi
     done
     if ! dep_has brew; then
-        log_warn "Homebrew not found. On macOS, install from https://brew.sh"
+        ui_warn "Homebrew not found. On macOS, install from https://brew.sh"
     else
-        log_ok "brew → $(command -v brew)"
+        ui_ok "brew → $(command -v brew)"
     fi
     if (( ${#missing[@]} )); then
-        log_err "Install missing deps first: ${missing[*]}"
+        ui_err "Install missing deps first: ${missing[*]}"
         exit 1
     fi
 }
 
 step_2_android_cli() {
-    log_step "2/12 Android CLI"
+    ui_header "2" "12" "Android CLI"
     if dep_android_cli_path >/dev/null 2>&1; then
-        log_ok "android CLI → $(dep_android_cli_path)"
+        ui_ok "android CLI → $(dep_android_cli_path)"
         return
     fi
 
@@ -111,12 +114,12 @@ step_2_android_cli() {
 EOF
 
     if [[ $ASSUME_YES -eq 1 ]]; then
-        log_warn "Skipping Android CLI install (--yes). Install manually and re-run 'gor-mobile init'."
+        ui_warn "Skipping Android CLI install (--yes). Install manually and re-run 'gor-mobile init'."
         return
     fi
 
     if ! _confirm "Open the install page in your browser now?"; then
-        log_warn "Install manually from https://developer.android.com/tools/agents, then re-run 'gor-mobile init'."
+        ui_warn "Install manually from https://developer.android.com/tools/agents, then re-run 'gor-mobile init'."
         return
     fi
 
@@ -125,32 +128,32 @@ EOF
     elif command -v xdg-open >/dev/null 2>&1; then
         _run "xdg-open 'https://developer.android.com/tools/agents'"
     else
-        log_info "Couldn't auto-open a browser — visit the URL above manually."
+        ui_info "Couldn't auto-open a browser — visit the URL above manually."
     fi
 
     printf "\n  Press Enter once the installer finishes (Ctrl-C to abort)..." >&2
     read -r _
     if dep_android_cli_path >/dev/null 2>&1; then
-        log_ok "android CLI → $(dep_android_cli_path)"
+        ui_ok "android CLI → $(dep_android_cli_path)"
     else
-        log_warn "Still not detected. You may need a new shell (PATH not picked up yet). Re-run 'gor-mobile init' later."
+        ui_warn "Still not detected. You may need a new shell (PATH not picked up yet). Re-run 'gor-mobile init' later."
     fi
 }
 
 step_3_lm_studio() {
-    log_step "3/12 LM Studio + local models"
+    ui_header "3" "12" "LM Studio + local models"
     if dep_lms_path >/dev/null 2>&1; then
-        log_ok "lms → $(dep_lms_path)"
+        ui_ok "lms → $(dep_lms_path)"
     elif dep_has brew && _confirm "Install LM Studio via 'brew install --cask lm-studio'?"; then
         _run "brew install --cask lm-studio"
     else
-        log_warn "Skipping LM Studio install (optional, but required for local inference)"
+        ui_warn "Skipping LM Studio install (optional, but required for local inference)"
         return
     fi
 
     local lms_bin
     if ! lms_bin="$(dep_lms_path 2>/dev/null)"; then
-        log_warn "lms CLI not available — skip model setup. Install LM Studio and rerun 'gor-mobile init'."
+        ui_warn "lms CLI not available — skip model setup. Install LM Studio and rerun 'gor-mobile init'."
         return
     fi
 
@@ -173,13 +176,13 @@ step_3_lm_studio() {
     local choice_deep="$default_deep"
 
     if (( ${#installed[@]} > 0 )); then
-        log_ok "Found ${#installed[@]} installed LLM(s):"
+        ui_ok "Found ${#installed[@]} installed LLM(s):"
         local m
         for m in "${installed[@]}"; do
             printf "    • %s\n" "$m" >&2
         done
     else
-        log_info "No LLMs installed yet — will pull defaults."
+        ui_info "No LLMs installed yet — will pull defaults."
     fi
 
     # Interactive per-role selection if installed models exist and user confirms
@@ -219,13 +222,13 @@ step_3_lm_studio() {
     done <<< "$wanted"
 
     if [[ -z "$missing" ]]; then
-        log_ok "All selected models are already installed."
+        ui_ok "All selected models are already installed."
         return
     fi
 
-    log_info "Missing models: $(echo "$missing" | tr '\n' ' ')"
+    ui_info "Missing models: $(echo "$missing" | tr '\n' ' ')"
     if ! _confirm "Pull missing models via 'lms get'? [~15-30 GB each]"; then
-        log_warn "Skipping model download. You can pull later via: lms get <model-id>"
+        ui_warn "Skipping model download. You can pull later via: lms get <model-id>"
         return
     fi
     while IFS= read -r mm; do
@@ -240,39 +243,23 @@ _pick_model_for_role() {
     local role="$1" default="$2"
     shift 2
     local -a models=("$@")
-
-    printf "\n  Role: %s (default: %s)\n" "$role" "$default" >&2
-    local idx=1 m default_idx=0
-    for m in "${models[@]}"; do
-        local marker=""
-        if [[ "$m" == "$default" ]]; then
-            marker=" [default]"
-            default_idx=$idx
-        fi
-        printf "    %2d) %s%s\n" "$idx" "$m" "$marker" >&2
-        idx=$((idx + 1))
-    done
-    local custom_idx=$idx
-    printf "    %2d) enter custom model id\n" "$custom_idx" >&2
-
-    local prompt_default="${default_idx:-$custom_idx}"
-    local reply
-    read -r -p "  Choose [1-$custom_idx, default=$prompt_default]: " reply
-    reply="${reply:-$prompt_default}"
-
-    if [[ "$reply" =~ ^[0-9]+$ ]] && (( reply >= 1 && reply <= ${#models[@]} )); then
-        echo "${models[$((reply - 1))]}"
+    local custom_label="↳ enter custom model id"
+    local picked
+    picked="$(ui_choose "Model for role '$role' (default: $default)" "$default" "${models[@]}" "$custom_label")"
+    if [[ -z "$picked" ]]; then
+        echo "$default"
         return
     fi
-    if [[ "$reply" == "$custom_idx" ]]; then
-        local custom
-        read -r -p "  Custom model id: " custom
+    if [[ "$picked" == "$custom_label" ]]; then
+        local custom; custom="$(ui_input "Custom model id")"
         if [[ -n "$custom" ]]; then
             echo "$custom"
             return
         fi
+        echo "$default"
+        return
     fi
-    echo "$default"
+    echo "$picked"
 }
 
 # _save_model_overrides <impl> <impl_default> <review> <review_default> <deep> <deep_default>
@@ -309,14 +296,14 @@ _save_model_overrides() {
         jq -n --argjson m "$overrides" '{models: $m}' > "$tmp"
     fi
     mv "$tmp" "$GOR_MOBILE_CONFIG"
-    log_ok "Saved model overrides: $(echo "$overrides" | jq -c .)"
+    ui_ok "Saved model overrides: $(echo "$overrides" | jq -c .)"
 }
 
 step_4_secrets() {
-    log_step "4/12 API keys"
+    ui_header "4" "12" "API keys"
     _run "mkdir -p \"$GOR_MOBILE_CONFIG_DIR\""
     if [[ -f "$GOR_MOBILE_SECRETS" ]]; then
-        log_ok "secrets file exists at $GOR_MOBILE_SECRETS"
+        ui_ok "secrets file exists at $GOR_MOBILE_SECRETS"
         return
     fi
     cat <<'EOF' > "/tmp/gor-mobile-secrets.tpl"
@@ -326,18 +313,18 @@ step_4_secrets() {
 EOF
     _run "cp /tmp/gor-mobile-secrets.tpl \"$GOR_MOBILE_SECRETS\""
     _run "chmod 600 \"$GOR_MOBILE_SECRETS\""
-    log_ok "Secrets template at $GOR_MOBILE_SECRETS (edit manually)"
+    ui_ok "Secrets template at $GOR_MOBILE_SECRETS (edit manually)"
 }
 
 step_5_rules_pack() {
-    log_step "5/12 Rules pack"
+    ui_header "5" "12" "Rules pack"
     local url="${RULES_URL:-$DEFAULT_RULES_URL}"
     if [[ -d "$GOR_MOBILE_RULES_DIR/.git" ]]; then
-        log_ok "Rules pack already present at $GOR_MOBILE_RULES_DIR"
+        ui_ok "Rules pack already present at $GOR_MOBILE_RULES_DIR"
         _run "git -C \"$GOR_MOBILE_RULES_DIR\" pull --ff-only || true"
     else
         _run "rm -rf \"$GOR_MOBILE_RULES_DIR\""
-        _run "git clone --depth 1 --branch \"$DEFAULT_RULES_REF\" \"$url\" \"$GOR_MOBILE_RULES_DIR\" || { log_warn 'Git clone failed — falling back to bundled minimal rules'; cp -r \"$GOR_MOBILE_ROOT/rules-default\" \"$GOR_MOBILE_RULES_DIR\"; }"
+        _run "git clone --depth 1 --branch \"$DEFAULT_RULES_REF\" \"$url\" \"$GOR_MOBILE_RULES_DIR\" || { ui_warn 'Git clone failed — falling back to bundled minimal rules'; cp -r \"$GOR_MOBILE_ROOT/rules-default\" \"$GOR_MOBILE_RULES_DIR\"; }"
     fi
     _save_config "$url"
 }
@@ -357,7 +344,7 @@ _save_config() {
 }
 
 step_6_settings_hook() {
-    log_step "6/12 SessionStart + UserPromptSubmit hooks → ~/.claude/settings.json"
+    ui_header "6" "12" "SessionStart + UserPromptSubmit hooks"
     _run "mkdir -p \"$GOR_MOBILE_HOME/templates\""
     _run "cp \"$GOR_MOBILE_ROOT/templates/session-start-hook.sh\" \"$GOR_MOBILE_HOME/templates/\""
     _run "chmod +x \"$GOR_MOBILE_HOME/templates/session-start-hook.sh\""
@@ -368,12 +355,12 @@ step_6_settings_hook() {
     else
         settings_install_session_start_hook
         settings_install_user_prompt_submit_hook
-        log_ok "SessionStart + UserPromptSubmit hooks merged into $CLAUDE_SETTINGS"
+        ui_ok "SessionStart + UserPromptSubmit hooks merged into $CLAUDE_SETTINGS"
     fi
 }
 
 step_7_skills() {
-    log_step "7/12 Skills → ~/.claude/skills/gor-mobile-*/"
+    ui_header "7" "12" "Skills → ~/.claude/skills/gor-mobile-*/"
     _run "mkdir -p \"$CLAUDE_SKILLS_DIR\""
     local d
     for d in "$GOR_MOBILE_ROOT"/templates/skills/*/; do
@@ -400,18 +387,18 @@ step_7_skills() {
             fi
         fi
     done
-    log_ok "Installed skills (verbatim superpowers + sed + overlay-append)"
+    ui_ok "Installed skills (verbatim superpowers + sed + overlay-append)"
 }
 
 step_8_scripts() {
-    log_step "8/12 LLM scripts → \$HOME/.gor-mobile/scripts/"
+    ui_header "8" "12" "LLM scripts → \$HOME/.gor-mobile/scripts/"
     _run "mkdir -p \"$GOR_MOBILE_HOME/scripts\""
     local s
     for s in llm-config llm-agent llm-implement llm-review llm-analyze llm-check llm-unload; do
         local src="$GOR_MOBILE_ROOT/templates/scripts/${s}.sh"
         local dst="$GOR_MOBILE_HOME/scripts/${s}.sh"
         if [[ ! -f "$src" ]]; then
-            log_warn "missing template $src"
+            ui_warn "missing template $src"
             continue
         fi
         if [[ $DRY_RUN -eq 1 ]]; then
@@ -420,11 +407,11 @@ step_8_scripts() {
             install -m 0755 "$src" "$dst"
         fi
     done
-    log_ok "Installed 7 craft-skills LLM scripts"
+    ui_ok "Installed 7 craft-skills LLM scripts"
 }
 
 step_9_agents() {
-    log_step "9/12 Agents → ~/.claude/agents/gor-mobile-code-reviewer.md"
+    ui_header "9" "12" "Agents → ~/.claude/agents/"
     _run "mkdir -p \"$CLAUDE_AGENTS_DIR\""
     local src="$GOR_MOBILE_ROOT/templates/agents/code-reviewer.md"
     local dst="$CLAUDE_AGENTS_DIR/gor-mobile-code-reviewer.md"
@@ -433,11 +420,11 @@ step_9_agents() {
     else
         install -m 0644 "$src" "$dst"
     fi
-    log_ok "Copied code-reviewer agent"
+    ui_ok "Copied code-reviewer agent"
 }
 
 step_10_mcp() {
-    log_step "10/12 MCP registration"
+    ui_header "10" "12" "MCP registration"
     if [[ $DRY_RUN -eq 1 ]]; then
         printf "  [dry-run] register google-dev-knowledge in %s\n" "$CLAUDE_MCP"
     else
@@ -446,41 +433,42 @@ step_10_mcp() {
 }
 
 step_11_claude_md() {
-    log_step "11/12 CLAUDE.md managed section"
+    ui_header "11" "12" "CLAUDE.md managed section"
     if [[ $DRY_RUN -eq 1 ]]; then
         printf "  [dry-run] merge managed section into %s\n" "$CLAUDE_CLAUDE_MD"
     else
         claude_md_write_section "$GOR_MOBILE_ROOT/templates/claude-md-snippet.md"
-        log_ok "Managed section written to $CLAUDE_CLAUDE_MD"
+        ui_ok "Managed section written to $CLAUDE_CLAUDE_MD"
     fi
 }
 
 step_12_sanity() {
-    log_step "12/12 Sanity check"
+    ui_header "12" "12" "Sanity check"
     if [[ $SKIP_SANITY -eq 1 ]]; then
-        log_info "Skipped (--skip-sanity)"
+        ui_info "Skipped (--skip-sanity)"
         return
     fi
     if ! dep_lms_path >/dev/null 2>&1; then
-        log_warn "lms not installed — skipping LM Studio sanity"
+        ui_warn "lms not installed — skipping LM Studio sanity"
         return
     fi
     if ! lm_server_up; then
-        log_info "LM Studio server is down — start it manually or re-run 'gor-mobile init'"
+        ui_info "LM Studio server is down — start it manually or re-run 'gor-mobile init'"
         return
     fi
     local models; models="$(curl -sS "$LLM_URL/v1/models" 2>/dev/null | jq -r '.data[].id' 2>/dev/null | head -5)"
     if [[ -n "$models" ]]; then
-        log_ok "LM Studio reachable — models: $(echo "$models" | tr '\n' ' ')"
+        ui_ok "LM Studio reachable — models: $(echo "$models" | tr '\n' ' ')"
     else
-        log_warn "LM Studio server reachable, but no models loaded"
+        ui_warn "LM Studio server reachable, but no models loaded"
     fi
 }
 
 cmd_init() {
     _parse_init_args "$@"
-    log_step "gor-mobile init (v$GOR_MOBILE_VERSION)"
-    [[ $DRY_RUN -eq 1 ]] && log_info "DRY RUN — no changes will be made"
+    ensure_gum || true
+    ui_banner "gor-mobile init — v$GOR_MOBILE_VERSION"
+    [[ $DRY_RUN -eq 1 ]] && ui_info "DRY RUN — no changes will be made"
 
     step_1_deps
     step_2_android_cli
@@ -495,6 +483,6 @@ cmd_init() {
     step_11_claude_md
     step_12_sanity
 
-    log_step "Done"
-    log_ok "Run 'gor-mobile doctor' anytime to verify the setup."
+    ui_header "✓" "12" "Done"
+    ui_ok "Run 'gor-mobile doctor' anytime to verify the setup."
 }
