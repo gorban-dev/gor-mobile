@@ -357,15 +357,18 @@ _save_config() {
 }
 
 step_6_settings_hook() {
-    log_step "6/12 SessionStart hook → ~/.claude/settings.json"
+    log_step "6/12 SessionStart + UserPromptSubmit hooks → ~/.claude/settings.json"
     _run "mkdir -p \"$GOR_MOBILE_HOME/templates\""
     _run "cp \"$GOR_MOBILE_ROOT/templates/session-start-hook.sh\" \"$GOR_MOBILE_HOME/templates/\""
     _run "chmod +x \"$GOR_MOBILE_HOME/templates/session-start-hook.sh\""
+    _run "cp \"$GOR_MOBILE_ROOT/templates/user-prompt-submit-hook.sh\" \"$GOR_MOBILE_HOME/templates/\""
+    _run "chmod +x \"$GOR_MOBILE_HOME/templates/user-prompt-submit-hook.sh\""
     if [[ $DRY_RUN -eq 1 ]]; then
-        printf "  [dry-run] merge SessionStart hook into %s\n" "$CLAUDE_SETTINGS"
+        printf "  [dry-run] merge SessionStart + UserPromptSubmit hooks into %s\n" "$CLAUDE_SETTINGS"
     else
         settings_install_session_start_hook
-        log_ok "SessionStart hook merged into $CLAUDE_SETTINGS"
+        settings_install_user_prompt_submit_hook
+        log_ok "SessionStart + UserPromptSubmit hooks merged into $CLAUDE_SETTINGS"
     fi
 }
 
@@ -386,8 +389,11 @@ step_7_skills() {
         rm -rf "$dst"
         cp -R "${d%/}" "$dst"
         if [[ -f "$dst/SKILL.md" ]]; then
-            sed -i '' 's/superpowers:/gor-mobile-/g' "$dst/SKILL.md"
-            sed -i '' 's/^name: /name: gor-mobile-/' "$dst/SKILL.md"
+            local tmp; tmp="$(mktemp)"
+            sed -e 's/superpowers:/gor-mobile-/g' \
+                -e 's/^name: /name: gor-mobile-/' \
+                "$dst/SKILL.md" > "$tmp"
+            mv "$tmp" "$dst/SKILL.md"
             if [[ -f "$overlay" ]]; then
                 printf '\n' >> "$dst/SKILL.md"
                 cat "$overlay" >> "$dst/SKILL.md"

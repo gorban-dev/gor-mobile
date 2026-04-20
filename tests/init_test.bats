@@ -46,34 +46,6 @@ teardown() {
     done
 }
 
-@test "installed skill bodies are verbatim superpowers (pre-overlay region)" {
-    mkdir -p "$GOR_MOBILE_HOME/rules"
-    cp -R "$GOR_MOBILE_ROOT/rules-default/." "$GOR_MOBILE_HOME/rules/"
-    ( cd "$GOR_MOBILE_HOME/rules" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -q -m seed )
-
-    run gor-mobile init --yes --skip-sanity
-    [ "$status" -eq 0 ]
-
-    # Pick one skill that has an overlay and verify the body above the
-    # overlay marker matches sed-transformed superpowers verbatim.
-    local name="subagent-driven-development"
-    local installed="$HOME/.claude/skills/gor-mobile-$name/SKILL.md"
-    local source_skill="/Users/home/Project/Agents/superpowers/skills/$name/SKILL.md"
-
-    [ -f "$installed" ]
-    [ -f "$source_skill" ]
-
-    local a b
-    a="$(awk '/<!-- BEGIN gor-mobile overlay -->/{exit} {print}' "$installed")"
-    b="$(sed -e 's/superpowers:/gor-mobile-/g' -e 's/^name: /name: gor-mobile-/' "$source_skill")"
-    # awk drops the trailing newline before the marker — tolerate that by
-    # trimming trailing blank lines from both sides before comparing.
-    [ "${a%$'\n'}" = "${b%$'\n'}" ] || {
-        diff <(printf '%s' "$a") <(printf '%s' "$b")
-        false
-    }
-}
-
 @test "settings_install_session_start_hook preserves unrelated hooks" {
     mkdir -p "$HOME/.claude"
     cat > "$HOME/.claude/settings.json" <<'JSON'

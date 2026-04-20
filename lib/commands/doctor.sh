@@ -23,13 +23,22 @@ _check_hook() {
         log_warn "No $CLAUDE_SETTINGS"
         return 1
     fi
+    local ok=0
     if jq -e '.hooks.SessionStart[]? | select(._managed_by == "gor-mobile")' \
             "$CLAUDE_SETTINGS" >/dev/null 2>&1; then
         log_ok "SessionStart hook registered"
-        return 0
+    else
+        log_warn "SessionStart hook NOT registered — run 'gor-mobile repair'"
+        ok=1
     fi
-    log_warn "SessionStart hook NOT registered — run 'gor-mobile repair'"
-    return 1
+    if jq -e '.hooks.UserPromptSubmit[]? | select(._managed_by == "gor-mobile")' \
+            "$CLAUDE_SETTINGS" >/dev/null 2>&1; then
+        log_ok "UserPromptSubmit hook registered"
+    else
+        log_warn "UserPromptSubmit hook NOT registered — run 'gor-mobile repair'"
+        ok=1
+    fi
+    return $ok
 }
 
 _check_claude_md_section() {
@@ -96,7 +105,69 @@ _check_scripts() {
     fi
 }
 
+_verbose_hook_emulation() {
+    local hook label
+    for hook_label in \
+        "session-start-hook.sh:SessionStart" \
+        "user-prompt-submit-hook.sh:UserPromptSubmit"; do
+        hook="${hook_label%%:*}"
+        label="${hook_label##*:}"
+        local path="$GOR_MOBILE_HOME/templates/$hook"
+        if [[ ! -f "$path" ]]; then
+            log_warn "[$label] template missing: $path"
+            continue
+        fi
+        if [[ ! -x "$path" ]]; then
+            log_warn "[$label] template not executable: $path"
+            continue
+        fi
+        local out
+        if ! out="$(bash "$path" 2>&1)"; then
+            log_warn "[$label] hook script errored:"
+            printf "%s\n" "$out" | sed 's/^/    /' >&2
+            continue
+        fi
+        local ctx; ctx="$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null || true)"
+        if [[ -z "$ctx" ]]; then
+            log_warn "[$label] hook produced no additionalContext:"
+            printf "%s\n" "$out" | sed 's/^/    /' >&2
+            continue
+        fi
+        log_ok "[$label] hook injects $(printf '%s' "$ctx" | wc -c | tr -d ' ') chars of additionalContext"
+        printf "    --- first 30 lines of $label context ---\n" >&2
+        printf "%s\n" "$ctx" | head -30 | sed 's/^/    /' >&2
+        printf "    --- end ---\n" >&2
+    done
+}
+
+_verbose_skills_frontmatter() {
+    [[ -d "$CLAUDE_SKILLS_DIR" ]] || { log_warn "$CLAUDE_SKILLS_DIR missing"; return; }
+    local count=0 bad=0 f
+    for f in "$CLAUDE_SKILLS_DIR"/gor-mobile-*/SKILL.md; do
+        [[ -f "$f" ]] || continue
+        count=$((count + 1))
+        if ! grep -q "^name: gor-mobile-" "$f"; then
+            bad=$((bad + 1))
+            log_warn "  $f missing 'name: gor-mobile-' prefix"
+        fi
+    done
+    if (( bad == 0 )); then
+        log_ok "Skills frontmatter OK ($count SKILL.md files, all prefixed)"
+    else
+        log_warn "Skills frontmatter: $bad of $count missing prefix — run 'gor-mobile repair'"
+    fi
+}
+
 cmd_doctor() {
+    local verbose=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --verbose|-v) verbose=1 ;;
+            *) log_warn "Unknown arg: $1" ;;
+        esac
+        shift
+    done
+
     log_step "Environment"
     dep_report "brew"     "$(command -v brew    || true)" optional
     dep_report "git"      "$(command -v git     || true)" required
@@ -125,6 +196,16 @@ cmd_doctor() {
     _check_file "$GOR_MOBILE_CONFIG"  "config.json" || true
     _check_file "$GOR_MOBILE_SECRETS" "secrets.env" || true
 
+    if [[ $verbose -eq 1 ]]; then
+        log_step "Hooks emulation (verbose)"
+        _verbose_hook_emulation
+        log_step "Skills frontmatter (verbose)"
+        _verbose_skills_frontmatter
+    fi
+
     printf "\n"
     log_info "If anything is missing, run: gor-mobile repair"
+    if [[ $verbose -eq 0 ]]; then
+        log_info "Run 'gor-mobile doctor --verbose' for hook-payload dump."
+    fi
 }

@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.2.7 — 2026-04-20
+
+Skills-workflow fidelity fixes — close the gap between "hook fires" and "agent
+actually invokes the skill" on long conversations.
+
+**Action required:** run `gor-mobile repair` after upgrading. Both the
+`SessionStart` template and the new `UserPromptSubmit` template need to land
+in `~/.gor-mobile/templates/`, and `~/.claude/settings.json` needs the second
+hook registered.
+
+- **SessionStart injection restructured.** The Android rules/scripts trailer
+  is no longer inside the `<EXTREMELY_IMPORTANT>` envelope. Main block now
+  closes on the skills-discipline rules; Android context moves into a
+  sibling `<gor-mobile-android-addendum>` block. Restores 1:1 structural
+  parity with the upstream superpowers hook — the signal the model anchors
+  on is no longer diluted.
+- **New `UserPromptSubmit` hook.** Short (~50 words) reminder injected on
+  every user prompt: "skills rule applies, check for a match before
+  responding, process skills before implementation skills." Counters
+  drift on Opus 4.x where the single-shot SessionStart injection fades
+  after a few turns. Registered via a mirror of the existing
+  `settings_install_session_start_hook` merge helper with the same
+  `_managed_by: gor-mobile` tag.
+- **`gor-mobile doctor --verbose`.** New flag dumps the first 30 lines of
+  what each hook actually emits (emulates the same `bash <hook>` the
+  harness runs), plus a per-SKILL.md frontmatter check — catches the
+  silent failure mode where the install-time `sed` left a skill with an
+  unprefixed `name:` and the skill never matches by id.
+- **Portable skill-frontmatter rewrite.** `lib/commands/{init,repair}.sh`
+  no longer use `sed -i ''` (BSD-only). Switched to the POSIX paradigm
+  `sed … > tmp && mv tmp file`, which works on both macOS BSD sed and
+  GNU sed (e.g. when users install `gnu-sed` via Homebrew). Repair also
+  runs a post-copy check — any SKILL.md still missing the
+  `name: gor-mobile-` prefix is loudly flagged with `log_warn`.
+- **Uninstall** cleans the new `UserPromptSubmit` managed entry
+  alongside the `SessionStart` one.
+- **bats**: `hook_test.bats` grew 6 new cases covering the new hook
+  (shape, reminder text) and the injection restructure (closing tag
+  before the addendum block). Dropped the non-portable
+  "installed skill bodies are verbatim superpowers" case that
+  hard-coded an absolute path to a sibling upstream checkout. Total
+  28 tests (was 23).
+
 ## 0.2.6 — 2026-04-20
 
 Realignment with superpowers; local-LLM delegation ported from craft-skills.

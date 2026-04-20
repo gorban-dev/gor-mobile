@@ -45,7 +45,11 @@ cmd_uninstall() {
 
     log_step "Removing SessionStart hook"
     settings_remove_session_start_hook
-    log_ok "Hook removed"
+    log_ok "SessionStart hook removed"
+
+    log_step "Removing UserPromptSubmit hook"
+    settings_remove_user_prompt_submit_hook
+    log_ok "UserPromptSubmit hook removed"
 
     log_step "Removing legacy commands/ (signature-matched)"
     _uninstall_cleanup_legacy_commands

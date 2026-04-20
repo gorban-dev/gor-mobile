@@ -46,3 +46,36 @@ settings_remove_session_start_hook() {
     ' "$CLAUDE_SETTINGS" > "$tmp"
     mv "$tmp" "$CLAUDE_SETTINGS"
 }
+
+# Adds a UserPromptSubmit hook entry that runs templates/user-prompt-submit-hook.sh.
+# Fires on every user prompt — counters skills-discipline drift between turns.
+settings_install_user_prompt_submit_hook() {
+    _settings_ensure_file
+    local hook_cmd="bash $GOR_MOBILE_HOME/templates/user-prompt-submit-hook.sh"
+    local tmp; tmp="$(mktemp)"
+
+    jq --arg cmd "$hook_cmd" --arg tag "gor-mobile" '
+        ( .hooks.UserPromptSubmit // [] ) as $existing
+        | .hooks.UserPromptSubmit =
+            (( $existing | map(select((._managed_by // "") != $tag)) )
+             + [{
+                 "_managed_by": $tag,
+                 "matcher": "",
+                 "hooks": [{ "type": "command", "command": $cmd }]
+             }])
+    ' "$CLAUDE_SETTINGS" > "$tmp"
+    mv "$tmp" "$CLAUDE_SETTINGS"
+}
+
+# Removes gor-mobile UserPromptSubmit entries (for uninstall).
+settings_remove_user_prompt_submit_hook() {
+    [[ -f "$CLAUDE_SETTINGS" ]] || return 0
+    local tmp; tmp="$(mktemp)"
+    jq --arg tag "gor-mobile" '
+        if .hooks.UserPromptSubmit then
+            .hooks.UserPromptSubmit |= map(select((._managed_by // "") != $tag))
+            | if (.hooks.UserPromptSubmit | length) == 0 then del(.hooks.UserPromptSubmit) else . end
+        else . end
+    ' "$CLAUDE_SETTINGS" > "$tmp"
+    mv "$tmp" "$CLAUDE_SETTINGS"
+}
