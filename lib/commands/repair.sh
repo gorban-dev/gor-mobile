@@ -84,6 +84,10 @@ cmd_repair() {
             tmp="$(mktemp)"
             sed -e 's/superpowers:/gor-mobile-/g' \
                 -e 's/^name: /name: gor-mobile-/' \
+                -e 's/"Invoke brainstorming skill"/"Invoke gor-mobile-brainstorming skill"/g' \
+                -e 's/"Invoke writing-plans skill"/"Invoke gor-mobile-writing-plans skill"/g' \
+                -e 's#~/.config/superpowers/worktrees#~/.config/gor-mobile/worktrees#g' \
+                -e 's/all 5 tasks/all tasks/g' \
                 "$dst/SKILL.md" > "$tmp"
             mv "$tmp" "$dst/SKILL.md"
             if [[ -f "$overlay" ]]; then

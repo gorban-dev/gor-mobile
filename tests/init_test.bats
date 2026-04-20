@@ -46,6 +46,40 @@ teardown() {
     done
 }
 
+@test "install-time sed rewrites skill names + paths to gor-mobile brand (upstream #1002, #1091, #1058)" {
+    mkdir -p "$GOR_MOBILE_HOME/rules"
+    cp -R "$GOR_MOBILE_ROOT/rules-default/." "$GOR_MOBILE_HOME/rules/"
+    ( cd "$GOR_MOBILE_HOME/rules" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -q -m seed )
+
+    run gor-mobile init --yes --skip-sanity
+    [ "$status" -eq 0 ]
+
+    # #1002: the using-superpowers flow diagram must reference the prefixed
+    # skill name, otherwise Skill("brainstorming") lookups fail because ours
+    # is registered as gor-mobile-brainstorming.
+    local usp="$HOME/.claude/skills/gor-mobile-using-superpowers/SKILL.md"
+    grep -qF '"Invoke gor-mobile-brainstorming skill"' "$usp"
+    ! grep -qF '"Invoke brainstorming skill"' "$usp"
+
+    # Same rewrite applied to brainstorming → writing-plans transition.
+    local bsm="$HOME/.claude/skills/gor-mobile-brainstorming/SKILL.md"
+    grep -qF '"Invoke gor-mobile-writing-plans skill"' "$bsm"
+    ! grep -qF '"Invoke writing-plans skill"' "$bsm"
+
+    # #1091: global worktree fallback path must live under gor-mobile, not
+    # superpowers — otherwise our users accumulate worktrees under a foreign
+    # config dir (upstream reports 1GB+ for 3 branches).
+    local wt="$HOME/.claude/skills/gor-mobile-using-git-worktrees/SKILL.md"
+    ! grep -qF '~/.config/superpowers/worktrees' "$wt"
+    grep -qF '~/.config/gor-mobile/worktrees' "$wt"
+
+    # #1058: example workflow anchoring on "5 tasks" causes the model to stop
+    # after task 5 regardless of actual task count.
+    local sdd="$HOME/.claude/skills/gor-mobile-subagent-driven-development/SKILL.md"
+    ! grep -qF 'all 5 tasks' "$sdd"
+    grep -qF 'all tasks' "$sdd"
+}
+
 @test "settings_install_session_start_hook preserves unrelated hooks" {
     mkdir -p "$HOME/.claude"
     cat > "$HOME/.claude/settings.json" <<'JSON'

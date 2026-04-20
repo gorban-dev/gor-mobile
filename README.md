@@ -8,7 +8,7 @@
 
 A bash CLI that wires a superpowers-style Android workflow (`brainstorm → plan → implement → review → verify`) into Claude Code, offloading routine code generation to **local LLMs** via LM Studio. Opus runs only where judgment is needed.
 
-> Status: `v0.3.1` — gum-backed TUI wizard (falls back to plain prompts without a TTY or with `--no-tui`); superpowers verbatim (14 skills, 1 agent, SessionStart + UserPromptSubmit hooks); craft-skills-ported local-LLM delegation scripts; brainstorming overlay closes upstream worktree-gap bug (obra/superpowers#1080). See `CHANGELOG.md`.
+> Status: `v0.3.2` — gum-backed TUI wizard (falls back to plain prompts without a TTY or with `--no-tui`); superpowers verbatim (14 skills, 1 agent, SessionStart + UserPromptSubmit hooks); craft-skills-ported local-LLM delegation scripts; preemptive fixes for 5 open upstream bugs (obra/superpowers#1002, #1058, #1077, #1080, #1091). See `CHANGELOG.md`.
 
 ## Install
 

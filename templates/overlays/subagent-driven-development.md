@@ -72,4 +72,25 @@ If LM Studio is down (`curl` fails) or the model refuses to load,
 `llm-implement.sh` emits `{"status":"BLOCKED","concerns":"LM Studio not running…"}`
 within 2 seconds. Main Claude takes over.
 
+### Skill-vs-Agent dispatch (clarification — upstream bug obra/superpowers#1077)
+
+The upstream Integration block lists `requesting-code-review` alongside agent
+types in a single bullet list, which causes the model to dispatch it via
+`Agent(type="gor-mobile-requesting-code-review")` and fail with
+"Agent type not found". Disambiguation:
+
+- **Skills** (invoke via `Skill` tool — these are *skills*, not agents):
+  - `gor-mobile-requesting-code-review`
+  - `gor-mobile-using-git-worktrees`
+  - `gor-mobile-writing-plans`
+  - `gor-mobile-finishing-a-development-branch`
+- **Agent** (dispatch via `Agent` tool with `subagent_type`):
+  - `gor-mobile-code-reviewer` (note the `-er` suffix — different from the
+    `requesting-code-review` skill). This is the subagent used internally
+    **by** the `requesting-code-review` skill, not a separate entry point.
+
+If you see `{"status":"Agent type not found"}` for a review step, the
+dispatch went to the wrong tool. Retry with `Skill(gor-mobile-requesting-code-review)`
+and let that skill orchestrate the `Agent(gor-mobile-code-reviewer)` call itself.
+
 <!-- END gor-mobile overlay -->

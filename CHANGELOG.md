@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.3.2 — 2026-04-20
+
+Preemptive fixes for 4 known upstream superpowers bugs that bite our users
+harder than they bite upstream (two of them specifically because of the
+`gor-mobile-` prefix). All four stay open in upstream as of the audit
+(2026-04-20).
+
+**Action required:** run `gor-mobile repair` after upgrading. No data
+migration; the install-time sed has more substitutions and one overlay
+grew an addendum.
+
+- **#1002 — `Skill("brainstorming")` lookup fails.** Upstream
+  `using-superpowers/SKILL.md` flow diagram uses plain
+  `"Invoke brainstorming skill"` text in dot labels, causing intermittent
+  `Skill("brainstorming")` calls that error with "Unknown skill". Our
+  previous sed only rewrote `superpowers:` cross-references, which left
+  these plain labels unchanged — meaning our users could never resolve
+  `Skill("brainstorming")` (ours is `gor-mobile-brainstorming`). Added
+  targeted sed for the two diagram-label forms (`brainstorming` +
+  `writing-plans`). Verified by new init test.
+- **#1091 — worktree global fallback leaks into `~/.config/superpowers/`.**
+  `using-git-worktrees/SKILL.md` references `~/.config/superpowers/worktrees/`
+  in 4 places. Install-time sed now rewrites to
+  `~/.config/gor-mobile/worktrees/` — correct brand, no more accumulation
+  under a foreign config dir (upstream reports 1GB+ for 3 branches).
+- **#1058 — subagent anchoring on "5 tasks".** Example workflow line in
+  `subagent-driven-development/SKILL.md` reads
+  `[Extract all 5 tasks with full text and context]` and the model
+  anchors on that number, stopping after task 5 regardless of actual
+  count. Install-time sed rewrites to `[Extract all tasks ...]`.
+- **#1077 — `requesting-code-review` dispatched as Agent type, errors
+  out.** Upstream's Integration bullet list mixes Skills and Agent types
+  without distinguishing them. Added a "Skill-vs-Agent dispatch"
+  clarification to the `subagent-driven-development` overlay listing
+  which name goes through which tool (and calling out that our
+  `gor-mobile-code-reviewer` agent is invoked *by* the
+  `gor-mobile-requesting-code-review` skill, not as a sibling entry point).
+- **Tests: 45 → 46.** New `init_test.bats` case asserts all three
+  install-time sed substitutions landed correctly in the installed
+  SKILL.md files.
+
 ## 0.3.1 — 2026-04-20
 
 Closes a known upstream superpowers bug where `brainstorming` silently
