@@ -66,29 +66,54 @@ _check_lm_studio() {
         return 1
     fi
     log_ok "lms → $(dep_lms_path)"
-    if lm_server_up; then
+    if curl -sf --max-time 2 "$LLM_URL" >/dev/null 2>&1 || lm_server_up; then
         local loaded; loaded="$(lm_loaded_identifier 2>/dev/null || true)"
         log_ok "LM Studio server reachable ($LLM_URL) — loaded=${loaded:-none}"
     else
-        log_warn "LM Studio server at $LLM_URL not reachable"
+        log_warn "LM Studio server at $LLM_URL not reachable (local-LLM scripts will fall back to BLOCKED)"
+    fi
+}
+
+_check_scripts() {
+    local dir="$GOR_MOBILE_HOME/scripts"
+    if [[ ! -d "$dir" ]]; then
+        log_warn "$dir missing — run 'gor-mobile repair'"
+        return 1
+    fi
+    local s missing=0
+    for s in llm-config llm-agent llm-implement llm-review llm-analyze llm-check llm-unload; do
+        local f="$dir/${s}.sh"
+        if [[ ! -f "$f" ]]; then
+            log_warn "missing $f"
+            missing=1
+        elif [[ ! -x "$f" ]]; then
+            log_warn "not executable: $f"
+            missing=1
+        fi
+    done
+    if [[ $missing -eq 0 ]]; then
+        log_ok "LLM scripts → $dir (7 files, executable)"
     fi
 }
 
 cmd_doctor() {
     log_step "Environment"
-    dep_report "brew"     "$(command -v brew  || true)" optional
-    dep_report "git"      "$(command -v git   || true)" required
-    dep_report "curl"     "$(command -v curl  || true)" required
-    dep_report "jq"       "$(command -v jq    || true)" required
+    dep_report "brew"     "$(command -v brew    || true)" optional
+    dep_report "git"      "$(command -v git     || true)" required
+    dep_report "curl"     "$(command -v curl    || true)" required
+    dep_report "jq"       "$(command -v jq      || true)" required
+    dep_report "python3"  "$(command -v python3 || true)" required
     dep_report "android"  "$(dep_android_cli_path || true)" optional
 
     log_step "Claude Code integration"
     _check_file "$CLAUDE_SETTINGS" "settings.json"
     _check_hook || true
-    _check_file "$CLAUDE_COMMANDS_DIR" "commands/"
     _check_file "$CLAUDE_AGENTS_DIR"   "agents/"
     _check_file "$CLAUDE_MCP"          "mcp.json"
     _check_claude_md_section || true
+
+    log_step "LLM scripts"
+    _check_scripts || true
 
     log_step "Rules pack"
     _check_rules || true

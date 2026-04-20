@@ -1,61 +1,31 @@
 #!/usr/bin/env bash
-# SessionStart hook: inject gor-mobile workflow + core rules into Claude Code context
-# when the working directory is an Android project.
-#
-# Wizard installs this file at $GOR_MOBILE_HOME/templates/session-start-hook.sh and
-# wires it into ~/.claude/settings.json via settings_install_session_start_hook().
+# SessionStart hook: inject gor-mobile-using-superpowers SKILL.md as additionalContext.
+# Mirrors the superpowers hook shape — NO Android gate, always injects.
 
 set -euo pipefail
 
-HOME_DIR="${HOME}"
-RULES_ROOT="${GOR_MOBILE_RULES_DIR:-$HOME_DIR/.gor-mobile/rules}"
-SNIPPET="${GOR_MOBILE_HOME:-$HOME_DIR/.gor-mobile}/templates/session-start-snippet.md"
-CORE_MD="$RULES_ROOT/rules/core.md"
-
-# Emit empty JSON and exit if the cwd doesn't look like Android.
-_is_android_project() {
-    local f
-    # build.gradle(.kts) at root or one level deep
-    for f in build.gradle build.gradle.kts settings.gradle settings.gradle.kts; do
-        [[ -f "$f" ]] && return 0
-    done
-    # Module-level (typical AGP layout)
-    if compgen -G "*/build.gradle*" >/dev/null 2>&1; then
-        return 0
-    fi
-    # AndroidManifest.xml is a reliable signal
-    if find . -maxdepth 4 -name AndroidManifest.xml -print -quit 2>/dev/null | grep -q .; then
-        return 0
-    fi
-    return 1
-}
-
-if ! _is_android_project; then
-    # Not an Android project → no-op. Claude Code expects valid JSON even on skip.
+SKILL_FILE="${CLAUDE_DIR:-$HOME/.claude}/skills/gor-mobile-using-superpowers/SKILL.md"
+if [[ ! -f "$SKILL_FILE" ]]; then
     printf '{}\n'
     exit 0
 fi
 
-snippet_content=""
-[[ -f "$SNIPPET" ]] && snippet_content="$(cat "$SNIPPET")"
-core_content=""
-[[ -f "$CORE_MD" ]] && core_content="$(cat "$CORE_MD")"
+content=$(cat "$SKILL_FILE")
+trailer="Android/Kotlin projects: architecture rules live in \$HOME/.gor-mobile/rules/
+(read via manifest.json / examples/index.json). Local-LLM delegation scripts
+are in \$HOME/.gor-mobile/scripts/ — see overlay sections inside each
+SKILL.md for usage."
 
-ctx=$(cat <<EOF
-$snippet_content
+injection="<EXTREMELY_IMPORTANT>
+You have gor-mobile superpowers. Below is the full 'gor-mobile-using-superpowers' skill
+- your introduction to using all other skills. For all other skills, use the 'Skill' tool.
 
-## Loaded core rules (from $RULES_ROOT)
+${content}
 
-$core_content
+${trailer}
+</EXTREMELY_IMPORTANT>"
 
-## Available slash commands
-/brainstorm /plan /worktree /implement /execute /parallel /tdd /review /verify /debug /finishing-branch
-
-Run 'gor-mobile doctor' if any of this looks wrong.
-EOF
-)
-
-jq -n --arg ctx "$ctx" '{
+jq -n --arg ctx "$injection" '{
     hookSpecificOutput: {
         hookEventName: "SessionStart",
         additionalContext: $ctx

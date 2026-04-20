@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.2.6 — 2026-04-20
+
+Realignment with superpowers; local-LLM delegation ported from craft-skills.
+
+- **Removed all 11 gor-mobile slash-commands.** Workflow now runs entirely
+  through the `Skill` tool; main Claude is instructed to invoke the skills
+  directly. Legacy `~/.claude/commands/*.md` files that match the old
+  templates are cleaned up on `gor-mobile repair` / `uninstall`; anything
+  diverged is left in place with a warning.
+- **Removed `gor-mobile-advisor` agent.** Its routing logic duplicated what
+  the skills already do, and its presence let main Claude bypass the
+  superpowers flow.
+- **`code-reviewer.md` restored to superpowers verbatim**, re-installed as
+  `gor-mobile-code-reviewer.md` with the name prefix applied. The
+  Android-spec-only variant introduced in 0.2.5 is gone.
+- **Added `writing-skills`** as the 14th skill (superpowers verbatim).
+- **Skills body is now verbatim superpowers.** Install-time transforms:
+  `sed 's/superpowers:/gor-mobile-/g'` on cross-references and
+  `sed 's/^name: /name: gor-mobile-/'` on the frontmatter id, then append
+  the optional overlay block from `templates/overlays/<skill>.md`.
+- **Overlays (5 files).** `subagent-driven-development`,
+  `test-driven-development`, `systematic-debugging`,
+  `requesting-code-review`, `brainstorming` — each ADDS an Android rules
+  pointer and, where it makes sense, a local-LLM delegation block. Other
+  9 skills install verbatim with no overlay.
+- **Session-start hook rewritten.** No more Android project gate; every
+  session gets the `gor-mobile-using-superpowers/SKILL.md` body injected
+  as `additionalContext`, plus a short trailer pointing at the rules pack
+  and scripts directory. Mirrors the superpowers hook shape.
+- **craft-skills LLM scripts ported verbatim** into `templates/scripts/`
+  and installed to `$HOME/.gor-mobile/scripts/` (7 scripts: `llm-config`,
+  `llm-agent`, `llm-implement`, `llm-review`, `llm-analyze`, `llm-check`,
+  `llm-unload`). These carry a rich `{status, severity, files_changed,
+  exports_added, concerns, notes, deviations, routing_hint,
+  routing_hint_reasons}` JSON contract, a pre-check LOC-routing to
+  `consider-sonnet`, and a scope-restricted `write_file` tool for Gemma.
+- **`gor-mobile llm` CLI kept as legacy** for backwards compatibility with
+  user scripts. Primary path is the new scripts.
+- **Doctor** learned to check `$HOME/.gor-mobile/scripts/` (7 executables),
+  `python3`, and LM Studio reachability (warning, not error).
+- **bats**: `hook_test.bats` retargeted at the new no-gate behavior,
+  `init_test.bats` asserts 14 skills / 0 commands / 1 agent / 7 scripts,
+  new `scripts_test.bats` covers the LLM scripts' graceful-degradation
+  contract.
+- **CLAUDE.md managed section** shrunk to 6 lines pointing at the
+  SessionStart hook, the rules pack, and the scripts directory.
+
 ## 0.2.5 — 2026-04-20
 
 Major overlay rewrite — full superpowers fidelity.

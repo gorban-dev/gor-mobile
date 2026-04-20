@@ -12,6 +12,22 @@ source "$GOR_MOBILE_ROOT/lib/helpers/mcp-register.sh"
 
 _assume_yes=0
 
+# Remove a legacy gor-mobile slash-command file iff its header still matches
+# the template we shipped. If the user customized it, leave the file in place.
+_uninstall_cleanup_legacy_commands() {
+    [[ -d "$CLAUDE_COMMANDS_DIR" ]] || return 0
+    local cmd f
+    for cmd in brainstorm plan worktree implement execute parallel tdd review verify debug finishing-branch; do
+        f="$CLAUDE_COMMANDS_DIR/$cmd.md"
+        [[ -f "$f" ]] || continue
+        if head -10 "$f" | grep -q 'Task from user: \*\*\$ARGUMENTS\*\*'; then
+            rm -f "$f"
+        else
+            log_warn "$f diverged from gor-mobile template — remove manually if unused"
+        fi
+    done
+}
+
 cmd_uninstall() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -21,7 +37,7 @@ cmd_uninstall() {
     done
 
     if [[ $_assume_yes -ne 1 ]]; then
-        printf "This will remove gor-mobile hooks, commands, agents, and the managed CLAUDE.md section.\n"
+        printf "This will remove gor-mobile hooks, skills, agents, scripts, and the managed CLAUDE.md section.\n"
         printf "Rules pack at %s and secrets at %s will be kept.\n" "$GOR_MOBILE_RULES_DIR" "$GOR_MOBILE_SECRETS"
         read -r -p "Continue? [y/N] " reply
         [[ "$reply" =~ ^[yY]$ ]] || { log_info "Aborted"; exit 0; }
@@ -31,25 +47,23 @@ cmd_uninstall() {
     settings_remove_session_start_hook
     log_ok "Hook removed"
 
-    log_step "Removing commands/"
-    rm -f "$CLAUDE_COMMANDS_DIR/brainstorm.md" \
-          "$CLAUDE_COMMANDS_DIR/plan.md" \
-          "$CLAUDE_COMMANDS_DIR/worktree.md" \
-          "$CLAUDE_COMMANDS_DIR/implement.md" \
-          "$CLAUDE_COMMANDS_DIR/execute.md" \
-          "$CLAUDE_COMMANDS_DIR/parallel.md" \
-          "$CLAUDE_COMMANDS_DIR/tdd.md" \
-          "$CLAUDE_COMMANDS_DIR/review.md" \
-          "$CLAUDE_COMMANDS_DIR/verify.md" \
-          "$CLAUDE_COMMANDS_DIR/debug.md" \
-          "$CLAUDE_COMMANDS_DIR/finishing-branch.md"
+    log_step "Removing legacy commands/ (signature-matched)"
+    _uninstall_cleanup_legacy_commands
 
     log_step "Removing skills/"
     rm -rf "$CLAUDE_SKILLS_DIR"/gor-mobile-*
 
     log_step "Removing agents/"
     rm -f "$CLAUDE_AGENTS_DIR/gor-mobile-advisor.md" \
-          "$CLAUDE_AGENTS_DIR/code-reviewer.md"
+          "$CLAUDE_AGENTS_DIR/gor-mobile-code-reviewer.md"
+    # 0.2.5 and earlier shipped unprefixed code-reviewer.md; drop it too.
+    local legacy_cr="$CLAUDE_AGENTS_DIR/code-reviewer.md"
+    if [[ -f "$legacy_cr" ]] && head -20 "$legacy_cr" | grep -q '^name: code-reviewer'; then
+        rm -f "$legacy_cr"
+    fi
+
+    log_step "Removing LLM scripts/"
+    rm -rf "$GOR_MOBILE_HOME/scripts"
 
     log_step "Removing MCP entries"
     mcp_unregister_managed

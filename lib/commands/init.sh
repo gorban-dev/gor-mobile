@@ -360,7 +360,6 @@ step_6_settings_hook() {
     log_step "6/12 SessionStart hook → ~/.claude/settings.json"
     _run "mkdir -p \"$GOR_MOBILE_HOME/templates\""
     _run "cp \"$GOR_MOBILE_ROOT/templates/session-start-hook.sh\" \"$GOR_MOBILE_HOME/templates/\""
-    _run "cp \"$GOR_MOBILE_ROOT/templates/session-start-snippet.md\" \"$GOR_MOBILE_HOME/templates/\""
     _run "chmod +x \"$GOR_MOBILE_HOME/templates/session-start-hook.sh\""
     if [[ $DRY_RUN -eq 1 ]]; then
         printf "  [dry-run] merge SessionStart hook into %s\n" "$CLAUDE_SETTINGS"
@@ -370,42 +369,65 @@ step_6_settings_hook() {
     fi
 }
 
-step_7_commands() {
-    log_step "7/12 Commands → ~/.claude/commands/ (11 slash-commands)"
-    _run "mkdir -p \"$CLAUDE_COMMANDS_DIR\""
-    local f
-    for f in "$GOR_MOBILE_ROOT"/templates/commands/*.md; do
-        [[ -f "$f" ]] || continue
-        local dst="$CLAUDE_COMMANDS_DIR/$(basename "$f")"
-        _run "cp \"$f\" \"$dst\""
-    done
-    log_ok "Copied command templates"
-}
-
-step_8_skills() {
-    log_step "8/12 Skills → ~/.claude/skills/gor-mobile-*/"
+step_7_skills() {
+    log_step "7/12 Skills → ~/.claude/skills/gor-mobile-*/"
     _run "mkdir -p \"$CLAUDE_SKILLS_DIR\""
     local d
     for d in "$GOR_MOBILE_ROOT"/templates/skills/*/; do
         [[ -d "$d" ]] || continue
         local skill_name; skill_name="$(basename "$d")"
         local dst="$CLAUDE_SKILLS_DIR/gor-mobile-$skill_name"
-        _run "rm -rf \"$dst\""
-        _run "cp -R \"${d%/}\" \"$dst\""
+        local overlay="$GOR_MOBILE_ROOT/templates/overlays/$skill_name.md"
+        if [[ $DRY_RUN -eq 1 ]]; then
+            printf "  [dry-run] install skill %s (sed + overlay=%s)\n" \
+                "$skill_name" "$([[ -f $overlay ]] && echo yes || echo no)"
+            continue
+        fi
+        rm -rf "$dst"
+        cp -R "${d%/}" "$dst"
+        if [[ -f "$dst/SKILL.md" ]]; then
+            sed -i '' 's/superpowers:/gor-mobile-/g' "$dst/SKILL.md"
+            sed -i '' 's/^name: /name: gor-mobile-/' "$dst/SKILL.md"
+            if [[ -f "$overlay" ]]; then
+                printf '\n' >> "$dst/SKILL.md"
+                cat "$overlay" >> "$dst/SKILL.md"
+            fi
+        fi
     done
-    log_ok "Copied skill templates (verbatim from superpowers)"
+    log_ok "Installed skills (verbatim superpowers + sed + overlay-append)"
+}
+
+step_8_scripts() {
+    log_step "8/12 LLM scripts → \$HOME/.gor-mobile/scripts/"
+    _run "mkdir -p \"$GOR_MOBILE_HOME/scripts\""
+    local s
+    for s in llm-config llm-agent llm-implement llm-review llm-analyze llm-check llm-unload; do
+        local src="$GOR_MOBILE_ROOT/templates/scripts/${s}.sh"
+        local dst="$GOR_MOBILE_HOME/scripts/${s}.sh"
+        if [[ ! -f "$src" ]]; then
+            log_warn "missing template $src"
+            continue
+        fi
+        if [[ $DRY_RUN -eq 1 ]]; then
+            printf "  [dry-run] install %s -> %s (0755)\n" "$src" "$dst"
+        else
+            install -m 0755 "$src" "$dst"
+        fi
+    done
+    log_ok "Installed 7 craft-skills LLM scripts"
 }
 
 step_9_agents() {
-    log_step "9/12 Agents → ~/.claude/agents/"
+    log_step "9/12 Agents → ~/.claude/agents/gor-mobile-code-reviewer.md"
     _run "mkdir -p \"$CLAUDE_AGENTS_DIR\""
-    local f
-    for f in "$GOR_MOBILE_ROOT"/templates/agents/*.md; do
-        [[ -f "$f" ]] || continue
-        local dst="$CLAUDE_AGENTS_DIR/$(basename "$f")"
-        _run "cp \"$f\" \"$dst\""
-    done
-    log_ok "Copied agents"
+    local src="$GOR_MOBILE_ROOT/templates/agents/code-reviewer.md"
+    local dst="$CLAUDE_AGENTS_DIR/gor-mobile-code-reviewer.md"
+    if [[ $DRY_RUN -eq 1 ]]; then
+        printf "  [dry-run] install %s -> %s\n" "$src" "$dst"
+    else
+        install -m 0644 "$src" "$dst"
+    fi
+    log_ok "Copied code-reviewer agent"
 }
 
 step_10_mcp() {
@@ -460,8 +482,8 @@ cmd_init() {
     step_4_secrets
     step_5_rules_pack
     step_6_settings_hook
-    step_7_commands
-    step_8_skills
+    step_7_skills
+    step_8_scripts
     step_9_agents
     step_10_mcp
     step_11_claude_md

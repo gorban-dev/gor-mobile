@@ -8,7 +8,7 @@
 
 A bash CLI that wires a superpowers-style Android workflow (`brainstorm → plan → implement → review → verify`) into Claude Code, offloading routine code generation to **local LLMs** via LM Studio. Opus runs only where judgment is needed.
 
-> Status: `v0.1.0` — core CLI, rules-pack loader, local-LLM dispatcher, full wizard. See `CHANGELOG.md`.
+> Status: `v0.2.6` — superpowers verbatim (14 skills, 1 agent, SessionStart hook) + craft-skills-ported local-LLM delegation scripts. See `CHANGELOG.md`.
 
 ## Install
 
@@ -46,10 +46,10 @@ Flags: `--dry-run` prints what would change; `--yes` / `-y` assumes yes to every
     Any selected or default model that isn't yet installed is offered for `lms get`.
 4. **Secrets template.** Creates `~/.config/gor-mobile/secrets.env` with `chmod 600` (skipped if it already exists — never overwrites your keys).
 5. **Rules pack.** Clones the default rules pack (or your `--rules <url>`) to `~/.gor-mobile/rules/`. If the directory already has `.git`, runs `git pull --ff-only` instead. Falls back to the minimal bundled `rules-default/` if the clone fails. Records the source URL + ref in `~/.config/gor-mobile/config.json`.
-6. **SessionStart hook.** Copies `session-start-hook.sh` + the snippet to `~/.gor-mobile/templates/`, then `jq`-merges a `SessionStart` entry into `~/.claude/settings.json` — your existing `Stop` / `PermissionRequest` / `Notification` / other `SessionStart` matchers are preserved untouched.
-7. **Slash commands.** Copies 11 thin wrapper commands into `~/.claude/commands/`: `/brainstorm`, `/plan`, `/worktree`, `/implement`, `/execute`, `/parallel`, `/tdd`, `/review`, `/verify`, `/debug`, `/finishing-branch`. Each wrapper delegates to a superpowers skill installed under `~/.claude/skills/gor-mobile-<skill>/` and adds two overlays: architecture rules + local-LLM delegation.
-8. **Skills.** Copies 13 verbatim superpowers skills into `~/.claude/skills/gor-mobile-<skill>/` (brainstorming, writing-plans, using-git-worktrees, subagent-driven-development with its 3 subagent-prompt templates, executing-plans, dispatching-parallel-agents, test-driven-development, requesting-code-review with `code-reviewer.md`, receiving-code-review, verification-before-completion, systematic-debugging, finishing-a-development-branch, using-superpowers). Only the `name:` frontmatter is prefixed `gor-mobile-` to avoid collision with a possible user-installed superpowers.
-9. **Agents.** Copies `gor-mobile-advisor` (proactive workflow router) and `code-reviewer` (invoked by `/review`) into `~/.claude/agents/`.
+6. **SessionStart hook.** Copies `session-start-hook.sh` to `~/.gor-mobile/templates/`, then `jq`-merges a `SessionStart` entry into `~/.claude/settings.json` — your existing `Stop` / `PermissionRequest` / `Notification` / other `SessionStart` matchers are preserved untouched. The hook mirrors the superpowers hook shape: it reads `gor-mobile-using-superpowers/SKILL.md` on every session start and injects it as `additionalContext` (no Android project gate).
+7. **Skills.** Copies 14 verbatim superpowers skills into `~/.claude/skills/gor-mobile-<skill>/`. Install-time transforms: `sed 's/superpowers:/gor-mobile-/g'` on cross-references, `sed 's/^name: /name: gor-mobile-/'` on the frontmatter id, and an optional overlay block appended from `templates/overlays/<skill>.md` for the 5 skills where local-LLM delegation makes sense (`subagent-driven-development`, `test-driven-development`, `systematic-debugging`, `requesting-code-review`, `brainstorming`).
+8. **LLM scripts.** Installs 7 craft-skills-ported scripts to `~/.gor-mobile/scripts/`: `llm-config`, `llm-agent`, `llm-implement`, `llm-review`, `llm-analyze`, `llm-check`, `llm-unload`. Overlay sections inside each `SKILL.md` direct main Claude to call these directly — they carry a rich JSON contract, a pre-check LOC-routing hint, and a scope-restricted `write_file` tool for the local model.
+9. **Agents.** Installs `gor-mobile-code-reviewer.md` (superpowers `code-reviewer` verbatim, name prefixed) into `~/.claude/agents/`.
 10. **MCP registration.** Adds a `google-dev-knowledge` entry to `~/.claude/mcp.json` via `jq`-merge (idempotent — won't duplicate an existing entry).
 11. **CLAUDE.md managed section.** Writes a short "Android Mobile Dev (managed by gor-mobile)" block between `<!-- BEGIN gor-mobile managed section -->` / `<!-- END ... -->` markers in `~/.claude/CLAUDE.md`. Content outside the markers is never modified; re-running replaces only the content between them.
 12. **Sanity check.** Skipped under `--skip-sanity`. Otherwise pings LM Studio at `http://127.0.0.1:1234/v1/models`; if reachable, lists up to five loaded models and confirms the round-trip works.
@@ -77,7 +77,19 @@ gor-mobile rules diff
 gor-mobile rules validate
 ```
 
-Local LLM:
+Local LLM (primary path — craft-skills scripts):
+
+```
+$HOME/.gor-mobile/scripts/llm-check.sh                  # availability probe
+$HOME/.gor-mobile/scripts/llm-implement.sh <task-file> \
+    <working-dir> "<allowed-paths>" [ref-files...]     # scope-restricted writes
+$HOME/.gor-mobile/scripts/llm-agent.sh <prompt> <cwd>   # read-only evidence agent
+$HOME/.gor-mobile/scripts/llm-review.sh  ...            # pre-screen large diffs
+$HOME/.gor-mobile/scripts/llm-analyze.sh ...            # pre-analysis pass
+$HOME/.gor-mobile/scripts/llm-unload.sh                 # free VRAM
+```
+
+Legacy (kept for backwards compat with user scripts):
 
 ```
 gor-mobile llm <role> --input <file>   # role ∈ {impl, tdd-red, routine-debug,
@@ -89,18 +101,31 @@ gor-mobile llm preset <aggressive-local|balanced|cloud-only>
 
 ## How delegation works
 
-Slash-commands in Claude Code invoke `gor-mobile llm <role> --input <prompt>`. The CLI
-routes per preset: e.g. in `balanced` mode, `impl` → local Qwen-Coder-30B, `review` →
-local Gemma-4-26B-A4B, `brainstorm`/`plan`/`verify` → cloud (Opus).
-
-Response JSON:
+Skill overlays (e.g. `gor-mobile-subagent-driven-development/SKILL.md`) direct
+main Claude to call `$HOME/.gor-mobile/scripts/llm-implement.sh` with a task
+file, working directory, comma-separated allowlist of paths the local model
+may write to, and optional reference files to pre-load. The script returns
+JSON to stdout:
 
 ```json
-{ "status": "OK|BLOCKED|ERROR", "model": "...", "content": "...",
-  "tokens": {"input": 0, "output": 0}, "elapsed_ms": 0 }
+{
+  "status":        "DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED",
+  "severity":      "none | minor | major",
+  "files_changed": ["…"],
+  "exports_added": ["…"],
+  "concerns":      "…",
+  "notes":         "…",
+  "deviations":    "…",
+  "routing_hint":  "" | "consider-sonnet",
+  "routing_hint_reasons": "…"
+}
 ```
 
-On `BLOCKED`/`ERROR` the agent falls back to Opus. Presets change which roles route where.
+Main Claude reads `status` and `routing_hint` to decide: accept, ask for more
+context, re-dispatch with a correction, or take over directly. Scope is
+hard-enforced — the local model's `write_file` tool refuses anything outside
+the allowlist. If LM Studio is unreachable, the script emits
+`{"status":"BLOCKED"}` within 2 s and main Claude takes over.
 
 ## Rules packs
 
@@ -113,26 +138,34 @@ to impose company-specific patterns:
 gor-mobile rules use git@github.com:my-company/gor-mobile-rules-corp.git
 ```
 
-## Slash-command map
+## Skill registry
 
-| Command | Skill (verbatim) | Route |
-|---------|------------------|-------|
-| `/brainstorm` | `brainstorming` | Opus |
-| `/plan` | `writing-plans` | Opus |
-| `/worktree` | `using-git-worktrees` | Opus |
-| `/implement` | `subagent-driven-development` | implementer subagents → local `impl`; reviewer via `/review` |
-| `/execute` | `executing-plans` | Opus (inline batch alt to `/implement`) |
-| `/parallel` | `dispatching-parallel-agents` | Opus orchestrator; subagents per their skill |
-| `/tdd` | `test-driven-development` | local `tdd-red` + `impl`, Opus fallback |
-| `/review` | `requesting-code-review` | spec pass: `code-reviewer` agent; architecture pass: local `review` / `review-deep` |
-| `/verify` | `verification-before-completion` | Opus |
-| `/debug` | `systematic-debugging` | routine legwork: local `routine-debug` + `tdd-red`; hypothesis: Opus |
-| `/finishing-branch` | `finishing-a-development-branch` | Opus |
+Invoke via the `Skill` tool — no slash-commands. Overlay column indicates
+which skills carry an Android-rules / local-LLM appendix.
+
+| Skill (name: `gor-mobile-<id>`) | Source | Overlay |
+|-|-|-|
+| `brainstorming` | superpowers | rules-pack pointer |
+| `writing-plans` | superpowers | — |
+| `using-git-worktrees` | superpowers | — |
+| `subagent-driven-development` | superpowers | rules + `llm-implement.sh` |
+| `test-driven-development` | superpowers | rules + `llm-implement.sh` (GREEN stage) |
+| `executing-plans` | superpowers | — |
+| `dispatching-parallel-agents` | superpowers | — |
+| `requesting-code-review` | superpowers | rules + `llm-review.sh` pre-screen |
+| `receiving-code-review` | superpowers | — |
+| `verification-before-completion` | superpowers | — |
+| `systematic-debugging` | superpowers | rules + `llm-agent.sh` (Phase 2) |
+| `finishing-a-development-branch` | superpowers | — |
+| `using-superpowers` | superpowers | — |
+| `writing-skills` | superpowers | — |
+
+Agent: `gor-mobile-code-reviewer` (dispatched via `requesting-code-review`).
 
 ## Uninstall
 
 ```sh
-gor-mobile uninstall    # removes hooks, commands, skills, agents, managed CLAUDE.md section
+gor-mobile uninstall    # removes hooks, skills, agents, scripts, managed CLAUDE.md section
 brew uninstall gor-mobile
 ```
 

@@ -1,9 +1,9 @@
 ## Android Mobile Dev (managed by gor-mobile)
 
-When working on Android projects:
-
-- Use slash-commands `/brainstorm`, `/plan`, `/implement`, `/tdd`, `/review`, `/verify`, `/debug`, `/finishing-branch`
-- Architecture rules live in `$HOME/.gor-mobile/rules/` (auto-injected into context by the SessionStart hook)
-- Delegate routine code generation via `gor-mobile llm <role> --input <file>` — local LM Studio first, Opus fallback
-- Run `gor-mobile doctor` if anything misbehaves, `gor-mobile repair` to restore managed files
-- Update with `brew upgrade gor-mobile && gor-mobile update`
+- Workflow injected into every session via SessionStart hook.
+- Use the `Skill` tool for all workflow steps — see `gor-mobile-*` skill registry.
+- Architecture rules: `$HOME/.gor-mobile/rules/` (user-replaceable via
+  `gor-mobile rules use <url>`).
+- Local-LLM delegation scripts: `$HOME/.gor-mobile/scripts/llm-*.sh` (LM Studio
+  required; graceful fallback to Claude when unavailable).
+- Run `gor-mobile doctor` to verify, `gor-mobile repair` to restore drift.

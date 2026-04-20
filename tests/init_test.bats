@@ -18,6 +18,62 @@ teardown() {
     [ ! -f "$HOME/.claude/settings.json" ]
 }
 
+@test "init installs 14 skills, 1 agent, 0 gor-mobile-commands, 7 scripts" {
+    # Full init without network: skip the rules pack clone by pre-seeding the dir.
+    mkdir -p "$GOR_MOBILE_HOME/rules"
+    cp -R "$GOR_MOBILE_ROOT/rules-default/." "$GOR_MOBILE_HOME/rules/"
+    ( cd "$GOR_MOBILE_HOME/rules" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -q -m seed )
+
+    run gor-mobile init --yes --skip-sanity
+    [ "$status" -eq 0 ]
+
+    local skills; skills="$(find "$HOME/.claude/skills" -maxdepth 1 -type d -name 'gor-mobile-*' | wc -l | tr -d ' ')"
+    [ "$skills" = "14" ]
+
+    local agent="$HOME/.claude/agents/gor-mobile-code-reviewer.md"
+    [ -f "$agent" ]
+
+    # No gor-mobile-owned slash commands should be installed.
+    for cmd in brainstorm plan worktree implement execute parallel tdd review verify debug finishing-branch; do
+        [ ! -f "$HOME/.claude/commands/$cmd.md" ]
+    done
+
+    local scripts; scripts="$(find "$GOR_MOBILE_HOME/scripts" -maxdepth 1 -type f -name 'llm-*.sh' | wc -l | tr -d ' ')"
+    [ "$scripts" = "7" ]
+    local s
+    for s in llm-config llm-agent llm-implement llm-review llm-analyze llm-check llm-unload; do
+        [ -x "$GOR_MOBILE_HOME/scripts/${s}.sh" ]
+    done
+}
+
+@test "installed skill bodies are verbatim superpowers (pre-overlay region)" {
+    mkdir -p "$GOR_MOBILE_HOME/rules"
+    cp -R "$GOR_MOBILE_ROOT/rules-default/." "$GOR_MOBILE_HOME/rules/"
+    ( cd "$GOR_MOBILE_HOME/rules" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -q -m seed )
+
+    run gor-mobile init --yes --skip-sanity
+    [ "$status" -eq 0 ]
+
+    # Pick one skill that has an overlay and verify the body above the
+    # overlay marker matches sed-transformed superpowers verbatim.
+    local name="subagent-driven-development"
+    local installed="$HOME/.claude/skills/gor-mobile-$name/SKILL.md"
+    local source_skill="/Users/home/Project/Agents/superpowers/skills/$name/SKILL.md"
+
+    [ -f "$installed" ]
+    [ -f "$source_skill" ]
+
+    local a b
+    a="$(awk '/<!-- BEGIN gor-mobile overlay -->/{exit} {print}' "$installed")"
+    b="$(sed -e 's/superpowers:/gor-mobile-/g' -e 's/^name: /name: gor-mobile-/' "$source_skill")"
+    # awk drops the trailing newline before the marker — tolerate that by
+    # trimming trailing blank lines from both sides before comparing.
+    [ "${a%$'\n'}" = "${b%$'\n'}" ] || {
+        diff <(printf '%s' "$a") <(printf '%s' "$b")
+        false
+    }
+}
+
 @test "settings_install_session_start_hook preserves unrelated hooks" {
     mkdir -p "$HOME/.claude"
     cat > "$HOME/.claude/settings.json" <<'JSON'
