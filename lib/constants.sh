@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared constants for gor-mobile CLI.
 
-GOR_MOBILE_VERSION="0.2.3"
+GOR_MOBILE_VERSION="0.2.4"
 GOR_MOBILE_NAME="gor-mobile"
 
 # Install layout (on user's machine).
