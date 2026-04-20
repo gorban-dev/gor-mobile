@@ -34,12 +34,18 @@ cmd_uninstall() {
     log_step "Removing commands/"
     rm -f "$CLAUDE_COMMANDS_DIR/brainstorm.md" \
           "$CLAUDE_COMMANDS_DIR/plan.md" \
+          "$CLAUDE_COMMANDS_DIR/worktree.md" \
           "$CLAUDE_COMMANDS_DIR/implement.md" \
+          "$CLAUDE_COMMANDS_DIR/execute.md" \
+          "$CLAUDE_COMMANDS_DIR/parallel.md" \
           "$CLAUDE_COMMANDS_DIR/tdd.md" \
           "$CLAUDE_COMMANDS_DIR/review.md" \
           "$CLAUDE_COMMANDS_DIR/verify.md" \
           "$CLAUDE_COMMANDS_DIR/debug.md" \
           "$CLAUDE_COMMANDS_DIR/finishing-branch.md"
+
+    log_step "Removing skills/"
+    rm -rf "$CLAUDE_SKILLS_DIR"/gor-mobile-*
 
     log_step "Removing agents/"
     rm -f "$CLAUDE_AGENTS_DIR/gor-mobile-advisor.md" \

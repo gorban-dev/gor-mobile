@@ -21,7 +21,7 @@ cmd_repair() {
     settings_install_session_start_hook
     log_ok "SessionStart hook refreshed"
 
-    mkdir -p "$CLAUDE_COMMANDS_DIR" "$CLAUDE_AGENTS_DIR"
+    mkdir -p "$CLAUDE_COMMANDS_DIR" "$CLAUDE_AGENTS_DIR" "$CLAUDE_SKILLS_DIR"
     for f in "$GOR_MOBILE_ROOT"/templates/commands/*.md; do
         [[ -f "$f" ]] || continue
         cp "$f" "$CLAUDE_COMMANDS_DIR/$(basename "$f")"
@@ -30,7 +30,14 @@ cmd_repair() {
         [[ -f "$f" ]] || continue
         cp "$f" "$CLAUDE_AGENTS_DIR/$(basename "$f")"
     done
-    log_ok "Commands and agents refreshed"
+    for d in "$GOR_MOBILE_ROOT"/templates/skills/*/; do
+        [[ -d "$d" ]] || continue
+        skill_name="$(basename "$d")"
+        dst="$CLAUDE_SKILLS_DIR/gor-mobile-$skill_name"
+        rm -rf "$dst"
+        cp -R "${d%/}" "$dst"
+    done
+    log_ok "Commands, skills, and agents refreshed"
 
     mcp_register_google_dev_knowledge || true
     claude_md_write_section "$GOR_MOBILE_ROOT/templates/claude-md-snippet.md"

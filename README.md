@@ -32,9 +32,9 @@ gor-mobile init
 
 ## What the wizard does
 
-`gor-mobile init` runs 11 idempotent steps. Re-run anytime to repair drift — every step checks current state first, and nothing outside the managed sections is ever touched.
+`gor-mobile init` runs 12 idempotent steps. Re-run anytime to repair drift — every step checks current state first, and nothing outside the managed sections is ever touched.
 
-Flags: `--dry-run` prints what would change; `--yes` / `-y` assumes yes to every prompt (non-interactive); `--skip-sanity` skips step 11; `--rules <git-url>` overrides the default rules pack URL.
+Flags: `--dry-run` prints what would change; `--yes` / `-y` assumes yes to every prompt (non-interactive); `--skip-sanity` skips step 12; `--rules <git-url>` overrides the default rules pack URL.
 
 1. **Base dependencies.** Verifies `git`, `curl`, `jq` are on PATH; warns if `brew` is missing. Missing hard deps abort the wizard.
 2. **Google Android CLI agent** (https://developer.android.com/tools/agents). Detects the `android` binary. If absent, prints a short explanation of what the CLI is and why `gor-mobile` needs it, then offers to open the install page in your default browser and waits for you to finish the install before re-detecting.
@@ -47,11 +47,12 @@ Flags: `--dry-run` prints what would change; `--yes` / `-y` assumes yes to every
 4. **Secrets template.** Creates `~/.config/gor-mobile/secrets.env` with `chmod 600` (skipped if it already exists — never overwrites your keys).
 5. **Rules pack.** Clones the default rules pack (or your `--rules <url>`) to `~/.gor-mobile/rules/`. If the directory already has `.git`, runs `git pull --ff-only` instead. Falls back to the minimal bundled `rules-default/` if the clone fails. Records the source URL + ref in `~/.config/gor-mobile/config.json`.
 6. **SessionStart hook.** Copies `session-start-hook.sh` + the snippet to `~/.gor-mobile/templates/`, then `jq`-merges a `SessionStart` entry into `~/.claude/settings.json` — your existing `Stop` / `PermissionRequest` / `Notification` / other `SessionStart` matchers are preserved untouched.
-7. **Slash commands.** Copies `/brainstorm`, `/plan`, `/implement`, `/tdd`, `/review`, `/verify`, `/debug`, `/finishing-branch` into `~/.claude/commands/`. Each file carries a managed marker so `repair` / `uninstall` can identify them.
-8. **Agents.** Copies `gor-mobile-advisor` (proactive workflow router) and `code-reviewer` (invoked by `/review`) into `~/.claude/agents/`.
-9. **MCP registration.** Adds a `google-dev-knowledge` entry to `~/.claude/mcp.json` via `jq`-merge (idempotent — won't duplicate an existing entry).
-10. **CLAUDE.md managed section.** Writes a short "Android Mobile Dev (managed by gor-mobile)" block between `<!-- BEGIN gor-mobile managed section -->` / `<!-- END ... -->` markers in `~/.claude/CLAUDE.md`. Content outside the markers is never modified; re-running replaces only the content between them.
-11. **Sanity check.** Skipped under `--skip-sanity`. Otherwise pings LM Studio at `http://127.0.0.1:1234/v1/models`; if reachable, lists up to five loaded models and confirms the round-trip works.
+7. **Slash commands.** Copies 11 thin wrapper commands into `~/.claude/commands/`: `/brainstorm`, `/plan`, `/worktree`, `/implement`, `/execute`, `/parallel`, `/tdd`, `/review`, `/verify`, `/debug`, `/finishing-branch`. Each wrapper delegates to a superpowers skill installed under `~/.claude/skills/gor-mobile-<skill>/` and adds two overlays: architecture rules + local-LLM delegation.
+8. **Skills.** Copies 13 verbatim superpowers skills into `~/.claude/skills/gor-mobile-<skill>/` (brainstorming, writing-plans, using-git-worktrees, subagent-driven-development with its 3 subagent-prompt templates, executing-plans, dispatching-parallel-agents, test-driven-development, requesting-code-review with `code-reviewer.md`, receiving-code-review, verification-before-completion, systematic-debugging, finishing-a-development-branch, using-superpowers). Only the `name:` frontmatter is prefixed `gor-mobile-` to avoid collision with a possible user-installed superpowers.
+9. **Agents.** Copies `gor-mobile-advisor` (proactive workflow router) and `code-reviewer` (invoked by `/review`) into `~/.claude/agents/`.
+10. **MCP registration.** Adds a `google-dev-knowledge` entry to `~/.claude/mcp.json` via `jq`-merge (idempotent — won't duplicate an existing entry).
+11. **CLAUDE.md managed section.** Writes a short "Android Mobile Dev (managed by gor-mobile)" block between `<!-- BEGIN gor-mobile managed section -->` / `<!-- END ... -->` markers in `~/.claude/CLAUDE.md`. Content outside the markers is never modified; re-running replaces only the content between them.
+12. **Sanity check.** Skipped under `--skip-sanity`. Otherwise pings LM Studio at `http://127.0.0.1:1234/v1/models`; if reachable, lists up to five loaded models and confirms the round-trip works.
 
 ## Commands
 
@@ -112,10 +113,26 @@ to impose company-specific patterns:
 gor-mobile rules use git@github.com:my-company/gor-mobile-rules-corp.git
 ```
 
+## Slash-command map
+
+| Command | Skill (verbatim) | Route |
+|---------|------------------|-------|
+| `/brainstorm` | `brainstorming` | Opus |
+| `/plan` | `writing-plans` | Opus |
+| `/worktree` | `using-git-worktrees` | Opus |
+| `/implement` | `subagent-driven-development` | implementer subagents → local `impl`; reviewer via `/review` |
+| `/execute` | `executing-plans` | Opus (inline batch alt to `/implement`) |
+| `/parallel` | `dispatching-parallel-agents` | Opus orchestrator; subagents per their skill |
+| `/tdd` | `test-driven-development` | local `tdd-red` + `impl`, Opus fallback |
+| `/review` | `requesting-code-review` | spec pass: `code-reviewer` agent; architecture pass: local `review` / `review-deep` |
+| `/verify` | `verification-before-completion` | Opus |
+| `/debug` | `systematic-debugging` | routine legwork: local `routine-debug` + `tdd-red`; hypothesis: Opus |
+| `/finishing-branch` | `finishing-a-development-branch` | Opus |
+
 ## Uninstall
 
 ```sh
-gor-mobile uninstall    # removes hooks, commands, agents, managed CLAUDE.md section
+gor-mobile uninstall    # removes hooks, commands, skills, agents, managed CLAUDE.md section
 brew uninstall gor-mobile
 ```
 

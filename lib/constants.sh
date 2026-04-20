@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared constants for gor-mobile CLI.
 
-GOR_MOBILE_VERSION="0.2.4"
+GOR_MOBILE_VERSION="0.3.0"
 GOR_MOBILE_NAME="gor-mobile"
 
 # Install layout (on user's machine).
@@ -18,6 +18,7 @@ CLAUDE_CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 CLAUDE_MCP="$CLAUDE_DIR/mcp.json"
 CLAUDE_COMMANDS_DIR="$CLAUDE_DIR/commands"
 CLAUDE_AGENTS_DIR="$CLAUDE_DIR/agents"
+CLAUDE_SKILLS_DIR="$CLAUDE_DIR/skills"
 
 # Managed-file marker. When present, the file is owned by gor-mobile and can be overwritten.
 GOR_MOBILE_MANAGED_MARKER="<!-- gor-mobile: managed — do not edit, run 'gor-mobile repair' -->"

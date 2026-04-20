@@ -49,7 +49,7 @@ $snippet_content
 $core_content
 
 ## Available slash commands
-/brainstorm /plan /implement /tdd /review /verify /debug /finishing-branch
+/brainstorm /plan /worktree /implement /execute /parallel /tdd /review /verify /debug /finishing-branch
 
 Run 'gor-mobile doctor' if any of this looks wrong.
 EOF

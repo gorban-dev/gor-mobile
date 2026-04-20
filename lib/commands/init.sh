@@ -63,7 +63,7 @@ _run() {
 # ──── Steps ────────────────────────────────────────────────────────────────
 
 step_1_deps() {
-    log_step "1/11 Checking base dependencies"
+    log_step "1/12 Checking base dependencies"
     local missing=()
     for bin in git curl jq; do
         if dep_has "$bin"; then
@@ -85,7 +85,7 @@ step_1_deps() {
 }
 
 step_2_android_cli() {
-    log_step "2/11 Android CLI"
+    log_step "2/12 Android CLI"
     if dep_android_cli_path >/dev/null 2>&1; then
         log_ok "android CLI → $(dep_android_cli_path)"
         return
@@ -138,7 +138,7 @@ EOF
 }
 
 step_3_lm_studio() {
-    log_step "3/11 LM Studio + local models"
+    log_step "3/12 LM Studio + local models"
     if dep_lms_path >/dev/null 2>&1; then
         log_ok "lms → $(dep_lms_path)"
     elif dep_has brew && _confirm "Install LM Studio via 'brew install --cask lm-studio'?"; then
@@ -313,7 +313,7 @@ _save_model_overrides() {
 }
 
 step_4_secrets() {
-    log_step "4/11 API keys"
+    log_step "4/12 API keys"
     _run "mkdir -p \"$GOR_MOBILE_CONFIG_DIR\""
     if [[ -f "$GOR_MOBILE_SECRETS" ]]; then
         log_ok "secrets file exists at $GOR_MOBILE_SECRETS"
@@ -330,7 +330,7 @@ EOF
 }
 
 step_5_rules_pack() {
-    log_step "5/11 Rules pack"
+    log_step "5/12 Rules pack"
     local url="${RULES_URL:-$DEFAULT_RULES_URL}"
     if [[ -d "$GOR_MOBILE_RULES_DIR/.git" ]]; then
         log_ok "Rules pack already present at $GOR_MOBILE_RULES_DIR"
@@ -357,7 +357,7 @@ _save_config() {
 }
 
 step_6_settings_hook() {
-    log_step "6/11 SessionStart hook → ~/.claude/settings.json"
+    log_step "6/12 SessionStart hook → ~/.claude/settings.json"
     _run "mkdir -p \"$GOR_MOBILE_HOME/templates\""
     _run "cp \"$GOR_MOBILE_ROOT/templates/session-start-hook.sh\" \"$GOR_MOBILE_HOME/templates/\""
     _run "cp \"$GOR_MOBILE_ROOT/templates/session-start-snippet.md\" \"$GOR_MOBILE_HOME/templates/\""
@@ -371,7 +371,7 @@ step_6_settings_hook() {
 }
 
 step_7_commands() {
-    log_step "7/11 Commands → ~/.claude/commands/"
+    log_step "7/12 Commands → ~/.claude/commands/ (11 slash-commands)"
     _run "mkdir -p \"$CLAUDE_COMMANDS_DIR\""
     local f
     for f in "$GOR_MOBILE_ROOT"/templates/commands/*.md; do
@@ -382,8 +382,22 @@ step_7_commands() {
     log_ok "Copied command templates"
 }
 
-step_8_agents() {
-    log_step "8/11 Agents → ~/.claude/agents/"
+step_8_skills() {
+    log_step "8/12 Skills → ~/.claude/skills/gor-mobile-*/"
+    _run "mkdir -p \"$CLAUDE_SKILLS_DIR\""
+    local d
+    for d in "$GOR_MOBILE_ROOT"/templates/skills/*/; do
+        [[ -d "$d" ]] || continue
+        local skill_name; skill_name="$(basename "$d")"
+        local dst="$CLAUDE_SKILLS_DIR/gor-mobile-$skill_name"
+        _run "rm -rf \"$dst\""
+        _run "cp -R \"${d%/}\" \"$dst\""
+    done
+    log_ok "Copied skill templates (verbatim from superpowers)"
+}
+
+step_9_agents() {
+    log_step "9/12 Agents → ~/.claude/agents/"
     _run "mkdir -p \"$CLAUDE_AGENTS_DIR\""
     local f
     for f in "$GOR_MOBILE_ROOT"/templates/agents/*.md; do
@@ -394,8 +408,8 @@ step_8_agents() {
     log_ok "Copied agents"
 }
 
-step_9_mcp() {
-    log_step "9/11 MCP registration"
+step_10_mcp() {
+    log_step "10/12 MCP registration"
     if [[ $DRY_RUN -eq 1 ]]; then
         printf "  [dry-run] register google-dev-knowledge in %s\n" "$CLAUDE_MCP"
     else
@@ -403,8 +417,8 @@ step_9_mcp() {
     fi
 }
 
-step_10_claude_md() {
-    log_step "10/11 CLAUDE.md managed section"
+step_11_claude_md() {
+    log_step "11/12 CLAUDE.md managed section"
     if [[ $DRY_RUN -eq 1 ]]; then
         printf "  [dry-run] merge managed section into %s\n" "$CLAUDE_CLAUDE_MD"
     else
@@ -413,8 +427,8 @@ step_10_claude_md() {
     fi
 }
 
-step_11_sanity() {
-    log_step "11/11 Sanity check"
+step_12_sanity() {
+    log_step "12/12 Sanity check"
     if [[ $SKIP_SANITY -eq 1 ]]; then
         log_info "Skipped (--skip-sanity)"
         return
@@ -447,10 +461,11 @@ cmd_init() {
     step_5_rules_pack
     step_6_settings_hook
     step_7_commands
-    step_8_agents
-    step_9_mcp
-    step_10_claude_md
-    step_11_sanity
+    step_8_skills
+    step_9_agents
+    step_10_mcp
+    step_11_claude_md
+    step_12_sanity
 
     log_step "Done"
     log_ok "Run 'gor-mobile doctor' anytime to verify the setup."
