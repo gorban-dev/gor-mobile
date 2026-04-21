@@ -17,9 +17,8 @@ fi
 
 content=$(cat "$SKILL_FILE")
 addendum="Android/Kotlin projects: architecture rules live in \$HOME/.gor-mobile/rules/
-(read via manifest.json / examples/index.json). Local-LLM delegation scripts
-are in \$HOME/.gor-mobile/scripts/ — see overlay sections inside each
-SKILL.md for usage."
+(read via manifest.json / examples/index.json). See overlay sections
+inside each SKILL.md for how to use them."
 
 injection="<EXTREMELY_IMPORTANT>
 You have gor-mobile superpowers.

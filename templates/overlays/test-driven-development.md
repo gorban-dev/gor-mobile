@@ -1,6 +1,6 @@
 <!-- BEGIN gor-mobile overlay -->
 
-## gor-mobile overlay (Android/Kotlin + local-LLM delegation)
+## gor-mobile overlay (Android/Kotlin)
 
 The skill body above runs verbatim. The following ADD to it when the target
 is an Android/Kotlin codebase.
@@ -11,34 +11,27 @@ from `$HOME/.gor-mobile/rules/` (always `core` + `architecture`; plus
 `testing-*` sections that match the layer under test). Paths come from
 `manifest.json` — never hardcode.
 
-### GREEN stage — local-LLM offload
-The implementer in the GREEN phase (make the failing test pass) can be
-delegated to LM Studio via:
+### Stage-to-model assignment
 
-    $HOME/.gor-mobile/scripts/llm-implement.sh \
-        <task-file>     # "make ${TestClass}.${method} pass"
-        <working-dir>
-        "<allowed-paths>"   # production-code paths, NOT the test file
-        <ref-files>...      # the failing test + 1-2 layer examples
+- **RED (write the failing test)** — main orchestrator (Opus). The
+  assertion set is the contract; drafting it is judgement work.
+- **GREEN (make the failing test pass)** — delegate to Sonnet:
 
-The test file stays out of the allowed-paths list so Gemma cannot change
-the assertion to make the test trivially pass. Verify the JSON `status`:
-- `DONE` → run Gradle test, confirm GREEN, proceed to REFACTOR.
-- `DONE_WITH_CONCERNS` with deviations — inspect before accepting.
-- `NEEDS_CONTEXT` / `BLOCKED` → take over yourself.
+        Task(
+          subagent_type = "general-purpose",
+          model         = "sonnet",
+          prompt        = <green-task-prompt>
+        )
 
-**IMPORTANT:** `DONE` from Gemma ≠ code is correct. Gemma has no
-execute-tool — she cannot know if imports / case are right. After every
-`DONE` you MUST run Gradle compile + test. Only commit after green.
+  The prompt's allowed-paths list MUST exclude the test file itself, so
+  Sonnet cannot weaken the assertion to make the test trivially pass.
+  Reference files: the failing test + 1–2 layer examples from the rules
+  pack.
 
-**Tool protocol (v0.3.3):** For GREEN-stage modifications of existing
-prod code, Gemma uses `edit_file` (exact substring replace, tiny
-tool-calls). Large production-code files (>150 LOC) are safe now — no
-full-file regeneration. `write_file` is used only for new files created
-as part of the fix.
+- **REFACTOR** — main orchestrator (Opus). Refactoring requires holistic
+  judgement across files the GREEN subagent wasn't scoped to see.
 
-REFACTOR stays on main Claude — refactoring requires holistic judgment.
-
-Tests: `./gradlew :<module>:test --tests "*<Name>Test*"`.
+After every GREEN dispatch, the orchestrator runs the Gradle test itself:
+`./gradlew :<module>:test --tests "*<Name>Test*"`. Only commit after green.
 
 <!-- END gor-mobile overlay -->
