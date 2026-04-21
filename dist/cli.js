@@ -618,20 +618,32 @@ function progressItem(i, total, label, status, note2) {
 
 // src/ui/section-header.ts
 import pc5 from "picocolors";
-function progressStrip(current, total) {
-  const chars = [];
-  for (let i = 1; i <= total; i++) {
-    if (i < current) chars.push(pc5.green("\u25CF"));
-    else if (i === current) chars.push(pc5.magenta("\u25B8"));
-    else chars.push(pc5.dim("\u25CB"));
-  }
-  return chars.join("");
+var STEP_LABELS = [
+  "deps",
+  "android",
+  "rules",
+  "hooks",
+  "skills",
+  "agents",
+  "mcp",
+  "claude-md",
+  "summary"
+];
+function breadcrumb(current, labels) {
+  const sep = pc5.dim(" \u203A ");
+  return labels.map((label, i) => {
+    const step = i + 1;
+    if (step < current) return pc5.green(`\u2713 ${label}`);
+    if (step === current) return pc5.bold(pc5.magenta(`\u25B8 ${label}`));
+    return pc5.dim(label);
+  }).join(sep);
 }
 function sectionHeader(n, total, title) {
   console.log("");
-  const strip = progressStrip(n, total);
+  const labels = STEP_LABELS.length === total ? STEP_LABELS : Array.from({ length: total }, (_, i) => String(i + 1));
+  console.log(`  ${breadcrumb(n, labels)}`);
   const lead = pc5.bold(pc5.magenta(`${n}/${total}`));
-  console.log(`  ${strip}  ${lead}  ${pc5.bold(title)}`);
+  console.log(`  ${lead}  ${pc5.bold(title)}`);
 }
 
 // src/ui/spinner.ts
