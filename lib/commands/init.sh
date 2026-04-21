@@ -64,7 +64,7 @@ _run() {
 # ──── Steps ────────────────────────────────────────────────────────────────
 
 step_1_deps() {
-    ui_header "1" "10" "Checking base dependencies"
+    ui_header "1" "9" "Checking base dependencies"
     local missing=()
     for bin in git curl jq; do
         if dep_has "$bin"; then
@@ -86,7 +86,7 @@ step_1_deps() {
 }
 
 step_2_android_cli() {
-    ui_header "2" "10" "Android CLI"
+    ui_header "2" "9" "Android CLI"
     if dep_android_cli_path >/dev/null 2>&1; then
         ui_ok "android CLI → $(dep_android_cli_path)"
         return
@@ -138,25 +138,8 @@ EOF
     fi
 }
 
-step_3_secrets() {
-    ui_header "3" "10" "API keys"
-    _run "mkdir -p \"$GOR_MOBILE_CONFIG_DIR\""
-    if [[ -f "$GOR_MOBILE_SECRETS" ]]; then
-        ui_ok "secrets file exists at $GOR_MOBILE_SECRETS"
-        return
-    fi
-    cat <<'EOF' > "/tmp/gor-mobile-secrets.tpl"
-# gor-mobile secrets — chmod 600. Only user-readable.
-# ANTHROPIC_API_KEY=sk-ant-...
-# GOOGLE_API_KEY=...
-EOF
-    _run "cp /tmp/gor-mobile-secrets.tpl \"$GOR_MOBILE_SECRETS\""
-    _run "chmod 600 \"$GOR_MOBILE_SECRETS\""
-    ui_ok "Secrets template at $GOR_MOBILE_SECRETS (edit manually)"
-}
-
-step_4_rules_pack() {
-    ui_header "4" "10" "Rules pack"
+step_3_rules_pack() {
+    ui_header "3" "9" "Rules pack"
     local url="${RULES_URL:-$DEFAULT_RULES_URL}"
     if [[ -d "$GOR_MOBILE_RULES_DIR/.git" ]]; then
         ui_ok "Rules pack already present at $GOR_MOBILE_RULES_DIR"
@@ -182,8 +165,8 @@ _save_config() {
     fi
 }
 
-step_5_settings_hook() {
-    ui_header "5" "10" "SessionStart + UserPromptSubmit hooks"
+step_4_settings_hook() {
+    ui_header "4" "9" "SessionStart + UserPromptSubmit hooks"
     _run "mkdir -p \"$GOR_MOBILE_HOME/templates\""
     _run "cp \"$GOR_MOBILE_ROOT/templates/session-start-hook.sh\" \"$GOR_MOBILE_HOME/templates/\""
     _run "chmod +x \"$GOR_MOBILE_HOME/templates/session-start-hook.sh\""
@@ -198,8 +181,8 @@ step_5_settings_hook() {
     fi
 }
 
-step_6_skills() {
-    ui_header "6" "10" "Skills → ~/.claude/skills/gor-mobile-*/"
+step_5_skills() {
+    ui_header "5" "9" "Skills → ~/.claude/skills/gor-mobile-*/"
     _run "mkdir -p \"$CLAUDE_SKILLS_DIR\""
     local d
     for d in "$GOR_MOBILE_ROOT"/templates/skills/*/; do
@@ -235,8 +218,8 @@ step_6_skills() {
     ui_ok "Installed skills (verbatim superpowers + sed + overlay-append)"
 }
 
-step_7_agents() {
-    ui_header "7" "10" "Agents → ~/.claude/agents/"
+step_6_agents() {
+    ui_header "6" "9" "Agents → ~/.claude/agents/"
     _run "mkdir -p \"$CLAUDE_AGENTS_DIR\""
     local src dst base
     for src in "$GOR_MOBILE_ROOT"/templates/agents/*.md; do
@@ -252,8 +235,8 @@ step_7_agents() {
     ui_ok "Copied agents from templates/agents/"
 }
 
-step_8_mcp() {
-    ui_header "8" "10" "MCP registration"
+step_7_mcp() {
+    ui_header "7" "9" "MCP registration"
     if [[ $DRY_RUN -eq 1 ]]; then
         printf "  [dry-run] register google-dev-knowledge in %s\n" "$CLAUDE_MCP"
     else
@@ -261,8 +244,8 @@ step_8_mcp() {
     fi
 }
 
-step_9_claude_md() {
-    ui_header "9" "10" "CLAUDE.md managed section"
+step_8_claude_md() {
+    ui_header "8" "9" "CLAUDE.md managed section"
     if [[ $DRY_RUN -eq 1 ]]; then
         printf "  [dry-run] merge managed section into %s\n" "$CLAUDE_CLAUDE_MD"
     else
@@ -271,8 +254,8 @@ step_9_claude_md() {
     fi
 }
 
-step_10_summary() {
-    ui_header "10" "10" "Summary"
+step_9_summary() {
+    ui_header "9" "9" "Summary"
     if [[ $SKIP_SANITY -eq 1 ]]; then
         ui_info "Skipped (--skip-sanity)"
         return
@@ -303,15 +286,14 @@ cmd_init() {
 
     step_1_deps
     step_2_android_cli
-    step_3_secrets
-    step_4_rules_pack
-    step_5_settings_hook
-    step_6_skills
-    step_7_agents
-    step_8_mcp
-    step_9_claude_md
-    step_10_summary
+    step_3_rules_pack
+    step_4_settings_hook
+    step_5_skills
+    step_6_agents
+    step_7_mcp
+    step_8_claude_md
+    step_9_summary
 
-    ui_header "✓" "10" "Done"
+    ui_header "✓" "9" "Done"
     ui_ok "Run 'gor-mobile doctor' anytime to verify the setup."
 }

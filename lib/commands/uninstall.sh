@@ -11,7 +11,6 @@ source "$GOR_MOBILE_ROOT/lib/helpers/claude-md-section.sh"
 source "$GOR_MOBILE_ROOT/lib/helpers/mcp-register.sh"
 
 _assume_yes=0
-_purge=0
 
 # Remove a legacy gor-mobile slash-command file iff its header still matches
 # the template we shipped. If the user customized it, leave the file in place.
@@ -33,18 +32,12 @@ cmd_uninstall() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --yes|-y) _assume_yes=1 ;;
-            --purge)  _purge=1 ;;
         esac
         shift
     done
 
     if [[ $_assume_yes -ne 1 ]]; then
-        printf "This will remove gor-mobile hooks, skills, agents, scripts, templates, cached gum, rules pack, and the managed CLAUDE.md section.\n"
-        if [[ $_purge -eq 1 ]]; then
-            printf "--purge: secrets at %s will ALSO be deleted.\n" "$GOR_MOBILE_SECRETS"
-        else
-            printf "Secrets at %s will be kept (re-run with --purge to delete them too).\n" "$GOR_MOBILE_SECRETS"
-        fi
+        printf "This will remove gor-mobile hooks, skills, agents, templates, cached gum, rules pack, config, and the managed CLAUDE.md section.\n"
         read -r -p "Continue? [y/N] " reply
         [[ "$reply" =~ ^[yY]$ ]] || { log_info "Aborted"; exit 0; }
     fi
@@ -78,24 +71,14 @@ cmd_uninstall() {
     claude_md_remove_section
 
     # settings.json and ~/.claude/ are already clean — now wipe the private sandbox.
-    # Safe to rm -rf the whole $GOR_MOBILE_HOME: templates/, scripts/, cache/bin/gum,
-    # and the rules-pack git clone all live here. Anything the user wants to keep
-    # belongs in $GOR_MOBILE_CONFIG_DIR instead.
-    log_step "Removing $GOR_MOBILE_HOME (templates, scripts, cache, rules)"
+    # Safe to rm -rf the whole $GOR_MOBILE_HOME: templates/, cache/bin/gum, and
+    # the rules-pack git clone all live here.
+    log_step "Removing $GOR_MOBILE_HOME (templates, cache, rules)"
     rm -rf "$GOR_MOBILE_HOME"
 
     log_step "Removing $GOR_MOBILE_CONFIG"
     rm -f "$GOR_MOBILE_CONFIG"
+    rmdir "$GOR_MOBILE_CONFIG_DIR" 2>/dev/null || true
 
-    if [[ $_purge -eq 1 ]]; then
-        log_step "Purging $GOR_MOBILE_SECRETS"
-        rm -f "$GOR_MOBILE_SECRETS"
-        rmdir "$GOR_MOBILE_CONFIG_DIR" 2>/dev/null || true
-        log_ok "gor-mobile fully purged — no artifacts remain"
-    else
-        log_ok "gor-mobile artifacts removed"
-        if [[ -f "$GOR_MOBILE_SECRETS" ]]; then
-            log_info "Secrets kept at $GOR_MOBILE_SECRETS — delete manually or re-run with --purge"
-        fi
-    fi
+    log_ok "gor-mobile artifacts removed"
 }

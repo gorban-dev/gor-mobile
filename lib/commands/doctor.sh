@@ -150,7 +150,6 @@ cmd_doctor() {
 
     log_step "Config"
     _check_file "$GOR_MOBILE_CONFIG"  "config.json" || true
-    _check_file "$GOR_MOBILE_SECRETS" "secrets.env" || true
 
     if [[ $verbose -eq 1 ]]; then
         log_step "Hooks emulation (verbose)"

@@ -9,7 +9,6 @@ GOR_MOBILE_HOME="${GOR_MOBILE_HOME:-$HOME/.gor-mobile}"
 GOR_MOBILE_RULES_DIR="$GOR_MOBILE_HOME/rules"
 GOR_MOBILE_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/gor-mobile"
 GOR_MOBILE_CONFIG="$GOR_MOBILE_CONFIG_DIR/config.json"
-GOR_MOBILE_SECRETS="$GOR_MOBILE_CONFIG_DIR/secrets.env"
 
 # Claude Code integration targets.
 CLAUDE_DIR="$HOME/.claude"
