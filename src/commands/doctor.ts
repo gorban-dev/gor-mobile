@@ -3,7 +3,6 @@ import { execa } from "execa";
 import {
   CLAUDE_AGENTS_DIR,
   CLAUDE_CLAUDE_MD,
-  CLAUDE_MCP,
   CLAUDE_SETTINGS,
   CLAUDE_SKILLS_DIR,
   GOR_MOBILE_CONFIG,
@@ -164,7 +163,6 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   checkFile(CLAUDE_SETTINGS, "settings.json");
   checkHooks();
   checkFile(CLAUDE_AGENTS_DIR, "agents/");
-  checkFile(CLAUDE_MCP, "mcp.json");
   checkClaudeMdSection();
 
   log.step("Rules pack");

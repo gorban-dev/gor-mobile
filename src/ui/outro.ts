@@ -4,7 +4,6 @@ export interface InstallSummary {
   skills: number;
   agents: number;
   hooks: number;
-  mcp: number;
   rulesVersion: string;
 }
 
@@ -20,7 +19,7 @@ const NEXT_STEPS = [
  * and plain-indented lines.
  */
 export function finalOutro(s: InstallSummary): void {
-  const summary = `Installed: ${s.skills} skills · ${s.agents} agents · ${s.hooks} hooks · ${s.mcp} MCP · rules v${s.rulesVersion}`;
+  const summary = `Installed: ${s.skills} skills · ${s.agents} agents · ${s.hooks} hooks · rules v${s.rulesVersion}`;
   console.log("");
   console.log(`  ${pc.green("✓")} ${pc.bold(summary)}`);
   console.log("");

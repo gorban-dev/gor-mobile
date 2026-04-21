@@ -53,7 +53,7 @@ gor-mobile init
 - **Live progress.** A `●▸○` progress strip and per-item `(i/N)` rows make
   bulk work (14 skills, 2 agents) legible; the rules-pack clone uses a
   single spinner with `Cloning → Resolving → Cloned v1.0.0` phase updates.
-- **Outro.** A summary line (skills / agents / hooks / MCP / rules-pack
+- **Outro.** A summary line (skills / agents / hooks / rules-pack
   version) followed by `Next steps` commands.
 
 Everything is idempotent — re-run any time to repair drift; every step
@@ -68,7 +68,7 @@ Flags:
 - `--advanced` forces Advanced mode (per-step confirm, editable rules URL).
 - `--rules <git-url>` overrides the default rules pack URL.
 
-The 9 steps:
+The 8 steps:
 
 1. **Base dependencies.** Verifies `git`, `curl`, `node` are on `PATH`. Missing hard deps abort the wizard.
 2. **Google Android CLI agent** (https://developer.android.com/tools/agents). Detects the `android` binary. If absent, prints an info card explaining what the CLI is and why gor-mobile needs it, then offers to open the install page in your default browser.
@@ -76,9 +76,8 @@ The 9 steps:
 4. **SessionStart + UserPromptSubmit hooks.** Copies `session-start-hook.sh` and `user-prompt-submit-hook.sh` to `~/.gor-mobile/templates/`, then merges matching entries into `~/.claude/settings.json` via pure-JS `JSON.parse` / `JSON.stringify` — your existing `Stop` / `PermissionRequest` / `Notification` / other matchers are preserved untouched. The SessionStart hook injects `gor-mobile-using-superpowers/SKILL.md` as `additionalContext` on each session start. The UserPromptSubmit hook fires on every user prompt and injects a short (~50-word) reminder — counters skills-discipline drift on long conversations.
 5. **Skills.** Copies 14 verbatim superpowers skills into `~/.claude/skills/gor-mobile-<skill>/`. Install-time transforms: cross-refs `superpowers:` → `gor-mobile-`, frontmatter id prefix `name: ` → `name: gor-mobile-`, and an optional overlay block appended from `templates/overlays/<skill>.md` for the 6 skills where Android rules, Task(model=...) routing, or a fix to a known upstream bug applies (`brainstorming`, `subagent-driven-development`, `test-driven-development`, `executing-plans`, `systematic-debugging`, `requesting-code-review`).
 6. **Agents.** Copies every `templates/agents/*.md` into `~/.claude/agents/` — currently `gor-mobile-code-reviewer.md` (Sonnet, default review path) and `gor-mobile-code-reviewer-deep.md` (Opus, used for large / security-sensitive diffs).
-7. **MCP registration.** Adds a `google-dev-knowledge` entry to `~/.claude/mcp.json` via idempotent merge (won't duplicate an existing entry).
-8. **CLAUDE.md managed section.** Writes a short "Android Mobile Dev (managed by gor-mobile)" block between `<!-- BEGIN gor-mobile managed section -->` / `<!-- END ... -->` markers in `~/.claude/CLAUDE.md`. Content outside the markers is never modified.
-9. **Summary.** Skipped under `--skip-sanity`. Otherwise reports counts for skills / agents / hooks and the rules-pack version.
+7. **CLAUDE.md managed section.** Writes a short "Android Mobile Dev (managed by gor-mobile)" block between `<!-- BEGIN gor-mobile managed section -->` / `<!-- END ... -->` markers in `~/.claude/CLAUDE.md`. Content outside the markers is never modified.
+8. **Summary.** Skipped under `--skip-sanity`. Otherwise reports counts for skills / agents / hooks and the rules-pack version.
 
 ## Commands
 

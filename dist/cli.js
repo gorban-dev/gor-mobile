@@ -39,7 +39,7 @@ function gorMobileRoot() {
 }
 
 // src/commands/init.ts
-import { existsSync as existsSync8 } from "fs";
+import { existsSync as existsSync7 } from "fs";
 import { join as join6 } from "path";
 import { execa as execa2 } from "execa";
 import pc8 from "picocolors";
@@ -269,52 +269,15 @@ function cleanupLegacyAgents() {
   return removed;
 }
 
-// src/helpers/mcp-register.ts
-import { existsSync as existsSync4 } from "fs";
-function ensureMcpFile() {
-  if (!existsSync4(CLAUDE_MCP)) {
-    writeJson(CLAUDE_MCP, { mcpServers: {} });
-  }
-  return readJsonSafe(CLAUDE_MCP, { mcpServers: {} });
-}
-function registerGoogleDevKnowledge() {
-  const cfg = ensureMcpFile();
-  if (cfg.mcpServers?.["google-dev-knowledge"]) {
-    return { already: true };
-  }
-  cfg.mcpServers = cfg.mcpServers ?? {};
-  const server = {
-    _managed_by: MANAGED_TAG,
-    command: "npx",
-    args: ["-y", "@anthropic/mcp-google-dev-knowledge@latest"]
-  };
-  cfg.mcpServers["google-dev-knowledge"] = server;
-  writeJson(CLAUDE_MCP, cfg);
-  return { already: false };
-}
-function unregisterManaged() {
-  if (!existsSync4(CLAUDE_MCP)) return;
-  const cfg = readJsonSafe(CLAUDE_MCP, {});
-  if (!cfg.mcpServers) return;
-  const filtered = {};
-  for (const [name, server] of Object.entries(cfg.mcpServers)) {
-    if ((server._managed_by ?? "") !== MANAGED_TAG) {
-      filtered[name] = server;
-    }
-  }
-  cfg.mcpServers = filtered;
-  writeJson(CLAUDE_MCP, cfg);
-}
-
 // src/helpers/rules-pack.ts
-import { existsSync as existsSync5, cpSync as cpSync2, rmSync as rmSync2 } from "fs";
+import { existsSync as existsSync4, cpSync as cpSync2, rmSync as rmSync2 } from "fs";
 import { join as join4 } from "path";
 import { execa } from "execa";
 function manifestPath() {
   return join4(GOR_MOBILE_RULES_DIR, "manifest.json");
 }
 function readManifest() {
-  if (!existsSync5(manifestPath())) return null;
+  if (!existsSync4(manifestPath())) return null;
   try {
     return readJsonSafe(manifestPath(), {});
   } catch {
@@ -335,13 +298,13 @@ function saveConfig(source, ref = DEFAULT_RULES_REF) {
   });
 }
 async function cloneOrPull(url, ref = DEFAULT_RULES_REF) {
-  if (existsSync5(join4(GOR_MOBILE_RULES_DIR, ".git"))) {
+  if (existsSync4(join4(GOR_MOBILE_RULES_DIR, ".git"))) {
     await execa("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], {
       reject: false
     });
     return;
   }
-  if (existsSync5(GOR_MOBILE_RULES_DIR)) {
+  if (existsSync4(GOR_MOBILE_RULES_DIR)) {
     rmSync2(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
   }
   ensureDir(join4(GOR_MOBILE_RULES_DIR, ".."));
@@ -356,19 +319,19 @@ async function cloneOrPull(url, ref = DEFAULT_RULES_REF) {
   ]);
 }
 function copyFromLocal(source) {
-  if (existsSync5(GOR_MOBILE_RULES_DIR)) {
+  if (existsSync4(GOR_MOBILE_RULES_DIR)) {
     rmSync2(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
   }
   cpSync2(source, GOR_MOBILE_RULES_DIR, { recursive: true });
 }
 function fallbackToBundled(bundledRoot) {
-  if (existsSync5(GOR_MOBILE_RULES_DIR)) {
+  if (existsSync4(GOR_MOBILE_RULES_DIR)) {
     rmSync2(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
   }
   cpSync2(bundledRoot, GOR_MOBILE_RULES_DIR, { recursive: true });
 }
 async function pullCurrent() {
-  if (!existsSync5(join4(GOR_MOBILE_RULES_DIR, ".git"))) {
+  if (!existsSync4(join4(GOR_MOBILE_RULES_DIR, ".git"))) {
     throw new Error("Current pack is not a git checkout \u2014 cannot pull");
   }
   await execa("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], {
@@ -376,7 +339,7 @@ async function pullCurrent() {
   });
 }
 async function diffAgainstUpstream() {
-  if (!existsSync5(join4(GOR_MOBILE_RULES_DIR, ".git"))) {
+  if (!existsSync4(join4(GOR_MOBILE_RULES_DIR, ".git"))) {
     throw new Error("Current pack is not a git checkout");
   }
   await execa("git", ["-C", GOR_MOBILE_RULES_DIR, "fetch", "origin"], {
@@ -400,7 +363,7 @@ function validateManifest() {
   if (!m.stack) errors.push("manifest.stack missing");
   if (m.sections) {
     for (const rel of Object.values(m.sections)) {
-      if (!existsSync5(join4(GOR_MOBILE_RULES_DIR, rel))) {
+      if (!existsSync4(join4(GOR_MOBILE_RULES_DIR, rel))) {
         errors.push(`missing rule file: ${rel}`);
       }
     }
@@ -408,17 +371,17 @@ function validateManifest() {
   return { ok: errors.length === 0, errors, manifest: m };
 }
 async function gitBranchAndRev() {
-  if (!existsSync5(join4(GOR_MOBILE_RULES_DIR, ".git"))) return {};
+  if (!existsSync4(join4(GOR_MOBILE_RULES_DIR, ".git"))) return {};
   const branch = await execa("git", ["-C", GOR_MOBILE_RULES_DIR, "rev-parse", "--abbrev-ref", "HEAD"], { reject: false });
   const rev = await execa("git", ["-C", GOR_MOBILE_RULES_DIR, "rev-parse", "--short", "HEAD"], { reject: false });
   return { branch: branch.stdout.trim(), rev: rev.stdout.trim() };
 }
 
 // src/helpers/settings-merge.ts
-import { existsSync as existsSync6 } from "fs";
+import { existsSync as existsSync5 } from "fs";
 function ensureSettingsFile() {
   ensureParentDir(CLAUDE_SETTINGS);
-  if (!existsSync6(CLAUDE_SETTINGS)) {
+  if (!existsSync5(CLAUDE_SETTINGS)) {
     writeJson(CLAUDE_SETTINGS, {});
   }
   return readJsonSafe(CLAUDE_SETTINGS, {});
@@ -438,7 +401,7 @@ function upsertHook(hookType, matcher, command) {
   writeJson(CLAUDE_SETTINGS, settings);
 }
 function removeHook(hookType) {
-  if (!existsSync6(CLAUDE_SETTINGS)) return;
+  if (!existsSync5(CLAUDE_SETTINGS)) return;
   const settings = readJsonSafe(CLAUDE_SETTINGS, {});
   if (!settings.hooks || !settings.hooks[hookType]) return;
   const remaining = settings.hooks[hookType].filter(
@@ -562,7 +525,7 @@ var NEXT_STEPS = [
   "cd <android-project>        open Claude Code; the session-start hook loads workflow"
 ];
 function finalOutro(s) {
-  const summary = `Installed: ${s.skills} skills \xB7 ${s.agents} agents \xB7 ${s.hooks} hooks \xB7 ${s.mcp} MCP \xB7 rules v${s.rulesVersion}`;
+  const summary = `Installed: ${s.skills} skills \xB7 ${s.agents} agents \xB7 ${s.hooks} hooks \xB7 rules v${s.rulesVersion}`;
   console.log("");
   console.log(`  ${pc2.green("\u2713")} ${pc2.bold(summary)}`);
   console.log("");
@@ -598,7 +561,6 @@ var STEP_LABELS = [
   "hooks",
   "skills",
   "agents",
-  "mcp",
   "claude-md",
   "summary"
 ];
@@ -624,12 +586,12 @@ import { confirm as confirm2, isCancel as isCancel3, cancel as cancel3 } from "@
 import pc6 from "picocolors";
 
 // src/ui/banner.ts
-import { existsSync as existsSync7, readFileSync as readFileSync4 } from "fs";
+import { existsSync as existsSync6, readFileSync as readFileSync4 } from "fs";
 import { join as join5 } from "path";
 import pc5 from "picocolors";
 function renderBanner() {
   const path = join5(gorMobileRoot(), "templates", "banner.txt");
-  if (existsSync7(path)) {
+  if (existsSync6(path)) {
     const raw = readFileSync4(path, "utf8");
     const trimmed = raw.replace(/\n+$/, "");
     const colored = trimmed.split("\n").map((line) => pc5.magenta(line)).join("\n");
@@ -651,7 +613,6 @@ var BULLETS = [
   "Merge SessionStart + UserPromptSubmit hooks into ~/.claude/settings.json.",
   "Install 14 gor-mobile-* skills into ~/.claude/skills/.",
   "Install 2 review agents (Sonnet + Opus) into ~/.claude/agents/.",
-  "Register the google-dev-knowledge MCP server in ~/.claude/mcp.json.",
   "Write a managed section into ~/.claude/CLAUDE.md."
 ];
 async function welcome(skip) {
@@ -705,7 +666,7 @@ ${label}`);
 };
 
 // src/commands/init.ts
-var TOTAL_STEPS = 9;
+var TOTAL_STEPS = 8;
 function dryLog(msg) {
   console.log(`    ${pc8.dim("[dry-run]")} ${msg}`);
 }
@@ -795,7 +756,7 @@ async function step3Rules(ctx) {
     progressItem(2, 2, "save config", "skip", "dry-run");
     return;
   }
-  const alreadyCloned = existsSync8(join6(GOR_MOBILE_RULES_DIR, ".git"));
+  const alreadyCloned = existsSync7(join6(GOR_MOBILE_RULES_DIR, ".git"));
   if (alreadyCloned) {
     await execa2("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], { reject: false });
     const m = readManifest();
@@ -842,7 +803,7 @@ async function step5Skills(ctx) {
   if (ctx.opts.dryRun) {
     const { readdirSync: readdirSync2 } = await import("fs");
     const src = join6(gorMobileRoot(), "templates", "skills");
-    const names = existsSync8(src) ? readdirSync2(src).filter((n) => !n.startsWith(".")) : [];
+    const names = existsSync7(src) ? readdirSync2(src).filter((n) => !n.startsWith(".")) : [];
     for (let i = 0; i < names.length; i++) {
       dryLog(`install skill ${names[i]} (sed + overlay)`);
     }
@@ -872,7 +833,7 @@ async function step6Agents(ctx) {
   if (ctx.opts.dryRun) {
     const { readdirSync: readdirSync2 } = await import("fs");
     const src = join6(gorMobileRoot(), "templates", "agents");
-    const files2 = existsSync8(src) ? readdirSync2(src).filter((f) => f.endsWith(".md")) : [];
+    const files2 = existsSync7(src) ? readdirSync2(src).filter((f) => f.endsWith(".md")) : [];
     for (let i = 0; i < files2.length; i++) {
       dryLog(`install agent ${files2[i]}`);
     }
@@ -890,25 +851,8 @@ async function step6Agents(ctx) {
   }
   ctx.counts.agents = total;
 }
-async function step7Mcp(ctx) {
-  runStep(7, "MCP registration");
-  if (ctx.opts.dryRun) {
-    progressItem(1, 1, "register google-dev-knowledge", "skip", "dry-run");
-    ctx.counts.mcp = 1;
-    return;
-  }
-  const r = registerGoogleDevKnowledge();
-  progressItem(
-    1,
-    1,
-    "register google-dev-knowledge",
-    "ok",
-    r.already ? "already present in mcp.json" : "added to mcp.json"
-  );
-  ctx.counts.mcp = 1;
-}
-async function step8ClaudeMd(ctx) {
-  runStep(8, "CLAUDE.md managed section");
+async function step7ClaudeMd(ctx) {
+  runStep(7, "CLAUDE.md managed section");
   if (ctx.opts.dryRun) {
     progressItem(1, 1, "write managed section", "skip", "dry-run");
     return;
@@ -916,15 +860,15 @@ async function step8ClaudeMd(ctx) {
   writeClaudeMdSection(join6(gorMobileRoot(), "templates", "claude-md-snippet.md"));
   progressItem(1, 1, "write managed section", "ok", "~/.claude/CLAUDE.md");
 }
-async function step9Summary(ctx) {
+async function step8Summary(ctx) {
   if (ctx.opts.skipSanity) {
-    runStep(9, "Summary");
+    runStep(8, "Summary");
     log.info("Skipped (--skip-sanity)");
     return;
   }
-  runStep(9, "Summary");
-  const skills = existsSync8(CLAUDE_SKILLS_DIR) ? (await import("fs")).readdirSync(CLAUDE_SKILLS_DIR).filter((n) => n.startsWith("gor-mobile-")).length : 0;
-  const agents = existsSync8(CLAUDE_AGENTS_DIR) ? (await import("fs")).readdirSync(CLAUDE_AGENTS_DIR).filter((n) => n.endsWith(".md")).length : 0;
+  runStep(8, "Summary");
+  const skills = existsSync7(CLAUDE_SKILLS_DIR) ? (await import("fs")).readdirSync(CLAUDE_SKILLS_DIR).filter((n) => n.startsWith("gor-mobile-")).length : 0;
+  const agents = existsSync7(CLAUDE_AGENTS_DIR) ? (await import("fs")).readdirSync(CLAUDE_AGENTS_DIR).filter((n) => n.endsWith(".md")).length : 0;
   progressItem(1, 4, "Skills", skills > 0 ? "ok" : "warn", String(skills));
   progressItem(2, 4, "Agents", agents > 0 ? "ok" : "warn", String(agents));
   progressItem(3, 4, "Hooks", ctx.counts.hooks === 2 ? "ok" : "warn", String(ctx.counts.hooks));
@@ -941,7 +885,7 @@ async function cmdInit(opts = {}) {
     mode,
     opts,
     rulesUrl: opts.rules ?? DEFAULT_RULES_URL,
-    counts: { skills: 0, agents: 0, hooks: 0, mcp: 0 },
+    counts: { skills: 0, agents: 0, hooks: 0 },
     rulesVersion: "?"
   };
   try {
@@ -951,9 +895,8 @@ async function cmdInit(opts = {}) {
     await step4Hooks(ctx);
     await step5Skills(ctx);
     await step6Agents(ctx);
-    await step7Mcp(ctx);
-    await step8ClaudeMd(ctx);
-    await step9Summary(ctx);
+    await step7ClaudeMd(ctx);
+    await step8Summary(ctx);
   } catch (err) {
     if (isCancel4(err)) {
       cancel4("Cancelled");
@@ -966,14 +909,13 @@ async function cmdInit(opts = {}) {
     skills: ctx.counts.skills,
     agents: ctx.counts.agents,
     hooks: ctx.counts.hooks,
-    mcp: ctx.counts.mcp,
     rulesVersion: ctx.rulesVersion
   });
   void GOR_MOBILE_VERSION;
 }
 
 // src/commands/doctor.ts
-import { existsSync as existsSync9, readFileSync as readFileSync5 } from "fs";
+import { existsSync as existsSync8, readFileSync as readFileSync5 } from "fs";
 import { execa as execa3 } from "execa";
 function reportDep(name, path, required) {
   if (path) {
@@ -985,7 +927,7 @@ function reportDep(name, path, required) {
   }
 }
 function checkFile(path, label) {
-  if (existsSync9(path)) {
+  if (existsSync8(path)) {
     log.ok(`${label} \u2192 ${path}`);
     return true;
   }
@@ -993,7 +935,7 @@ function checkFile(path, label) {
   return false;
 }
 function checkHooks() {
-  if (!existsSync9(CLAUDE_SETTINGS)) {
+  if (!existsSync8(CLAUDE_SETTINGS)) {
     log.warn(`No ${CLAUDE_SETTINGS}`);
     return;
   }
@@ -1009,7 +951,7 @@ function checkHooks() {
   }
 }
 function checkClaudeMdSection() {
-  if (!existsSync9(CLAUDE_CLAUDE_MD)) {
+  if (!existsSync8(CLAUDE_CLAUDE_MD)) {
     log.warn(`${CLAUDE_CLAUDE_MD} does not exist`);
     return;
   }
@@ -1020,7 +962,7 @@ function checkClaudeMdSection() {
   }
 }
 function checkRulesPack() {
-  if (!existsSync9(GOR_MOBILE_RULES_DIR)) {
+  if (!existsSync8(GOR_MOBILE_RULES_DIR)) {
     log.warn(`Rules pack not installed (${GOR_MOBILE_RULES_DIR})`);
     return;
   }
@@ -1040,7 +982,7 @@ async function verboseHookEmulation() {
   ];
   for (const [file, label] of hooks) {
     const path = `${GOR_MOBILE_HOME}/templates/${file}`;
-    if (!existsSync9(path)) {
+    if (!existsSync8(path)) {
       log.warn(`[${label}] template missing: ${path}`);
       continue;
     }
@@ -1071,7 +1013,7 @@ async function verboseHookEmulation() {
   }
 }
 function verboseSkillsFrontmatter() {
-  if (!existsSync9(CLAUDE_SKILLS_DIR)) {
+  if (!existsSync8(CLAUDE_SKILLS_DIR)) {
     log.warn(`${CLAUDE_SKILLS_DIR} missing`);
     return;
   }
@@ -1082,7 +1024,7 @@ function verboseSkillsFrontmatter() {
   for (const entry of readdirSync2(CLAUDE_SKILLS_DIR)) {
     if (!entry.startsWith("gor-mobile-")) continue;
     const skillMd = join11(CLAUDE_SKILLS_DIR, entry, "SKILL.md");
-    if (!existsSync9(skillMd)) continue;
+    if (!existsSync8(skillMd)) continue;
     count++;
     const content = readFileSync5(skillMd, "utf8");
     if (!/^name: gor-mobile-/m.test(content)) {
@@ -1107,7 +1049,6 @@ async function cmdDoctor(opts = {}) {
   checkFile(CLAUDE_SETTINGS, "settings.json");
   checkHooks();
   checkFile(CLAUDE_AGENTS_DIR, "agents/");
-  checkFile(CLAUDE_MCP, "mcp.json");
   checkClaudeMdSection();
   log.step("Rules pack");
   checkRulesPack();
@@ -1128,6 +1069,24 @@ async function cmdDoctor(opts = {}) {
 
 // src/commands/repair.ts
 import { join as join7 } from "path";
+
+// src/helpers/mcp-register.ts
+import { existsSync as existsSync9 } from "fs";
+function unregisterManaged() {
+  if (!existsSync9(CLAUDE_MCP)) return;
+  const cfg = readJsonSafe(CLAUDE_MCP, {});
+  if (!cfg.mcpServers) return;
+  const filtered = {};
+  for (const [name, server] of Object.entries(cfg.mcpServers)) {
+    if ((server._managed_by ?? "") !== MANAGED_TAG) {
+      filtered[name] = server;
+    }
+  }
+  cfg.mcpServers = filtered;
+  writeJson(CLAUDE_MCP, cfg);
+}
+
+// src/commands/repair.ts
 async function cmdRepair() {
   log.step("Repairing ~/.claude/ managed files");
   copyHookTemplates();
@@ -1150,11 +1109,10 @@ async function cmdRepair() {
   const agents = installAgents();
   log.ok(`Agents refreshed (${agents.length} in ~/.claude/agents)`);
   try {
-    const mcp = registerGoogleDevKnowledge();
-    if (mcp.already) log.info("MCP google-dev-knowledge already registered");
-    else log.ok("MCP google-dev-knowledge registered");
+    unregisterManaged();
+    log.ok("Managed MCP entries pruned from ~/.claude/mcp.json");
   } catch (err) {
-    log.warn(`MCP register failed: ${err.message}`);
+    log.warn(`MCP cleanup failed: ${err.message}`);
   }
   writeClaudeMdSection(join7(gorMobileRoot(), "templates", "claude-md-snippet.md"));
   log.ok("CLAUDE.md managed section refreshed");
@@ -1338,15 +1296,12 @@ async function cmdDocs(query) {
     log.info(`\u2192 android docs "${q}"`);
     const res = await execa4(cli, ["docs", q], { stdio: "inherit", reject: false });
     if (res.exitCode === 0) return;
-    log.warn("android docs returned nothing; falling back to MCP");
+    log.warn("android docs returned nothing; falling back to web search");
   }
   const encoded = encodeURIComponent(q);
   console.log(`Native android docs unavailable for this query.`);
   console.log(``);
-  console.log(`Inside Claude Code, ask the google-dev-knowledge MCP server directly:`);
-  console.log(`  $ claude > use google-dev-knowledge to find "${q}"`);
-  console.log(``);
-  console.log(`Or open: https://developer.android.com/search?q=${encoded}`);
+  console.log(`Open: https://developer.android.com/search?q=${encoded}`);
 }
 
 // src/commands/self-update.ts

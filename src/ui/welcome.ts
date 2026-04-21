@@ -9,7 +9,6 @@ const BULLETS = [
   "Merge SessionStart + UserPromptSubmit hooks into ~/.claude/settings.json.",
   "Install 14 gor-mobile-* skills into ~/.claude/skills/.",
   "Install 2 review agents (Sonnet + Opus) into ~/.claude/agents/.",
-  "Register the google-dev-knowledge MCP server in ~/.claude/mcp.json.",
   "Write a managed section into ~/.claude/CLAUDE.md."
 ];
 

@@ -22,7 +22,6 @@ import {
   installAgents,
   installSkills
 } from "../helpers/install-assets.js";
-import { registerGoogleDevKnowledge } from "../helpers/mcp-register.js";
 import {
   cloneOrPull,
   fallbackToBundled,
@@ -55,7 +54,7 @@ export interface InitOptions {
   rules?: string;
 }
 
-const TOTAL_STEPS = 9;
+const TOTAL_STEPS = 8;
 
 interface RunCtx {
   mode: WizardMode;
@@ -65,7 +64,6 @@ interface RunCtx {
     skills: number;
     agents: number;
     hooks: number;
-    mcp: number;
   };
   rulesVersion: string;
 }
@@ -281,28 +279,8 @@ async function step6Agents(ctx: RunCtx): Promise<void> {
   ctx.counts.agents = total;
 }
 
-async function step7Mcp(ctx: RunCtx): Promise<void> {
-  runStep(7, "MCP registration");
-
-  if (ctx.opts.dryRun) {
-    progressItem(1, 1, "register google-dev-knowledge", "skip", "dry-run");
-    ctx.counts.mcp = 1;
-    return;
-  }
-
-  const r = registerGoogleDevKnowledge();
-  progressItem(
-    1,
-    1,
-    "register google-dev-knowledge",
-    "ok",
-    r.already ? "already present in mcp.json" : "added to mcp.json"
-  );
-  ctx.counts.mcp = 1;
-}
-
-async function step8ClaudeMd(ctx: RunCtx): Promise<void> {
-  runStep(8, "CLAUDE.md managed section");
+async function step7ClaudeMd(ctx: RunCtx): Promise<void> {
+  runStep(7, "CLAUDE.md managed section");
 
   if (ctx.opts.dryRun) {
     progressItem(1, 1, "write managed section", "skip", "dry-run");
@@ -313,13 +291,13 @@ async function step8ClaudeMd(ctx: RunCtx): Promise<void> {
   progressItem(1, 1, "write managed section", "ok", "~/.claude/CLAUDE.md");
 }
 
-async function step9Summary(ctx: RunCtx): Promise<void> {
+async function step8Summary(ctx: RunCtx): Promise<void> {
   if (ctx.opts.skipSanity) {
-    runStep(9, "Summary");
+    runStep(8, "Summary");
     log.info("Skipped (--skip-sanity)");
     return;
   }
-  runStep(9, "Summary");
+  runStep(8, "Summary");
 
   const skills = existsSync(CLAUDE_SKILLS_DIR)
     ? (await import("node:fs")).readdirSync(CLAUDE_SKILLS_DIR).filter((n) => n.startsWith("gor-mobile-"))
@@ -342,7 +320,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   // 1. Banner + what-will-happen.
   // 2. Mode select (QuickStart vs Advanced — the only behavioural
   //    difference is whether step 3 prompts to override the rules URL).
-  // 3. Run all 9 steps in sequence, no per-step confirm.
+  // 3. Run all 8 steps in sequence, no per-step confirm.
   await welcome(Boolean(opts.yes));
 
   const mode: WizardMode = opts.advanced
@@ -359,7 +337,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     mode,
     opts,
     rulesUrl: opts.rules ?? DEFAULT_RULES_URL,
-    counts: { skills: 0, agents: 0, hooks: 0, mcp: 0 },
+    counts: { skills: 0, agents: 0, hooks: 0 },
     rulesVersion: "?"
   };
 
@@ -370,9 +348,8 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     await step4Hooks(ctx);
     await step5Skills(ctx);
     await step6Agents(ctx);
-    await step7Mcp(ctx);
-    await step8ClaudeMd(ctx);
-    await step9Summary(ctx);
+    await step7ClaudeMd(ctx);
+    await step8Summary(ctx);
   } catch (err) {
     if (isCancel(err as unknown)) {
       cancel("Cancelled");
@@ -386,7 +363,6 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     skills: ctx.counts.skills,
     agents: ctx.counts.agents,
     hooks: ctx.counts.hooks,
-    mcp: ctx.counts.mcp,
     rulesVersion: ctx.rulesVersion
   });
 

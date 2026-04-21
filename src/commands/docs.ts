@@ -15,14 +15,11 @@ export async function cmdDocs(query: string[]): Promise<void> {
     log.info(`→ android docs "${q}"`);
     const res = await execa(cli, ["docs", q], { stdio: "inherit", reject: false });
     if (res.exitCode === 0) return;
-    log.warn("android docs returned nothing; falling back to MCP");
+    log.warn("android docs returned nothing; falling back to web search");
   }
 
   const encoded = encodeURIComponent(q);
   console.log(`Native android docs unavailable for this query.`);
   console.log(``);
-  console.log(`Inside Claude Code, ask the google-dev-knowledge MCP server directly:`);
-  console.log(`  $ claude > use google-dev-knowledge to find "${q}"`);
-  console.log(``);
-  console.log(`Or open: https://developer.android.com/search?q=${encoded}`);
+  console.log(`Open: https://developer.android.com/search?q=${encoded}`);
 }

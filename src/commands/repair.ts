@@ -8,7 +8,7 @@ import {
   installAgents,
   installSkills
 } from "../helpers/install-assets.js";
-import { registerGoogleDevKnowledge } from "../helpers/mcp-register.js";
+import { unregisterManaged } from "../helpers/mcp-register.js";
 import {
   installSessionStartHook,
   installUserPromptSubmitHook
@@ -42,11 +42,10 @@ export async function cmdRepair(): Promise<void> {
   log.ok(`Agents refreshed (${agents.length} in ~/.claude/agents)`);
 
   try {
-    const mcp = registerGoogleDevKnowledge();
-    if (mcp.already) log.info("MCP google-dev-knowledge already registered");
-    else log.ok("MCP google-dev-knowledge registered");
+    unregisterManaged();
+    log.ok("Managed MCP entries pruned from ~/.claude/mcp.json");
   } catch (err) {
-    log.warn(`MCP register failed: ${(err as Error).message}`);
+    log.warn(`MCP cleanup failed: ${(err as Error).message}`);
   }
 
   writeClaudeMdSection(join(gorMobileRoot(), "templates", "claude-md-snippet.md"));

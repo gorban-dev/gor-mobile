@@ -7,7 +7,6 @@ export const STEP_LABELS = [
   "hooks",
   "skills",
   "agents",
-  "mcp",
   "claude-md",
   "summary"
 ] as const;
