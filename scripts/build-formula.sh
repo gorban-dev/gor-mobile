@@ -33,12 +33,16 @@ class GorMobile < Formula
   license  "MIT"
 
   depends_on "git"
-  depends_on "jq"
-  depends_on "python@3.12"
+  depends_on "node"
 
   def install
     libexec.install Dir["*"]
-    (bin/"gor-mobile").write_env_script libexec/"bin/gor-mobile", GOR_MOBILE_ROOT: libexec.to_s
+    cd libexec do
+      system "npm", "install", "--production=false", "--no-audit", "--no-fund"
+      system "npm", "run", "build"
+    end
+    (bin/"gor-mobile").write_env_script libexec/"bin/gor-mobile.mjs",
+      GOR_MOBILE_ROOT: libexec.to_s
   end
 
   def caveats

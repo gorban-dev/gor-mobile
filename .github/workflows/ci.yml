@@ -11,20 +11,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install bats
-        run: brew install bats-core
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
-      - name: Bats tests
-        run: bats tests/
+      - name: Install deps
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npx tsc --noEmit
 
       - name: Smoke — CLI boots
-        env:
-          GOR_MOBILE_ROOT: ${{ github.workspace }}
         run: |
           ./bin/gor-mobile version
-          ./bin/gor-mobile help
+          ./bin/gor-mobile --help
 
       - name: Smoke — init --dry-run
-        env:
-          GOR_MOBILE_ROOT: ${{ github.workspace }}
         run: ./bin/gor-mobile init --dry-run --yes --skip-sanity
