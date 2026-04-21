@@ -471,27 +471,6 @@ function hasManagedHook(hookType) {
   return entries.some((e) => (e._managed_by ?? "") === MANAGED_TAG);
 }
 
-// src/ui/banner.ts
-import { existsSync as existsSync7, readFileSync as readFileSync4 } from "fs";
-import { join as join5 } from "path";
-import pc from "picocolors";
-function renderBanner() {
-  const path = join5(gorMobileRoot(), "templates", "banner.txt");
-  if (existsSync7(path)) {
-    const raw = readFileSync4(path, "utf8");
-    const trimmed = raw.replace(/\n+$/, "");
-    const colored = trimmed.split("\n").map((line) => pc.magenta(line)).join("\n");
-    console.log("");
-    console.log(colored);
-  } else {
-    console.log("");
-    console.log(pc.bold(pc.magenta("GOR-MOBILE")));
-  }
-  const subtitle = `Android-aware overlay installer for Claude Code  \xB7  v${GOR_MOBILE_VERSION}`;
-  console.log(pc.dim(subtitle));
-  console.log("");
-}
-
 // src/ui/confirm-step.ts
 import { confirm, isCancel, cancel } from "@clack/prompts";
 
@@ -559,7 +538,7 @@ async function modeSelect(defaults) {
 
 // src/ui/note.ts
 import { note as clackNote } from "@clack/prompts";
-import pc2 from "picocolors";
+import pc from "picocolors";
 function note(body, title) {
   if (isTuiOn()) {
     clackNote(body, title);
@@ -567,7 +546,7 @@ function note(body, title) {
   }
   if (title) {
     console.log("");
-    console.log(pc2.bold(title));
+    console.log(pc.bold(title));
   }
   for (const line of body.split("\n")) {
     console.log(`  ${line}`);
@@ -576,8 +555,7 @@ function note(body, title) {
 }
 
 // src/ui/outro.ts
-import { outro as clackOutro } from "@clack/prompts";
-import pc3 from "picocolors";
+import pc2 from "picocolors";
 var NEXT_STEPS = [
   "gor-mobile doctor           verify setup",
   "gor-mobile rules list       inspect installed architecture rules",
@@ -585,39 +563,34 @@ var NEXT_STEPS = [
 ];
 function finalOutro(s) {
   const summary = `Installed: ${s.skills} skills \xB7 ${s.agents} agents \xB7 ${s.hooks} hooks \xB7 ${s.mcp} MCP \xB7 rules v${s.rulesVersion}`;
-  if (isTuiOn()) {
-    const lines = [pc3.green(summary), "", pc3.bold("Next steps:"), ...NEXT_STEPS.map((n) => `  ${pc3.cyan(n)}`)];
-    clackOutro(lines.join("\n"));
-    return;
-  }
   console.log("");
-  console.log(pc3.bold(summary));
+  console.log(`  ${pc2.green("\u2713")} ${pc2.bold(summary)}`);
   console.log("");
-  console.log(pc3.bold("Next steps:"));
-  for (const n of NEXT_STEPS) console.log(`  ${pc3.cyan(n)}`);
+  console.log(pc2.bold("  Next steps:"));
+  for (const n of NEXT_STEPS) console.log(`    ${pc2.cyan(n)}`);
   console.log("");
 }
 
 // src/ui/progress.ts
-import pc4 from "picocolors";
+import pc3 from "picocolors";
 var SYMBOLS = {
-  ok: pc4.green("\u2713"),
-  fail: pc4.red("\u2717"),
-  warn: pc4.yellow("!"),
-  skip: pc4.dim("\u25CB")
+  ok: pc3.green("\u2713"),
+  fail: pc3.red("\u2717"),
+  warn: pc3.yellow("!"),
+  skip: pc3.dim("\u25CB")
 };
 function pad(n, total) {
   const width = String(total).length;
   return String(n).padStart(width, " ");
 }
 function progressItem(i, total, label, status, note2) {
-  const prefix2 = pc4.dim(`(${pad(i, total)}/${total})`);
-  const suffix = note2 ? pc4.dim(` ${note2}`) : "";
+  const prefix2 = pc3.dim(`(${pad(i, total)}/${total})`);
+  const suffix = note2 ? pc3.dim(` ${note2}`) : "";
   console.log(`    ${prefix2}  ${label.padEnd(38)} ${SYMBOLS[status]}${suffix}`);
 }
 
 // src/ui/section-header.ts
-import pc5 from "picocolors";
+import pc4 from "picocolors";
 var STEP_LABELS = [
   "deps",
   "android",
@@ -630,20 +603,20 @@ var STEP_LABELS = [
   "summary"
 ];
 function breadcrumb(current, labels) {
-  const sep = pc5.dim(" \u203A ");
+  const sep = pc4.dim(" \u203A ");
   return labels.map((label, i) => {
     const step = i + 1;
-    if (step < current) return pc5.green(`\u2713 ${label}`);
-    if (step === current) return pc5.bold(pc5.magenta(`\u25B8 ${label}`));
-    return pc5.dim(label);
+    if (step < current) return pc4.green(`\u2713 ${label}`);
+    if (step === current) return pc4.bold(pc4.magenta(`\u25B8 ${label}`));
+    return pc4.dim(label);
   }).join(sep);
 }
 function sectionHeader(n, total, title) {
   console.log("");
   const labels = STEP_LABELS.length === total ? STEP_LABELS : Array.from({ length: total }, (_, i) => String(i + 1));
   console.log(`  ${breadcrumb(n, labels)}`);
-  const lead = pc5.bold(pc5.magenta(`${n}/${total}`));
-  console.log(`  ${lead}  ${pc5.bold(title)}`);
+  const lead = pc4.bold(pc4.magenta(`${n}/${total}`));
+  console.log(`  ${lead}  ${pc4.bold(title)}`);
 }
 
 // src/ui/spinner.ts
@@ -677,8 +650,31 @@ function spinner() {
 }
 
 // src/ui/welcome.ts
-import { intro, confirm as confirm2, isCancel as isCancel3, cancel as cancel3 } from "@clack/prompts";
+import { confirm as confirm2, isCancel as isCancel3, cancel as cancel3 } from "@clack/prompts";
 import pc6 from "picocolors";
+
+// src/ui/banner.ts
+import { existsSync as existsSync7, readFileSync as readFileSync4 } from "fs";
+import { join as join5 } from "path";
+import pc5 from "picocolors";
+function renderBanner() {
+  const path = join5(gorMobileRoot(), "templates", "banner.txt");
+  if (existsSync7(path)) {
+    const raw = readFileSync4(path, "utf8");
+    const trimmed = raw.replace(/\n+$/, "");
+    const colored = trimmed.split("\n").map((line) => pc5.magenta(line)).join("\n");
+    console.log("");
+    console.log(colored);
+  } else {
+    console.log("");
+    console.log(pc5.bold(pc5.magenta("GOR-MOBILE")));
+  }
+  const subtitle = `Android-aware overlay installer for Claude Code  \xB7  v${GOR_MOBILE_VERSION}`;
+  console.log(pc5.dim(subtitle));
+  console.log("");
+}
+
+// src/ui/welcome.ts
 var BULLETS = [
   "Check base deps (git, curl, node) and detect Google Android CLI.",
   "Clone the architecture rules pack into ~/.gor-mobile/rules/.",
@@ -690,16 +686,10 @@ var BULLETS = [
 ];
 async function welcome(skip) {
   renderBanner();
-  if (!isTuiOn() || skip) {
-    console.log(pc6.bold("What will happen:"));
-    for (const b of BULLETS) console.log(`  \u2022 ${b}`);
-    console.log("");
-    return;
-  }
-  intro(pc6.bold(pc6.magenta("gor-mobile init")));
   console.log(pc6.bold("  What will happen:"));
-  for (const b of BULLETS) console.log(`    \u2022 ${b}`);
+  for (const b of BULLETS) console.log(`    ${pc6.dim("\u2022")} ${b}`);
   console.log("");
+  if (skip || !isTuiOn()) return;
   const proceed = await confirm2({
     message: "Ready to start?",
     initialValue: true
@@ -749,17 +739,11 @@ var TOTAL_STEPS = 9;
 function dryLog(msg) {
   console.log(`    ${pc8.dim("[dry-run]")} ${msg}`);
 }
-async function maybeRunStep(ctx, stepNum, title) {
+function runStep(stepNum, title) {
   sectionHeader(stepNum, TOTAL_STEPS, title);
-  if (ctx.mode !== "advanced") return true;
-  const go = await confirmStep(`Run step ${stepNum}?`, true);
-  if (!go) {
-    console.log(`    ${pc8.yellow("skipped")}`);
-  }
-  return go;
 }
 async function step1Deps(ctx) {
-  if (!await maybeRunStep(ctx, 1, "Base dependencies")) return;
+  runStep(1, "Base dependencies");
   const required = [
     ["git", which("git")],
     ["curl", which("curl")],
@@ -781,7 +765,7 @@ async function step1Deps(ctx) {
   }
 }
 async function step2Android(ctx) {
-  if (!await maybeRunStep(ctx, 2, "Google Android CLI")) return;
+  runStep(2, "Google Android CLI");
   const existing = androidCliPath();
   if (existing) {
     progressItem(1, 1, "android CLI", "ok", existing);
@@ -824,7 +808,7 @@ async function step2Android(ctx) {
   await execa2(opener, [url], { reject: false });
 }
 async function step3Rules(ctx) {
-  if (!await maybeRunStep(ctx, 3, "Rules pack")) return;
+  runStep(3, "Rules pack");
   if (ctx.mode === "advanced" && !ctx.opts.rules) {
     ctx.rulesUrl = await textPrompt(
       "Rules pack URL",
@@ -870,7 +854,7 @@ async function step3Rules(ctx) {
   if (m?.version) ctx.rulesVersion = m.version;
 }
 async function step4Hooks(ctx) {
-  if (!await maybeRunStep(ctx, 4, "SessionStart + UserPromptSubmit hooks")) return;
+  runStep(4, "SessionStart + UserPromptSubmit hooks");
   if (ctx.opts.dryRun) {
     dryLog(`copy templates/{session-start,user-prompt-submit}-hook.sh \u2192 ~/.gor-mobile/templates/`);
     dryLog(`merge managed hooks into ${CLAUDE_SETTINGS}`);
@@ -888,7 +872,7 @@ async function step4Hooks(ctx) {
   ctx.counts.hooks = 2;
 }
 async function step5Skills(ctx) {
-  if (!await maybeRunStep(ctx, 5, "Skills \u2192 ~/.claude/skills/gor-mobile-*/")) return;
+  runStep(5, "Skills \u2192 ~/.claude/skills/gor-mobile-*/");
   if (ctx.opts.dryRun) {
     const { readdirSync: readdirSync2 } = await import("fs");
     const src = join6(gorMobileRoot(), "templates", "skills");
@@ -918,7 +902,7 @@ async function step5Skills(ctx) {
   ctx.counts.skills = total;
 }
 async function step6Agents(ctx) {
-  if (!await maybeRunStep(ctx, 6, "Agents \u2192 ~/.claude/agents/")) return;
+  runStep(6, "Agents \u2192 ~/.claude/agents/");
   if (ctx.opts.dryRun) {
     const { readdirSync: readdirSync2 } = await import("fs");
     const src = join6(gorMobileRoot(), "templates", "agents");
@@ -941,7 +925,7 @@ async function step6Agents(ctx) {
   ctx.counts.agents = total;
 }
 async function step7Mcp(ctx) {
-  if (!await maybeRunStep(ctx, 7, "MCP registration")) return;
+  runStep(7, "MCP registration");
   if (ctx.opts.dryRun) {
     dryLog(`register google-dev-knowledge in ~/.claude/mcp.json`);
     ctx.counts.mcp = 1;
@@ -954,7 +938,7 @@ async function step7Mcp(ctx) {
   ctx.counts.mcp = 1;
 }
 async function step8ClaudeMd(ctx) {
-  if (!await maybeRunStep(ctx, 8, "CLAUDE.md managed section")) return;
+  runStep(8, "CLAUDE.md managed section");
   if (ctx.opts.dryRun) {
     dryLog(`merge managed section into ~/.claude/CLAUDE.md`);
     return;
@@ -966,11 +950,11 @@ async function step8ClaudeMd(ctx) {
 }
 async function step9Summary(ctx) {
   if (ctx.opts.skipSanity) {
-    sectionHeader(9, TOTAL_STEPS, "Summary");
+    runStep(9, "Summary");
     log.info("Skipped (--skip-sanity)");
     return;
   }
-  if (!await maybeRunStep(ctx, 9, "Summary")) return;
+  runStep(9, "Summary");
   const skills = existsSync8(CLAUDE_SKILLS_DIR) ? (await import("fs")).readdirSync(CLAUDE_SKILLS_DIR).filter((n) => n.startsWith("gor-mobile-")).length : 0;
   const agents = existsSync8(CLAUDE_AGENTS_DIR) ? (await import("fs")).readdirSync(CLAUDE_AGENTS_DIR).filter((n) => n.endsWith(".md")).length : 0;
   progressItem(1, 4, "Skills", skills > 0 ? "ok" : "warn", String(skills));
@@ -980,16 +964,8 @@ async function step9Summary(ctx) {
 }
 async function cmdInit(opts = {}) {
   if (opts.noTui || opts.tui === false) forceNoTui();
-  const mode = await (async () => {
-    if (opts.yes && !opts.advanced) return "quickstart";
-    if (opts.advanced) return "advanced";
-    return modeSelect({ yes: Boolean(opts.yes), advanced: Boolean(opts.advanced) });
-  })();
-  if (!opts.yes) {
-    await welcome(false);
-  } else {
-    renderBanner();
-  }
+  await welcome(Boolean(opts.yes));
+  const mode = opts.advanced ? "advanced" : opts.yes ? "quickstart" : await modeSelect({ yes: Boolean(opts.yes), advanced: Boolean(opts.advanced) });
   if (opts.dryRun) {
     log.info("DRY RUN \u2014 no changes will be made");
   }

@@ -1,6 +1,4 @@
-import { outro as clackOutro } from "@clack/prompts";
 import pc from "picocolors";
-import { isTuiOn } from "./tui-mode.js";
 
 export interface InstallSummary {
   skills: number;
@@ -16,17 +14,17 @@ const NEXT_STEPS = [
   "cd <android-project>        open Claude Code; the session-start hook loads workflow"
 ];
 
+/**
+ * Plain console.log outro — same reasoning as welcome.ts: avoiding clack's
+ * group frame keeps the wizard output from turning into a mix of `│`-fenced
+ * and plain-indented lines.
+ */
 export function finalOutro(s: InstallSummary): void {
   const summary = `Installed: ${s.skills} skills · ${s.agents} agents · ${s.hooks} hooks · ${s.mcp} MCP · rules v${s.rulesVersion}`;
-  if (isTuiOn()) {
-    const lines = [pc.green(summary), "", pc.bold("Next steps:"), ...NEXT_STEPS.map((n) => `  ${pc.cyan(n)}`)];
-    clackOutro(lines.join("\n"));
-    return;
-  }
   console.log("");
-  console.log(pc.bold(summary));
+  console.log(`  ${pc.green("✓")} ${pc.bold(summary)}`);
   console.log("");
-  console.log(pc.bold("Next steps:"));
-  for (const n of NEXT_STEPS) console.log(`  ${pc.cyan(n)}`);
+  console.log(pc.bold("  Next steps:"));
+  for (const n of NEXT_STEPS) console.log(`    ${pc.cyan(n)}`);
   console.log("");
 }

@@ -75,18 +75,12 @@ function dryLog(msg: string): void {
   console.log(`    ${pc.dim("[dry-run]")} ${msg}`);
 }
 
-async function maybeRunStep(ctx: RunCtx, stepNum: number, title: string): Promise<boolean> {
+function runStep(stepNum: number, title: string): void {
   sectionHeader(stepNum, TOTAL_STEPS, title);
-  if (ctx.mode !== "advanced") return true;
-  const go = await confirmStep(`Run step ${stepNum}?`, true);
-  if (!go) {
-    console.log(`    ${pc.yellow("skipped")}`);
-  }
-  return go;
 }
 
 async function step1Deps(ctx: RunCtx): Promise<void> {
-  if (!(await maybeRunStep(ctx, 1, "Base dependencies"))) return;
+  runStep(1, "Base dependencies");
   const required: Array<[string, string | null]> = [
     ["git", which("git")],
     ["curl", which("curl")],
@@ -109,7 +103,7 @@ async function step1Deps(ctx: RunCtx): Promise<void> {
 }
 
 async function step2Android(ctx: RunCtx): Promise<void> {
-  if (!(await maybeRunStep(ctx, 2, "Google Android CLI"))) return;
+  runStep(2, "Google Android CLI");
 
   const existing = androidCliPath();
   if (existing) {
@@ -158,7 +152,7 @@ async function step2Android(ctx: RunCtx): Promise<void> {
 }
 
 async function step3Rules(ctx: RunCtx): Promise<void> {
-  if (!(await maybeRunStep(ctx, 3, "Rules pack"))) return;
+  runStep(3, "Rules pack");
 
   if (ctx.mode === "advanced" && !ctx.opts.rules) {
     ctx.rulesUrl = await textPrompt(
@@ -208,7 +202,7 @@ async function step3Rules(ctx: RunCtx): Promise<void> {
 }
 
 async function step4Hooks(ctx: RunCtx): Promise<void> {
-  if (!(await maybeRunStep(ctx, 4, "SessionStart + UserPromptSubmit hooks"))) return;
+  runStep(4, "SessionStart + UserPromptSubmit hooks");
 
   if (ctx.opts.dryRun) {
     dryLog(`copy templates/{session-start,user-prompt-submit}-hook.sh → ~/.gor-mobile/templates/`);
@@ -229,7 +223,7 @@ async function step4Hooks(ctx: RunCtx): Promise<void> {
 }
 
 async function step5Skills(ctx: RunCtx): Promise<void> {
-  if (!(await maybeRunStep(ctx, 5, "Skills → ~/.claude/skills/gor-mobile-*/"))) return;
+  runStep(5, "Skills → ~/.claude/skills/gor-mobile-*/");
 
   if (ctx.opts.dryRun) {
     const { readdirSync } = await import("node:fs");
@@ -264,7 +258,7 @@ async function step5Skills(ctx: RunCtx): Promise<void> {
 }
 
 async function step6Agents(ctx: RunCtx): Promise<void> {
-  if (!(await maybeRunStep(ctx, 6, "Agents → ~/.claude/agents/"))) return;
+  runStep(6, "Agents → ~/.claude/agents/");
 
   if (ctx.opts.dryRun) {
     const { readdirSync } = await import("node:fs");
@@ -292,7 +286,7 @@ async function step6Agents(ctx: RunCtx): Promise<void> {
 }
 
 async function step7Mcp(ctx: RunCtx): Promise<void> {
-  if (!(await maybeRunStep(ctx, 7, "MCP registration"))) return;
+  runStep(7, "MCP registration");
 
   if (ctx.opts.dryRun) {
     dryLog(`register google-dev-knowledge in ~/.claude/mcp.json`);
@@ -308,7 +302,7 @@ async function step7Mcp(ctx: RunCtx): Promise<void> {
 }
 
 async function step8ClaudeMd(ctx: RunCtx): Promise<void> {
-  if (!(await maybeRunStep(ctx, 8, "CLAUDE.md managed section"))) return;
+  runStep(8, "CLAUDE.md managed section");
 
   if (ctx.opts.dryRun) {
     dryLog(`merge managed section into ~/.claude/CLAUDE.md`);
@@ -323,11 +317,11 @@ async function step8ClaudeMd(ctx: RunCtx): Promise<void> {
 
 async function step9Summary(ctx: RunCtx): Promise<void> {
   if (ctx.opts.skipSanity) {
-    sectionHeader(9, TOTAL_STEPS, "Summary");
+    runStep(9, "Summary");
     log.info("Skipped (--skip-sanity)");
     return;
   }
-  if (!(await maybeRunStep(ctx, 9, "Summary"))) return;
+  runStep(9, "Summary");
 
   const skills = existsSync(CLAUDE_SKILLS_DIR)
     ? (await import("node:fs")).readdirSync(CLAUDE_SKILLS_DIR).filter((n) => n.startsWith("gor-mobile-"))
@@ -347,17 +341,17 @@ async function step9Summary(ctx: RunCtx): Promise<void> {
 export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   if (opts.noTui || opts.tui === false) forceNoTui();
 
-  const mode = await (async () => {
-    if (opts.yes && !opts.advanced) return "quickstart" as const;
-    if (opts.advanced) return "advanced" as const;
-    return modeSelect({ yes: Boolean(opts.yes), advanced: Boolean(opts.advanced) });
-  })();
+  // 1. Banner + what-will-happen.
+  // 2. Mode select (QuickStart vs Advanced — the only behavioural
+  //    difference is whether step 3 prompts to override the rules URL).
+  // 3. Run all 9 steps in sequence, no per-step confirm.
+  await welcome(Boolean(opts.yes));
 
-  if (!opts.yes) {
-    await welcome(false);
-  } else {
-    renderBanner();
-  }
+  const mode: WizardMode = opts.advanced
+    ? "advanced"
+    : opts.yes
+    ? "quickstart"
+    : await modeSelect({ yes: Boolean(opts.yes), advanced: Boolean(opts.advanced) });
 
   if (opts.dryRun) {
     log.info("DRY RUN — no changes will be made");
