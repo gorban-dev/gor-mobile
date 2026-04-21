@@ -5,8 +5,6 @@
 source "$GOR_MOBILE_ROOT/lib/constants.sh"
 # shellcheck source=../helpers/detect-deps.sh
 source "$GOR_MOBILE_ROOT/lib/helpers/detect-deps.sh"
-# shellcheck source=../helpers/lm-studio.sh
-source "$GOR_MOBILE_ROOT/lib/helpers/lm-studio.sh"
 
 _check_file() {
     local path="$1" label="$2"
@@ -67,42 +65,6 @@ _check_rules() {
     local version; version="$(jq -r '.version // "?"' "$manifest")"
     local stack; stack="$(jq -r '.stack // "?"' "$manifest")"
     log_ok "Rules pack v$version (stack=$stack) at $GOR_MOBILE_RULES_DIR"
-}
-
-_check_lm_studio() {
-    if ! dep_lms_path >/dev/null 2>&1; then
-        log_warn "lms CLI not installed (optional)"
-        return 1
-    fi
-    log_ok "lms → $(dep_lms_path)"
-    if curl -sf --max-time 2 "$LLM_URL" >/dev/null 2>&1 || lm_server_up; then
-        local loaded; loaded="$(lm_loaded_identifier 2>/dev/null || true)"
-        log_ok "LM Studio server reachable ($LLM_URL) — loaded=${loaded:-none}"
-    else
-        log_warn "LM Studio server at $LLM_URL not reachable (local-LLM scripts will fall back to BLOCKED)"
-    fi
-}
-
-_check_scripts() {
-    local dir="$GOR_MOBILE_HOME/scripts"
-    if [[ ! -d "$dir" ]]; then
-        log_warn "$dir missing — run 'gor-mobile repair'"
-        return 1
-    fi
-    local s missing=0
-    for s in llm-config llm-agent llm-implement llm-review llm-analyze llm-check llm-unload; do
-        local f="$dir/${s}.sh"
-        if [[ ! -f "$f" ]]; then
-            log_warn "missing $f"
-            missing=1
-        elif [[ ! -x "$f" ]]; then
-            log_warn "not executable: $f"
-            missing=1
-        fi
-    done
-    if [[ $missing -eq 0 ]]; then
-        log_ok "LLM scripts → $dir (7 files, executable)"
-    fi
 }
 
 _verbose_hook_emulation() {
@@ -183,14 +145,8 @@ cmd_doctor() {
     _check_file "$CLAUDE_MCP"          "mcp.json"
     _check_claude_md_section || true
 
-    log_step "LLM scripts"
-    _check_scripts || true
-
     log_step "Rules pack"
     _check_rules || true
-
-    log_step "LM Studio"
-    _check_lm_studio || true
 
     log_step "Config"
     _check_file "$GOR_MOBILE_CONFIG"  "config.json" || true

@@ -64,8 +64,7 @@ cmd_uninstall() {
     rm -rf "$CLAUDE_SKILLS_DIR"/gor-mobile-*
 
     log_step "Removing agents/"
-    rm -f "$CLAUDE_AGENTS_DIR/gor-mobile-advisor.md" \
-          "$CLAUDE_AGENTS_DIR/gor-mobile-code-reviewer.md"
+    rm -f "$CLAUDE_AGENTS_DIR"/gor-mobile-*.md
     # 0.2.5 and earlier shipped unprefixed code-reviewer.md; drop it too.
     local legacy_cr="$CLAUDE_AGENTS_DIR/code-reviewer.md"
     if [[ -f "$legacy_cr" ]] && head -20 "$legacy_cr" | grep -q '^name: code-reviewer'; then

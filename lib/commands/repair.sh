@@ -50,7 +50,7 @@ _repair_cleanup_legacy_code_reviewer() {
 cmd_repair() {
     log_step "Repairing ~/.claude/ managed files"
 
-    mkdir -p "$GOR_MOBILE_HOME/templates" "$GOR_MOBILE_HOME/scripts"
+    mkdir -p "$GOR_MOBILE_HOME/templates"
     cp "$GOR_MOBILE_ROOT/templates/session-start-hook.sh" "$GOR_MOBILE_HOME/templates/"
     chmod +x "$GOR_MOBILE_HOME/templates/session-start-hook.sh"
     cp "$GOR_MOBILE_ROOT/templates/user-prompt-submit-hook.sh" "$GOR_MOBILE_HOME/templates/"
@@ -120,18 +120,14 @@ cmd_repair() {
     fi
     log_ok "Skills refreshed ($installed_count gor-mobile-* dirs)"
 
-    install -m 0644 \
-        "$GOR_MOBILE_ROOT/templates/agents/code-reviewer.md" \
-        "$CLAUDE_AGENTS_DIR/gor-mobile-code-reviewer.md"
-    log_ok "Code-reviewer agent refreshed"
-
-    local s
-    for s in llm-config llm-agent llm-implement llm-review llm-analyze llm-check llm-unload; do
-        install -m 0755 \
-            "$GOR_MOBILE_ROOT/templates/scripts/${s}.sh" \
-            "$GOR_MOBILE_HOME/scripts/${s}.sh"
+    local a base agent_count=0
+    for a in "$GOR_MOBILE_ROOT"/templates/agents/*.md; do
+        [[ -f "$a" ]] || continue
+        base="$(basename "$a")"
+        install -m 0644 "$a" "$CLAUDE_AGENTS_DIR/$base"
+        agent_count=$((agent_count + 1))
     done
-    log_ok "LLM scripts refreshed (7 in $GOR_MOBILE_HOME/scripts/)"
+    log_ok "Agents refreshed ($agent_count in $CLAUDE_AGENTS_DIR)"
 
     mcp_register_google_dev_knowledge || true
     claude_md_write_section "$GOR_MOBILE_ROOT/templates/claude-md-snippet.md"
