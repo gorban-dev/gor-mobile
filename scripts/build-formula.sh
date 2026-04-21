@@ -25,7 +25,7 @@ SHA="$(shasum -a 256 "$TMP/tarball.tgz" | awk '{print $1}')"
 
 cat <<EOF
 class GorMobile < Formula
-  desc     "Android development CLI — superpowers-style workflow with local-LLM delegation"
+  desc     "Android-aware overlay installer for Claude Code — superpowers-style workflow"
   homepage "https://github.com/gorban-dev/gor-mobile"
   url      "$TARBALL_URL"
   sha256   "$SHA"
@@ -45,11 +45,7 @@ class GorMobile < Formula
     <<~EOS
       To finish setup, run:
         gor-mobile init
-
-      For LM Studio integration, install the LM Studio desktop app from
-      https://lmstudio.ai and run:
-        lms get qwen/qwen3-coder-30b
-        lms get google/gemma-4-26b-a4b
+        gor-mobile doctor
     EOS
   end
 
