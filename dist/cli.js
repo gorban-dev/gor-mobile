@@ -619,36 +619,6 @@ function sectionHeader(n, total, title) {
   console.log(`  ${lead}  ${pc4.bold(title)}`);
 }
 
-// src/ui/spinner.ts
-import { spinner as clackSpinner } from "@clack/prompts";
-function spinner() {
-  if (!isTuiOn()) {
-    return {
-      start(m) {
-        console.log(`  \u25B8 ${m}`);
-      },
-      message(m) {
-        console.log(`    \u2026 ${m}`);
-      },
-      stop(m) {
-        console.log(`  \u2713 ${m}`);
-      }
-    };
-  }
-  const s = clackSpinner();
-  return {
-    start(m) {
-      s.start(m);
-    },
-    message(m) {
-      s.message(m);
-    },
-    stop(m, code) {
-      s.stop(m, code);
-    }
-  };
-}
-
 // src/ui/welcome.ts
 import { confirm as confirm2, isCancel as isCancel3, cancel as cancel3 } from "@clack/prompts";
 import pc6 from "picocolors";
@@ -820,55 +790,51 @@ async function step3Rules(ctx) {
       }
     );
   }
-  const s = spinner();
   if (ctx.opts.dryRun) {
-    dryLog(`clone/pull ${ctx.rulesUrl} \u2192 ${GOR_MOBILE_RULES_DIR}`);
-  } else if (existsSync8(join6(GOR_MOBILE_RULES_DIR, ".git"))) {
-    s.start("Rules pack already present \u2014 pulling latest");
-    try {
-      await execa2("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], { reject: false });
-      s.stop(`Rules pack updated at ${GOR_MOBILE_RULES_DIR}`);
-    } catch {
-      s.stop("Rules pack up-to-date");
-    }
+    progressItem(1, 2, "fetch rules pack", "skip", `dry-run: ${ctx.rulesUrl}`);
+    progressItem(2, 2, "save config", "skip", "dry-run");
+    return;
+  }
+  const alreadyCloned = existsSync8(join6(GOR_MOBILE_RULES_DIR, ".git"));
+  if (alreadyCloned) {
+    await execa2("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], { reject: false });
+    const m = readManifest();
+    ctx.rulesVersion = m?.version ?? "?";
+    progressItem(1, 2, "pull existing pack", "ok", `v${ctx.rulesVersion} @ ${GOR_MOBILE_RULES_DIR}`);
   } else {
-    s.start(`Cloning rules pack from ${ctx.rulesUrl}`);
     try {
-      s.message("Resolving deltas\u2026");
       await cloneOrPull(ctx.rulesUrl, DEFAULT_RULES_REF);
-      const m2 = readManifest();
-      s.stop(`Rules pack v${m2?.version ?? "?"} cloned`);
-      ctx.rulesVersion = m2?.version ?? "?";
+      const m = readManifest();
+      ctx.rulesVersion = m?.version ?? "?";
+      progressItem(1, 2, "clone rules pack", "ok", `v${ctx.rulesVersion} from ${ctx.rulesUrl}`);
     } catch (err) {
-      s.stop(`Clone failed \u2014 falling back to bundled rules`, 1);
       log.warn(`git clone failed: ${err.message}`);
       fallbackToBundled(join6(gorMobileRoot(), "rules-default"));
-      const m2 = readManifest();
-      ctx.rulesVersion = m2?.version ?? "bundled";
+      const m = readManifest();
+      ctx.rulesVersion = m?.version ?? "bundled";
+      progressItem(1, 2, "clone rules pack", "warn", `fallback to bundled v${ctx.rulesVersion}`);
     }
   }
-  if (!ctx.opts.dryRun) {
-    saveConfig(ctx.rulesUrl, DEFAULT_RULES_REF);
-  }
-  const m = readManifest();
-  if (m?.version) ctx.rulesVersion = m.version;
+  saveConfig(ctx.rulesUrl, DEFAULT_RULES_REF);
+  progressItem(2, 2, "save config", "ok", GOR_MOBILE_RULES_DIR);
 }
 async function step4Hooks(ctx) {
   runStep(4, "SessionStart + UserPromptSubmit hooks");
   if (ctx.opts.dryRun) {
-    dryLog(`copy templates/{session-start,user-prompt-submit}-hook.sh \u2192 ~/.gor-mobile/templates/`);
-    dryLog(`merge managed hooks into ${CLAUDE_SETTINGS}`);
+    progressItem(1, 4, "copy session-start-hook.sh", "skip", "dry-run");
+    progressItem(2, 4, "copy user-prompt-submit-hook.sh", "skip", "dry-run");
+    progressItem(3, 4, "merge SessionStart", "skip", "dry-run");
+    progressItem(4, 4, "merge UserPromptSubmit", "skip", "dry-run");
     ctx.counts.hooks = 2;
     return;
   }
-  const s = spinner();
-  s.start("Merging hooks into settings.json");
   copyHookTemplates();
-  s.message("Upserting SessionStart");
+  progressItem(1, 4, "copy session-start-hook.sh", "ok");
+  progressItem(2, 4, "copy user-prompt-submit-hook.sh", "ok");
   installSessionStartHook();
-  s.message("Upserting UserPromptSubmit");
+  progressItem(3, 4, "merge SessionStart", "ok", CLAUDE_SETTINGS);
   installUserPromptSubmitHook();
-  s.stop("Hooks merged into settings.json");
+  progressItem(4, 4, "merge UserPromptSubmit", "ok", CLAUDE_SETTINGS);
   ctx.counts.hooks = 2;
 }
 async function step5Skills(ctx) {
@@ -927,26 +893,28 @@ async function step6Agents(ctx) {
 async function step7Mcp(ctx) {
   runStep(7, "MCP registration");
   if (ctx.opts.dryRun) {
-    dryLog(`register google-dev-knowledge in ~/.claude/mcp.json`);
+    progressItem(1, 1, "register google-dev-knowledge", "skip", "dry-run");
     ctx.counts.mcp = 1;
     return;
   }
-  const s = spinner();
-  s.start("Registering google-dev-knowledge MCP");
   const r = registerGoogleDevKnowledge();
-  s.stop(r.already ? "google-dev-knowledge already registered" : "google-dev-knowledge registered");
+  progressItem(
+    1,
+    1,
+    "register google-dev-knowledge",
+    "ok",
+    r.already ? "already present in mcp.json" : "added to mcp.json"
+  );
   ctx.counts.mcp = 1;
 }
 async function step8ClaudeMd(ctx) {
   runStep(8, "CLAUDE.md managed section");
   if (ctx.opts.dryRun) {
-    dryLog(`merge managed section into ~/.claude/CLAUDE.md`);
+    progressItem(1, 1, "write managed section", "skip", "dry-run");
     return;
   }
-  const s = spinner();
-  s.start("Writing managed section to CLAUDE.md");
   writeClaudeMdSection(join6(gorMobileRoot(), "templates", "claude-md-snippet.md"));
-  s.stop("Managed section written to ~/.claude/CLAUDE.md");
+  progressItem(1, 1, "write managed section", "ok", "~/.claude/CLAUDE.md");
 }
 async function step9Summary(ctx) {
   if (ctx.opts.skipSanity) {
