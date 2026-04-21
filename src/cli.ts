@@ -1,5 +1,19 @@
 import { Command } from "commander";
 import { GOR_MOBILE_VERSION } from "./constants.js";
+import { cmdDoctor } from "./commands/doctor.js";
+import { cmdRepair } from "./commands/repair.js";
+import { cmdUninstall } from "./commands/uninstall.js";
+import {
+  rulesDiff,
+  rulesList,
+  rulesUpdate,
+  rulesUse,
+  rulesValidate
+} from "./commands/rules.js";
+import { cmdDocs } from "./commands/docs.js";
+import { cmdSelfUpdate } from "./commands/self-update.js";
+import { cmdAndroid } from "./commands/android.js";
+import { cmdUpdate } from "./commands/update.js";
 
 const program = new Command();
 
@@ -15,13 +29,6 @@ program
     console.log(`gor-mobile ${GOR_MOBILE_VERSION}`);
   });
 
-function notImplemented(name: string) {
-  return () => {
-    console.log(`${name}: not implemented yet`);
-    process.exit(0);
-  };
-}
-
 program
   .command("init")
   .description("Run the install wizard (Android CLI, hooks, skills, MCP)")
@@ -31,69 +38,102 @@ program
   .option("--no-tui", "force plain-text prompts")
   .option("--advanced", "confirm each step and allow URL override")
   .option("--rules <url>", "custom rules-pack git URL")
-  .action(notImplemented("init"));
+  .action(() => {
+    console.error("init: not yet ported to TS (next commit).");
+    console.error("For now, use the bash wizard: ./bin/gor-mobile.bash.bak init");
+    process.exit(1);
+  });
 
 program
   .command("doctor")
   .description("Check environment (deps, hooks, MCP)")
   .option("-v, --verbose", "dump hook payload + skill frontmatter")
-  .action(notImplemented("doctor"));
+  .action(async (opts) => {
+    await cmdDoctor(opts);
+  });
 
 program
   .command("repair")
   .description("Restore managed files in ~/.claude/")
-  .action(notImplemented("repair"));
+  .action(async () => {
+    await cmdRepair();
+  });
 
 program
   .command("update")
   .description("Pull latest rules + repair managed files")
-  .action(notImplemented("update"));
+  .action(async () => {
+    await cmdUpdate();
+  });
 
 program
   .command("self-update")
   .description("Update the CLI itself (curl-install path)")
-  .action(notImplemented("self-update"));
+  .action(async () => {
+    await cmdSelfUpdate();
+  });
 
 program
   .command("uninstall")
   .description("Remove everything gor-mobile installed")
   .option("-y, --yes", "skip confirmation")
-  .action(notImplemented("uninstall"));
+  .action(async (opts) => {
+    await cmdUninstall(opts);
+  });
 
 const rules = program
   .command("rules")
   .description("Manage the architecture rules pack");
 rules
   .command("list")
+  .alias("ls")
   .description("Show installed pack + source + version")
-  .action(notImplemented("rules list"));
+  .action(async () => {
+    await rulesList();
+  });
 rules
   .command("use <url>")
   .description("Switch to a pack (git URL or local dir)")
-  .action(notImplemented("rules use"));
+  .action(async (url: string) => {
+    await rulesUse(url);
+  });
 rules
   .command("update")
+  .alias("up")
   .description("git pull the current pack")
-  .action(notImplemented("rules update"));
+  .action(async () => {
+    await rulesUpdate();
+  });
 rules
   .command("diff")
   .description("Show diff vs upstream")
-  .action(notImplemented("rules diff"));
+  .action(async () => {
+    await rulesDiff();
+  });
 rules
   .command("validate")
   .description("Check manifest.json and compatibility")
-  .action(notImplemented("rules validate"));
+  .action(async () => {
+    await rulesValidate();
+  });
 
 program
-  .command("docs <query...>")
+  .command("docs")
+  .argument("<query...>")
   .description("Search Android docs")
-  .action(notImplemented("docs"));
+  .action(async (query: string[]) => {
+    await cmdDocs(query);
+  });
 
 program
   .command("android")
   .description("Wrapper around Google's `android` CLI")
   .allowUnknownOption(true)
-  .action(notImplemented("android"));
+  .helpOption(false)
+  .argument("[args...]", "arguments passed through to android CLI")
+  .action(async (args: string[]) => {
+    await cmdAndroid(args ?? []);
+  });
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err);
