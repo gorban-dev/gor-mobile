@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { GOR_MOBILE_VERSION } from "./constants.js";
+import { cmdInit } from "./commands/init.js";
 import { cmdDoctor } from "./commands/doctor.js";
 import { cmdRepair } from "./commands/repair.js";
 import { cmdUninstall } from "./commands/uninstall.js";
@@ -38,10 +39,8 @@ program
   .option("--no-tui", "force plain-text prompts")
   .option("--advanced", "confirm each step and allow URL override")
   .option("--rules <url>", "custom rules-pack git URL")
-  .action(() => {
-    console.error("init: not yet ported to TS (next commit).");
-    console.error("For now, use the bash wizard: ./bin/gor-mobile.bash.bak init");
-    process.exit(1);
+  .action(async (opts) => {
+    await cmdInit(opts);
   });
 
 program
