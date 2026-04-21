@@ -27,6 +27,16 @@ the assertion to make the test trivially pass. Verify the JSON `status`:
 - `DONE_WITH_CONCERNS` with deviations — inspect before accepting.
 - `NEEDS_CONTEXT` / `BLOCKED` → take over yourself.
 
+**IMPORTANT:** `DONE` from Gemma ≠ code is correct. Gemma has no
+execute-tool — she cannot know if imports / case are right. After every
+`DONE` you MUST run Gradle compile + test. Only commit after green.
+
+**Tool protocol (v0.3.3):** For GREEN-stage modifications of existing
+prod code, Gemma uses `edit_file` (exact substring replace, tiny
+tool-calls). Large production-code files (>150 LOC) are safe now — no
+full-file regeneration. `write_file` is used only for new files created
+as part of the fix.
+
 REFACTOR stays on main Claude — refactoring requires holistic judgment.
 
 Tests: `./gradlew :<module>:test --tests "*<Name>Test*"`.

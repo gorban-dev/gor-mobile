@@ -46,26 +46,60 @@ Returns JSON to stdout:
     }
 
 **Decision rules for the orchestrator (main Claude):**
-- `status == "DONE"` — accept, verify with gradle, move on.
+- `status == "DONE"` — accept, **verify with gradle before trusting**
+  (Gemma has no execute-tool → can silently break imports / case), move on.
 - `status == "DONE_WITH_CONCERNS"` — read `concerns` + `deviations`; if minor
   accept and note; if major re-dispatch with correction or escalate to Opus.
 - `status == "NEEDS_CONTEXT"` — the LLM honestly asking for more files. Add
   missing reference to the ref-files list and retry.
 - `status == "BLOCKED"` — take over yourself (Opus/Sonnet).
-- `routing_hint == "consider-sonnet"` — pre-check decided the scope is too
-  large (>480 LOC single allowed file, or >2500 LOC combined). Don't even
-  dispatch to Gemma — do it directly.
+- `routing_hint == "consider-sonnet"` — **advisory** since v0.3.3. Modify
+  tasks on large files now use `edit_file` (tiny tool-calls, no
+  regeneration) → size no longer critical. Still consider-sonnet if the
+  task creates a new large file (>480 LOC via `write_file`) or involves
+  holistic refactor across many files.
 
-**Scope protection:** `write_file` inside Gemma's tool belt is hard-restricted
+**Delegation gate (MANDATORY before falling back to main Claude Edit/Bash):**
+For every implementer task check if it qualifies for LM Studio delegation.
+It qualifies when ALL of:
+1. File paths are enumerated in the task (no open-ended "find and fix").
+2. ≤6 files in allowed-paths.
+3. Not touching build config (gradle), CI, release machinery.
+4. Not declared "design decision" / "human review required".
+
+If qualifies → dispatch via `llm-implement.sh`. Only fall back to direct
+Edit/Bash when the script returns `status == "BLOCKED"` (LM Studio down or
+genuine failure) or `routing_hint == "consider-sonnet"` with a reason that
+still applies post-edit_file (new large file via write_file, cross-file
+refactor).
+
+On Gemma failure (truncate, HTTP error mid-session, post-verify shows
+breakage): **re-dispatch a fix-task**, do NOT patch manually. The
+upstream skill body already says this — overlay reinforces: no
+`git checkout --` / `git reset --hard` as shortcut, no manual Edit on
+Gemma's scope files. Write a new fix-task.md with point-by-point
+instructions and re-dispatch `llm-implement.sh`.
+
+**Tool protocol (v0.3.3):** Gemma now has `edit_file(path, old_string,
+new_string)` in addition to `write_file(path, content)`. Routing is
+automatic and model-driven:
+- Existing file + modification → `edit_file` (exact substring replace,
+  small tool-call, no regeneration → no truncation, no stochastic
+  substitutions).
+- New file → `write_file` (full content, one pass).
+- `write_file` on existing file returns an error instructing Gemma to
+  use `edit_file`.
+
+**Scope protection:** both `write_file` and `edit_file` are hard-restricted
 to the `<allowed-paths>` list. Gemma cannot touch anything else; if it tries,
 it gets `NEEDS_CONTEXT` and has to raise the scope formally.
 
 Tests are Gradle:
 `./gradlew :<module>:test --tests "*<Name>Test*"`.
 
-Doc paths follow superpowers convention:
-`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
-`docs/superpowers/plans/YYYY-MM-DD-<feature>.md`.
+Doc paths land in the gitignored project-local workspace:
+`.gor-mobile/specs/YYYY-MM-DD-<topic>-design.md`
+`.gor-mobile/plans/YYYY-MM-DD-<feature>.md`.
 
 ### Graceful degradation
 If LM Studio is down (`curl` fails) or the model refuses to load,

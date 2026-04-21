@@ -1,5 +1,84 @@
 # Changelog
 
+## 0.3.3 — 2026-04-21
+
+Fixes the core throughput + quality bottleneck in local-LLM delegation.
+Observed in v0.3.2 field testing on a real Android feature (emoji bottom
+sheet, Compose screen at 354 LOC): Gemma's only write tool was
+`write_file(path, content)` inherited verbatim from craft-skills upstream,
+which forces full-file regeneration on every modification. On files
+>~150 LOC this causes:
+
+- **Truncation at MAX_OUTPUT_TOKENS=8192** — confirmed in metrics
+  (`iteration_completion_tokens: [... 8191]`), file ends mid-function.
+- **Stochastic substitutions** during long regeneration —
+  `androidx.compose.animation.*` → `androidx.animation.*`,
+  `parametersOf` → `parametersof`, unused imports resurrected.
+- **Throughput collapse** — 2800+ output tokens × several iterations =
+  3–5 minutes wall-clock per single file modify, unusable for
+  iterative workflow.
+
+**Action required:** `gor-mobile repair` after upgrading. Picks up the
+updated `llm-implement.sh` and the three revised overlays.
+
+- **`edit_file` tool added to `llm-implement.sh`.** Gemma now has
+  `edit_file(path, old_string, new_string)` for in-place substring
+  replacement: tiny tool-calls (tens to hundreds of tokens vs thousands),
+  no regeneration, no length limit, no MAX_OUTPUT truncation risk.
+  `old_string` must match exactly once (whitespace + case + newlines
+  included) — on no-match or multi-match the call errors out and Gemma
+  is instructed to widen / narrow context and retry. Fallback to
+  `write_file` remains for brand-new files; `write_file` on an existing
+  file now returns an error pointing at `edit_file`.
+- **SYSTEM_PROMPT reroutes Gemma's tool choice.** Explicit rule:
+  `edit_file` for modify, `write_file` for create only. Signature
+  Verification section updated to cover both.
+- **Three overlay files revised** to reflect the new protocol and
+  reinforce two behaviour rules already in upstream skill body that
+  the orchestrator was silently skipping:
+  - `subagent-driven-development.md` — added MANDATORY delegation gate
+    (4-point qualification list) before falling back to main-Claude
+    Edit/Bash; re-dispatch fix-tasks instead of patching manually on
+    Gemma failure; no `git checkout --` / `git reset --hard` shortcuts.
+  - `test-driven-development.md` — explicit "DONE ≠ correct — always
+    run Gradle compile + test before commit" (Gemma has no execute-tool
+    and can silently break imports).
+  - `executing-plans.md` — same post-verify rule + destructive-git
+    guardrail.
+- **`routing_hint == "consider-sonnet"` demoted to advisory** for
+  modify tasks. With `edit_file`, single-file size ≤480 LOC is no
+  longer a meaningful threshold. Still flagged for new large files
+  (create-via-write_file) and cross-file refactors.
+- **`write_file` no longer overwrites existing files silently.** It
+  now returns an error and redirects Gemma to `edit_file`. Closes the
+  partial-write corruption class where a failed mid-session write_file
+  (HTTP 400 after 3 successful writes) left a 354-LOC file truncated
+  to 80 LOC with a generation-artifact comment spliced into the code.
+- **`finishing-a-development-branch` overlay: merge-mode sub-choice.**
+  Option 1 (Merge back locally) now prompts for sub-mode before
+  running git merge: `1a` full merge (upstream default, preserves every
+  commit including spec/plan docs), `1b` squash to working tree (diff
+  appears as uncommitted changes on base branch — user builds/runs on
+  device, reviews, creates MR manually with clean history), `1c`
+  squash to single commit (one commit on base with combined diff). The
+  `1b` mode matches the solo-dev iterative pattern where the worktree
+  acts as an AI-context scratchpad and the final diff is curated by
+  hand.
+- **Spec/plan artefacts moved to gitignored `.gor-mobile/` workspace.**
+  Install-time sed rewrites `docs/superpowers/specs/` →
+  `.gor-mobile/specs/` and `docs/superpowers/plans/` →
+  `.gor-mobile/plans/` across skill bodies + overlays. gor-mobile is a
+  branded superset (not a pass-through of superpowers), and the
+  project-local scratch workspace should carry the gor-mobile name.
+  Brainstorming overlay step 8.5 now ensures `.gor-mobile/` is appended
+  to the project's `.gitignore` before the first spec is written
+  (single-line commit: `chore: gitignore .gor-mobile/ (scratch
+  workspace)`). Rationale: under the new `1b` merge mode the spec/plan
+  docs would otherwise land in `main` history as uncommitted files
+  next to the feature diff; gitignoring them keeps them local to the
+  worktree. Existing repos with specs under `docs/superpowers/` keep
+  them — only new artefacts land under `.gor-mobile/`.
+
 ## 0.3.2 — 2026-04-20
 
 Preemptive fixes for 4 known upstream superpowers bugs that bite our users

@@ -51,8 +51,10 @@ For every task in the plan, in order:
         }
 
 5. **Decide:**
-    - `DONE` — run the task's verification step (Gradle test, compile check),
-      mark TodoWrite `completed`, continue.
+    - `DONE` — **always run the task's verification step before trusting**
+      (Gradle test, compile check). Gemma has no execute-tool and can
+      silently break imports / case — do not commit until verification
+      passes. Then mark TodoWrite `completed`, continue.
     - `DONE_WITH_CONCERNS` + `severity: minor` — accept, log the concern,
       continue. `severity: major` — re-dispatch with a correction note
       appended to the task file, or take over yourself if the second pass
@@ -60,9 +62,22 @@ For every task in the plan, in order:
     - `NEEDS_CONTEXT` — add the files it asked for to `<ref-file*>` and
       retry once. Two consecutive NEEDS_CONTEXT for the same task means
       the plan is under-specified — stop, raise with the human partner.
-    - `BLOCKED` or `routing_hint == "consider-sonnet"` (pre-check: single
-      allowed file > 480 LOC or combined > 2500 LOC) — do the task yourself
-      in-session, don't burn cycles on Gemma.
+    - `BLOCKED` — LM Studio down or genuine failure. Do the task yourself.
+    - `routing_hint == "consider-sonnet"` — advisory since v0.3.3.
+      Modifications use `edit_file` now (no regeneration → size not
+      critical). Still escalate for new large files, or cross-file
+      refactors.
+
+**On delegation failure (partial write, truncate, post-verify breakage):**
+re-dispatch a fix-task with precise instructions. Do NOT patch manually
+(context pollution) and do NOT `git checkout --` / `git reset --hard` as a
+shortcut — ask the user before any destructive git op.
+
+**Tool protocol (v0.3.3):** `llm-implement.sh` now gives Gemma both
+`write_file` (new files only) and `edit_file` (existing-file substring
+replace). Modify-heavy tasks on large Compose/Kotlin files are reliable.
+No overlay action needed — the script's SYSTEM_PROMPT routes
+automatically.
 
 6. **Verification (delegated too when scripted):** the plan's verification
    steps that are `./gradlew …` commands can be run directly — no LLM

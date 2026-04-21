@@ -8,7 +8,7 @@
 
 A bash CLI that wires a superpowers-style Android workflow (`brainstorm → plan → implement → review → verify`) into Claude Code, offloading routine code generation to **local LLMs** via LM Studio. Opus runs only where judgment is needed.
 
-> Status: `v0.3.2` — gum-backed TUI wizard (falls back to plain prompts without a TTY or with `--no-tui`); superpowers verbatim (14 skills, 1 agent, SessionStart + UserPromptSubmit hooks); craft-skills-ported local-LLM delegation scripts; preemptive fixes for 5 open upstream bugs (obra/superpowers#1002, #1058, #1077, #1080, #1091). See `CHANGELOG.md`.
+> Status: `v0.3.3` — gum-backed TUI wizard (falls back to plain prompts without a TTY or with `--no-tui`); superpowers verbatim (14 skills, 1 agent, SessionStart + UserPromptSubmit hooks); craft-skills-ported local-LLM delegation scripts with `edit_file` tool for in-place substring replacement (no full-file regeneration on modify — fixes truncation + stochastic substitutions on large Compose files); preemptive fixes for 5 open upstream bugs (obra/superpowers#1002, #1058, #1077, #1080, #1091). See `CHANGELOG.md`.
 
 ## Install
 
@@ -156,7 +156,7 @@ which skills carry an Android-rules / local-LLM appendix.
 | `receiving-code-review` | superpowers | — |
 | `verification-before-completion` | superpowers | — |
 | `systematic-debugging` | superpowers | rules + `llm-agent.sh` (Phase 2) |
-| `finishing-a-development-branch` | superpowers | — |
+| `finishing-a-development-branch` | superpowers | merge-mode sub-choice (full / squash-to-working-tree / squash-to-commit) |
 | `using-superpowers` | superpowers | — |
 | `writing-skills` | superpowers | — |
 

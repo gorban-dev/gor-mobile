@@ -78,6 +78,16 @@ teardown() {
     local sdd="$HOME/.claude/skills/gor-mobile-subagent-driven-development/SKILL.md"
     ! grep -qF 'all 5 tasks' "$sdd"
     grep -qF 'all tasks' "$sdd"
+
+    # v0.3.3: spec/plan artefacts must land in the gitignored project-local
+    # `.gor-mobile/` workspace, not in `docs/superpowers/` (which would leak
+    # into merged history under the scratch-pad workflow, option 1b of
+    # finishing-a-development-branch).
+    ! grep -qF 'docs/superpowers/specs/' "$bsm"
+    ! grep -qF 'docs/superpowers/plans/' "$sdd"
+    grep -qF '.gor-mobile/specs/' "$bsm"
+    grep -qF '.gor-mobile/specs/' "$sdd"
+    grep -qF '.gor-mobile/plans/' "$sdd"
 }
 
 @test "settings_install_session_start_hook preserves unrelated hooks" {

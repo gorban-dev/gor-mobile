@@ -88,6 +88,8 @@ cmd_repair() {
                 -e 's/"Invoke writing-plans skill"/"Invoke gor-mobile-writing-plans skill"/g' \
                 -e 's#~/.config/superpowers/worktrees#~/.config/gor-mobile/worktrees#g' \
                 -e 's/all 5 tasks/all tasks/g' \
+                -e 's#docs/superpowers/specs/#.gor-mobile/specs/#g' \
+                -e 's#docs/superpowers/plans/#.gor-mobile/plans/#g' \
                 "$dst/SKILL.md" > "$tmp"
             mv "$tmp" "$dst/SKILL.md"
             if [[ -f "$overlay" ]]; then

@@ -15,7 +15,25 @@ boundaries, DI scope, etc.).
 Brainstorming stays on main Claude — the analysis/judgment work is the
 whole point of this skill. No local-LLM offload here.
 
-Spec output path: `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`.
+Spec output path: `.gor-mobile/specs/YYYY-MM-DD-<topic>-design.md`
+(rewritten from the upstream `docs/superpowers/...` at install time —
+gor-mobile is a branded superset, not a pass-through).
+
+The `.gor-mobile/` directory is the project-local workspace for spec
+and plan artefacts. It MUST be gitignored — these are scratch files
+used during development, not audit artefacts that belong in merged
+history. Before writing the first spec in a repo:
+
+1. Check the project root for a `.gitignore`. If `.gor-mobile/` (or
+   `.gor-mobile`) is already listed, proceed.
+2. If absent, append `.gor-mobile/` to `.gitignore` (create the file
+   if it doesn't exist) and commit that single-line change with
+   message `chore: gitignore .gor-mobile/ (scratch workspace)`.
+3. Then write the spec to `.gor-mobile/specs/...`.
+
+Rationale: prevents the scratch-pad workflow (`finishing-a-development-branch`
+option 1b) from polluting `main` history with spec/plan docs when the
+user merges the feature back as an uncommitted working-tree diff.
 
 ### Worktree decision (delta — inserts between checklist steps 8 and 9)
 

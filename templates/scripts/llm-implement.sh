@@ -142,11 +142,11 @@ SYSTEM_PROMPT = """You are a senior developer implementing code for a project.
 - Use named exports only (no default exports)
 - Follow TypeScript best practices with proper typing
 - Respect architecture module boundaries
-- Use the write_file tool to create/modify files
-- Use read_file, list_dir, search_code to explore the codebase when needed
+- **Tool choice:** use `edit_file` for modifying existing files (exact substring replacement — no regeneration, no length limit). Use `write_file` ONLY to create brand-new files that do not yet exist. Never use `write_file` to rewrite an existing file — it forces full-content regeneration and causes truncation / stochastic substitutions on files larger than ~150 LOC.
+- Use `read_file`, `list_dir`, `search_code` to explore the codebase when needed
 
-## Signature Verification (REQUIRED before write_file)
-Before calling write_file on a file that imports custom components/enums/utils from the codebase: if the task description doesn't show you the exact prop interface, default-vs-named export, or enum members — read_file the source ONCE to confirm. Cap reads at 1-2 per file you're about to write.
+## Signature Verification (REQUIRED before write_file or edit_file)
+Before calling write_file or edit_file on a file that imports custom components/enums/utils from the codebase: if the task description doesn't show you the exact prop interface, default-vs-named export, or enum members — read_file the source ONCE to confirm. Cap reads at 1-2 per file you're about to write.
 
 Common pitfalls to verify:
 - Component prop names (e.g. `fulfillmentStatus` not `status`, `orderSource` not `source`)
@@ -226,7 +226,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Write content to a file. Only allowed for files in the task scope.",
+            "description": "Create a NEW file. Do NOT use for modifying existing files — use edit_file instead. write_file sends the full content and regenerating a large existing file causes truncation and stochastic substitutions.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -234,6 +234,22 @@ TOOLS = [
                     "content": {"type": "string", "description": "Full file content to write"}
                 },
                 "required": ["path", "content"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "edit_file",
+            "description": "Replace an exact substring in an existing file. PREFERRED for any modification of existing files: sends only the change, no whole-file regeneration, no length limits. old_string must match exactly once (whitespace, case, newlines included). On no-match or multi-match the call returns an error — widen or narrow the context and retry. Call multiple times for multiple edits in the same file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path from project root"},
+                    "old_string": {"type": "string", "description": "Exact substring currently in the file (must appear exactly once)"},
+                    "new_string": {"type": "string", "description": "Replacement substring (may be empty to delete)"}
+                },
+                "required": ["path", "old_string", "new_string"]
             }
         }
     }
@@ -288,11 +304,11 @@ def execute_tool(name, args):
             if rel_path not in allowed_files:
                 return f"ERROR: path not in task scope. Allowed: {', '.join(allowed_files)}. If this file is necessary, report NEEDS_CONTEXT with the path in your concerns."
             filepath = os.path.join(workdir, rel_path)
+            # Guard: write_file is for CREATE only. Redirect to edit_file on existing files.
+            if os.path.isfile(filepath):
+                return f"ERROR: {rel_path} already exists. Use edit_file for modifications — write_file is for new files only. Regenerating an existing file risks truncation and stochastic substitutions."
             # Create parent directories
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
-            # Warn on overwrite
-            if os.path.exists(filepath):
-                print(f"WARN: overwriting existing file {rel_path}", file=sys.stderr)
             # Atomic write: temp file + rename
             tmp_path = filepath + ".tmp"
             with open(tmp_path, "w") as f:
@@ -301,12 +317,41 @@ def execute_tool(name, args):
             files_written.append(rel_path)
             return f"OK: wrote {len(args['content'])} chars to {rel_path}"
 
+        elif name == "edit_file":
+            rel_path = args["path"]
+            old = args["old_string"]
+            new = args["new_string"]
+            if rel_path.startswith("/") or ".." in rel_path:
+                return f"ERROR: path must be relative and cannot contain '..'. Got: {rel_path}"
+            if rel_path not in allowed_files:
+                return f"ERROR: path not in task scope. Allowed: {', '.join(allowed_files)}. If this file is necessary, report NEEDS_CONTEXT with the path in your concerns."
+            filepath = os.path.join(workdir, rel_path)
+            if not os.path.isfile(filepath):
+                return f"ERROR: file does not exist: {rel_path}. Use write_file to create new files."
+            if old == new:
+                return f"ERROR: old_string and new_string are identical — nothing to do."
+            with open(filepath) as f:
+                original = f.read()
+            count = original.count(old)
+            if count == 0:
+                return f"ERROR: old_string not found in {rel_path}. Must match exactly (whitespace, case, newlines). read_file to confirm current content."
+            if count > 1:
+                return f"ERROR: old_string matches {count} times in {rel_path}. Add surrounding context to make the match unique."
+            updated = original.replace(old, new, 1)
+            tmp_path = filepath + ".tmp"
+            with open(tmp_path, "w") as f:
+                f.write(updated)
+            os.rename(tmp_path, filepath)
+            if rel_path not in files_written:
+                files_written.append(rel_path)
+            return f"OK: replaced {len(old)} chars with {len(new)} chars in {rel_path}"
+
     except Exception as e:
         return f"Error: {e}"
 
 messages = [
     {"role": "system", "content": SYSTEM_PROMPT},
-    {"role": "user", "content": "/no_think\nImplement the task described above. Use the reference files as patterns. Use write_file to create the implementation files. End with the STATUS block."}
+    {"role": "user", "content": "/no_think\nImplement the task described above. Use the reference files as patterns. Use edit_file to modify existing files and write_file to create new ones (never use write_file on a file that already exists). End with the STATUS block."}
 ]
 
 MAX_ITERATIONS = 25
