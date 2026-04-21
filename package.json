@@ -1,0 +1,43 @@
+{
+  "name": "gor-mobile",
+  "version": "0.1.0",
+  "description": "Android-aware overlay installer for Claude Code — superpowers-style workflow",
+  "type": "module",
+  "bin": {
+    "gor-mobile": "bin/gor-mobile.mjs"
+  },
+  "main": "dist/cli.mjs",
+  "files": [
+    "bin",
+    "dist",
+    "templates",
+    "rules-default",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gorban-dev/gor-mobile.git"
+  },
+  "homepage": "https://github.com/gorban-dev/gor-mobile",
+  "license": "MIT",
+  "dependencies": {
+    "@clack/prompts": "^0.8.2",
+    "commander": "^12.1.0",
+    "execa": "^9.5.1",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2"
+  }
+}
