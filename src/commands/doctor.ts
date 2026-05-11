@@ -10,6 +10,7 @@ import {
   GOR_MOBILE_RULES_DIR,
   SECTION_BEGIN
 } from "../constants.js";
+import { androidCliSkillInstalled } from "../helpers/android-cli.js";
 import { hasManagedHook } from "../helpers/settings-merge.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import { readManifest } from "../helpers/rules-pack.js";
@@ -163,6 +164,11 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   checkFile(CLAUDE_SETTINGS, "settings.json");
   checkHooks();
   checkFile(CLAUDE_AGENTS_DIR, "agents/");
+  if (androidCliSkillInstalled()) {
+    log.ok("android-cli skill installed in ~/.claude/skills/");
+  } else if (androidCliPath()) {
+    log.warn("android-cli skill missing — run 'gor-mobile repair'");
+  }
   checkClaudeMdSection();
 
   log.step("Rules pack");

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { CLAUDE_COMMANDS_DIR, gorMobileRoot } from "../constants.js";
+import { runAndroidInit } from "../helpers/android-cli.js";
 import { writeClaudeMdSection } from "../helpers/claude-md-section.js";
 import {
   cleanupLegacyAgents,
@@ -46,6 +47,17 @@ export async function cmdRepair(): Promise<void> {
     log.ok("Managed MCP entries pruned from ~/.claude/mcp.json");
   } catch (err) {
     log.warn(`MCP cleanup failed: ${(err as Error).message}`);
+  }
+
+  const androidRes = await runAndroidInit();
+  if (!androidRes.ran) {
+    log.info("android CLI not on PATH — skipping 'android init'");
+  } else if (androidRes.skillInstalled) {
+    log.ok("android-cli skill refreshed via 'android init'");
+  } else if (androidRes.error) {
+    log.warn(`'android init' failed: ${androidRes.error}`);
+  } else {
+    log.warn("'android init' ran but ~/.claude/skills/android-cli/SKILL.md missing");
   }
 
   writeClaudeMdSection(join(gorMobileRoot(), "templates", "claude-md-snippet.md"));

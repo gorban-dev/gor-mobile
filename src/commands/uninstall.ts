@@ -9,7 +9,9 @@ import {
   GOR_MOBILE_CONFIG_DIR,
   GOR_MOBILE_HOME
 } from "../constants.js";
+import { uninstallAndroidCli } from "../helpers/android-cli.js";
 import { removeClaudeMdSection } from "../helpers/claude-md-section.js";
+import { androidCliPath } from "../helpers/deps.js";
 import { cleanupLegacyCommands } from "../helpers/install-assets.js";
 import { unregisterManaged } from "../helpers/mcp-register.js";
 import {
@@ -95,4 +97,20 @@ export async function cmdUninstall(opts: UninstallOptions = {}): Promise<void> {
   }
 
   log.ok("gor-mobile artifacts removed");
+
+  const cli = androidCliPath();
+  if (cli && !opts.yes) {
+    const removeAndroid = await confirm({
+      message:
+        "Also uninstall the Android CLI (launcher + ~/.android/cli cache + android-cli skill)?",
+      initialValue: false
+    });
+    if (!isCancel(removeAndroid) && removeAndroid === true) {
+      log.step("Removing Android CLI");
+      const res = await uninstallAndroidCli();
+      for (const p of res.removed) log.ok(`removed ${p}`);
+      for (const e of res.errors) log.warn(e);
+      if (res.errors.length === 0) log.ok("Android CLI removed");
+    }
+  }
 }

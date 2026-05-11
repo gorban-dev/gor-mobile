@@ -60,7 +60,7 @@ program
 
 program
   .command("update")
-  .description("Pull latest rules + repair managed files")
+  .description("Pull latest rules, `android update`, then repair managed files")
   .action(async () => {
     await cmdUpdate();
   });
