@@ -4,6 +4,15 @@
 
 Pre-release scaffolding. Under active development on `develop` branch.
 
+- change: code-reviewer dispatch now compares the working tree against
+  the base branch (`git diff <BASE_REF>`) instead of the upstream
+  `BASE_SHA..HEAD_SHA` commit range. Since gor-mobile cycles never
+  auto-commit, the SHA range was usually empty; the working-tree diff
+  shows every change the user has accumulated (committed on the branch
+  + uncommitted). The overlay also skips dispatch entirely when the
+  diff is empty, so reviewer subagents aren't burned on no-op tasks.
+  The reviewer agents themselves are unchanged. Existing users: run
+  `gor-mobile repair`.
 - remove: all automatic git operations (`commit`, `branch`, `checkout`,
   `worktree add`) from skill overlays and the UserPromptSubmit reminder.
   Spec, plan, tests, and implementation code now accumulate as
