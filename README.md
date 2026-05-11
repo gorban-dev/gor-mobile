@@ -44,7 +44,7 @@ gor-mobile init
 
 ## What the wizard does
 
-`gor-mobile init` drives a 9-step interactive install with `@clack/prompts`:
+`gor-mobile init` drives an 8-step interactive install with `@clack/prompts`:
 
 - **Banner + welcome.** ASCII banner, a 7-bullet summary of what will
   happen, and an Enter-to-start confirmation.
@@ -71,7 +71,7 @@ Flags:
 The 8 steps:
 
 1. **Base dependencies.** Verifies `git`, `curl`, `node` are on `PATH`. Missing hard deps abort the wizard.
-2. **Google Android CLI agent** (https://developer.android.com/tools/agents). Detects the `android` binary. If absent, prints an info card and (with your consent) runs Google's official installer `curl -fsSL https://dl.google.com/android/cli/latest/darwin_arm64/install.sh | bash` — a ~5 MB launcher lands in `/usr/local/bin/android` (sudo may be prompted); the launcher lazily fetches the full CLI on first run. Auto-install is supported on ARM macOS and x86_64 Linux; on other platforms the step falls back to a manual-install note. Once present, runs `android init` to drop the official `android-cli` skill into `~/.claude/skills/android-cli/` so Claude gets the full command reference in-session.
+2. **Google Android CLI** (https://developer.android.com/tools/agents). Detects the `android` binary. If absent, prints an info card and (with your consent) runs Google's official installer `curl -fsSL https://dl.google.com/android/cli/latest/darwin_arm64/install.sh | bash` — a ~5 MB launcher lands in `/usr/local/bin/android` (sudo may be prompted); the launcher lazily fetches the full CLI on first run. Auto-install is supported on ARM macOS and x86_64 Linux; on other platforms the step falls back to a manual-install note. Once present, runs `android init` to drop the official `android-cli` skill into `~/.claude/skills/android-cli/` so Claude gets the full command reference in-session.
 3. **Rules pack.** Clones the default rules pack (or your `--rules <url>`) into `~/.gor-mobile/rules/`. If the directory already has `.git`, runs `git pull --ff-only` instead. Falls back to the minimal bundled `rules-default/` if the clone fails. Records the source URL + ref in `~/.config/gor-mobile/config.json`.
 4. **SessionStart + UserPromptSubmit hooks.** Copies `session-start-hook.sh` and `user-prompt-submit-hook.sh` to `~/.gor-mobile/templates/`, then merges matching entries into `~/.claude/settings.json` via pure-JS `JSON.parse` / `JSON.stringify` — your existing `Stop` / `PermissionRequest` / `Notification` / other matchers are preserved untouched. The SessionStart hook injects `gor-mobile-using-superpowers/SKILL.md` as `additionalContext` on each session start. The UserPromptSubmit hook fires on every user prompt and injects a short (~50-word) reminder — counters skills-discipline drift on long conversations.
 5. **Skills.** Copies 14 verbatim superpowers skills into `~/.claude/skills/gor-mobile-<skill>/`. Install-time transforms: cross-refs `superpowers:` → `gor-mobile-`, frontmatter id prefix `name: ` → `name: gor-mobile-`, and an optional overlay block appended from `templates/overlays/<skill>.md` for the 6 skills where Android rules, Task(model=...) routing, or a fix to a known upstream bug applies (`brainstorming`, `subagent-driven-development`, `test-driven-development`, `executing-plans`, `systematic-debugging`, `requesting-code-review`).
@@ -85,8 +85,8 @@ Setup & maintenance:
 
 ```
 gor-mobile init              # wizard
-gor-mobile doctor            # environment check (add --verbose for hook payload dump)
-gor-mobile repair            # restore managed files
+gor-mobile doctor            # environment check (--verbose: hook payload; warns on missing android-cli skill)
+gor-mobile repair            # restore managed files; re-runs `android init` if the CLI is installed
 gor-mobile update            # pull rules + `android update` + repair
 gor-mobile self-update       # update the CLI (curl-installer path)
 gor-mobile uninstall         # clean removal of gor-mobile; optionally the Android CLI too
