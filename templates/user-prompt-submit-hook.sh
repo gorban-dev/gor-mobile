@@ -22,7 +22,7 @@ Before ANY tool call (including Grep/Glob/Read/Explore/Task/other plugin skills)
 - "Review this code" / completion claims → Skill(gor-mobile-requesting-code-review) or Skill(gor-mobile-verification-before-completion).
 - Running an existing written plan → Skill(gor-mobile-executing-plans).
 
-Worktree discipline (known upstream bug obra/superpowers#1080): if brainstorming just finished and the spec is about to be written/committed, do NOT commit on the current branch silently. Ask the user whether to invoke Skill(gor-mobile-using-git-worktrees) first — see brainstorming overlay, step 8.5.
+No automatic git: gor-mobile skills NEVER run `git commit`, `git branch`, `git checkout`, or `git worktree add` on the user's behalf. All work accumulates as uncommitted modifications in the working tree; the user decides when to commit and on which branch. Only invoke `gor-mobile-using-git-worktrees` or `gor-mobile-finishing-a-development-branch` when the user explicitly asks for it.
 
 Matching a non-gor-mobile skill (e.g. yandex-tracker, figma) does NOT discharge this rule — process skills ALWAYS run before research or implementation tools. When in doubt, invoke Skill(gor-mobile-brainstorming).
 </gor-mobile-turn-reminder>'

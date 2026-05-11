@@ -39,4 +39,14 @@ and layer examples from `examples/index.json → .layers`. Never hardcode
 filenames — the user may have swapped the pack via
 `gor-mobile rules use <url>`.
 
+### Override: no checkpoint commits
+
+The upstream skill body suggests committing at phase boundaries
+(review checkpoints between tasks). The gor-mobile overlay
+**overrides this**: never run `git commit` between tasks or phases,
+and never create branches / worktrees. All changes accumulate as
+uncommitted modifications in the working tree until the user decides
+to commit. Verification (`./gradlew :<module>:test ...`) still runs
+after every task — that's correctness gating, not git state.
+
 <!-- END gor-mobile overlay -->

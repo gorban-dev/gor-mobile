@@ -1,99 +1,39 @@
 <!-- BEGIN gor-mobile overlay -->
 
-## gor-mobile overlay (merge-mode choice for Option 1)
+## gor-mobile overlay (no-op default)
 
-The skill body above runs verbatim. The following ADDs a sub-choice to
-**Option 1 (Merge back to <base-branch> locally)** so the user can pick
-how much of the feature-branch history lands in `main`.
+The skill body above describes a full merge / branch-delete / commit
+flow. The gor-mobile overlay **disables all of it by default**.
 
-### When user picks Option 1 — ask merge mode FIRST
+### Default behaviour (from any entry point)
 
-Before running `git merge`, present this sub-prompt:
+When this skill is invoked from another flow (`executing-plans`,
+`subagent-driven-development`, or as the natural "wrap-up" step after
+a feature is implemented):
 
-```
-How would you like to land the changes?
+1. Run `git status --short` and `git diff --stat` to show what changed.
+2. Print:
 
-1a. Full merge — preserves every commit including spec/plan docs
-    (default, matches upstream skill behaviour)
-1b. Squash to working tree — all changes appear as uncommitted
-    modifications on <base-branch>; you review/run/commit manually
-1c. Squash to single commit — one commit on <base-branch> with the
-    combined diff, spec/plan commits dropped from history
+       All changes are uncommitted in your working tree.
+       Review `git diff`, then commit / branch / push at your own
+       discretion. gor-mobile will not touch git state for you.
 
-Which sub-option?
-```
+3. Stop. Do **not** run `git merge`, `git branch -d/-D`,
+   `git checkout`, `git commit`, `git push`, or
+   `git worktree remove`. gor-mobile never modifies git state
+   automatically — the user owns those decisions.
 
-Wait for `1a`/`1b`/`1c` reply. Default to `1a` on empty / unrecognised.
+### Explicit user request — opt-in only
 
-### 1a — Full merge (upstream default)
+If the user explicitly asks for a specific git operation by name
+("squash my work into one commit on main", "delete the feature
+branch <name>", "push and open a PR"), execute exactly that single
+operation and stop. Do not chain extras (no automatic test runs,
+no `git push`, no `gh pr create` unless those were also asked for).
 
-Run the upstream skill body verbatim:
-
-```bash
-git checkout <base-branch>
-git pull --ff-only
-git merge <feature-branch>
-<test command>
-git branch -d <feature-branch>
-```
-
-### 1b — Squash to working tree (solo-dev iterative pattern)
-
-Materialises the full feature diff as **uncommitted** changes on
-`<base-branch>`. User then builds/runs on device, reviews manually, and
-decides how to commit (new branch + MR, direct commit on base, or
-discard).
-
-```bash
-git checkout <base-branch>
-git pull --ff-only
-git merge --squash <feature-branch>   # applies diff to index, no commit
-git reset HEAD                         # unstage — leaves changes in working tree
-git branch -D <feature-branch>         # drop feature branch (history squashed)
-```
-
-After this: `git status` shows the feature as modified/untracked files,
-`git diff` shows the full diff. Print this guidance to the user:
-
-```
-Done — feature-branch changes are now uncommitted on <base-branch>.
-
-Next steps (your choice):
-- Verify on device:       <build command, e.g. ./gradlew installDebug>
-- Review diff:            git diff
-- New branch + MR:        git checkout -b <name> && git add -p && git commit && git push && gh pr create
-- Direct commit on base:  git add -A && git commit -m "<message>"
-- Discard everything:     git checkout . && git clean -fd
-```
-
-### 1c — Squash to single commit
-
-One commit on `<base-branch>` combining all feature work. Spec/plan
-commits drop from history but the diff is preserved.
-
-```bash
-git checkout <base-branch>
-git pull --ff-only
-git merge --squash <feature-branch>
-# Prompt user for commit message; default to feature branch name
-git commit -m "<message>"
-<test command>
-git branch -D <feature-branch>
-```
-
-### Cleanup rules
-
-For all three sub-options worktree cleanup runs per upstream Step 5
-(`git worktree remove <worktree-path>`). No overlay change there.
-
-### When to pick which
-
-- **1a** — team workflow, spec/plan are audit artefacts shared with
-  reviewers, git history is part of documentation.
-- **1b** — solo workflow, iterative verification on device/simulator
-  before committing, user prefers building MR manually with clean
-  history.
-- **1c** — solo workflow, user trusts AI work enough to commit directly
-  on base, wants a clean single-commit history.
+If the user wants the full upstream merge-mode flow (sub-options
+1a / 1b / 1c from the original superpowers skill), they will say so
+explicitly — at which point the upstream skill body above can run.
+Until that happens, this skill is a no-op reporter.
 
 <!-- END gor-mobile overlay -->

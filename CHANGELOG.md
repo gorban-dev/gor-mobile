@@ -4,6 +4,18 @@
 
 Pre-release scaffolding. Under active development on `develop` branch.
 
+- remove: all automatic git operations (`commit`, `branch`, `checkout`,
+  `worktree add`) from skill overlays and the UserPromptSubmit reminder.
+  Spec, plan, tests, and implementation code now accumulate as
+  uncommitted modifications in the working tree across the full
+  `brainstorming → writing-plans → executing-plans → TDD →
+  finishing-a-development-branch` cycle. The user reviews `git diff`
+  and commits at their own discretion, on whichever branch they want.
+  The `gor-mobile-using-git-worktrees` and
+  `gor-mobile-finishing-a-development-branch` skills remain installed
+  and can be invoked explicitly when the user wants them. Existing
+  users: run `gor-mobile repair` to refresh the overlays and the
+  UserPromptSubmit hook.
 - add: wizard step 2 and `gor-mobile repair` now run `android init` when
   the `android` binary is on `PATH`. This drops the official Google
   `android-cli` skill into `~/.claude/skills/android-cli/SKILL.md`, so

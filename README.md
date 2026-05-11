@@ -102,6 +102,24 @@ gor-mobile rules diff
 gor-mobile rules validate
 ```
 
+## No automatic git
+
+gor-mobile skills never run `git commit`, `git branch`, `git checkout`,
+or `git worktree add` on your behalf. Spec, plan, tests, and
+implementation code all accumulate as uncommitted modifications in your
+working tree. You review `git status` / `git diff` at your own pace and
+commit when you're ready — on whichever branch you want.
+
+If you want a feature branch or an isolated worktree, ask explicitly
+(e.g. "сделай worktree для этой задачи" / "create a worktree for X").
+gor-mobile then invokes `gor-mobile-using-git-worktrees` and runs the
+exact operation you asked for — nothing more.
+
+The same rule applies to `gor-mobile-finishing-a-development-branch`:
+its default behaviour is to print `git status` + `git diff --stat` and
+stop. The upstream merge / squash / branch-delete flow only runs when
+you explicitly request it by name.
+
 ## How delegation works
 
 Skill overlays (e.g. `gor-mobile-subagent-driven-development/SKILL.md`)
@@ -153,7 +171,7 @@ which skills carry an Android-rules / Task(model=...) appendix.
 | `receiving-code-review` | superpowers | — |
 | `verification-before-completion` | superpowers | — |
 | `systematic-debugging` | superpowers | rules + Phase 2 evidence → Sonnet (read-only) |
-| `finishing-a-development-branch` | superpowers | merge-mode sub-choice (full / squash-to-working-tree / squash-to-commit) |
+| `finishing-a-development-branch` | superpowers | no-op default; runs upstream merge/branch flow only on explicit user request |
 | `using-superpowers` | superpowers | — |
 | `writing-skills` | superpowers | — |
 

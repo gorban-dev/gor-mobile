@@ -61,6 +61,16 @@ Doc paths land in the gitignored project-local workspace:
 `.gor-mobile/specs/YYYY-MM-DD-<topic>-design.md`
 `.gor-mobile/plans/YYYY-MM-DD-<feature>.md`.
 
+### Override: no automatic commits, branches, or worktrees
+
+Never run `git commit`, `git branch`, `git checkout`, or
+`git worktree add` between subagent tasks. Implementer-task diffs
+accumulate as uncommitted modifications in the working tree across
+the entire plan. The user reviews `git diff` and commits / branches /
+pushes at their own discretion. If the user explicitly asks for a
+worktree or branch, invoke `Skill(gor-mobile-using-git-worktrees)`
+or run the requested git command — otherwise do nothing.
+
 ### Skill-vs-Agent dispatch (clarification — upstream bug obra/superpowers#1077)
 
 The upstream Integration block lists `requesting-code-review` alongside agent

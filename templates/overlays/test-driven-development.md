@@ -32,6 +32,12 @@ from `$HOME/.gor-mobile/rules/` (always `core` + `architecture`; plus
   judgement across files the GREEN subagent wasn't scoped to see.
 
 After every GREEN dispatch, the orchestrator runs the Gradle test itself:
-`./gradlew :<module>:test --tests "*<Name>Test*"`. Only commit after green.
+`./gradlew :<module>:test --tests "*<Name>Test*"`.
+
+### Override: no automatic commits
+
+Never run `git commit` between RED / GREEN / REFACTOR cycles. Tests
+and code accumulate as uncommitted modifications in the working tree.
+The user decides when to commit.
 
 <!-- END gor-mobile overlay -->
