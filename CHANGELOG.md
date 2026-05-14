@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.1.0 — Unreleased
+## 0.1.0 — 2026-05-14
 
-Pre-release scaffolding. Under active development on `develop` branch.
+First tagged release.
 
 - change: code-reviewer dispatch now compares the working tree against
   the base branch (`git diff <BASE_REF>`) instead of the upstream
