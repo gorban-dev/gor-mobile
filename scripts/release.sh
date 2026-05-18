@@ -4,7 +4,8 @@
 # Usage:
 #   ./scripts/release.sh <new-version>      # e.g. 0.2.0
 #
-# - Bumps GOR_MOBILE_VERSION in lib/constants.sh
+# - Bumps the version in package.json, src/constants.ts, and README.md
+# - Rebuilds dist/ (committed alongside the bump)
 # - Commits the bump
 # - Tags v<new-version>
 # - Prints the tarball URL + formula command
@@ -28,10 +29,16 @@ if [[ -n "$(git status --porcelain)" ]]; then
     exit 1
 fi
 
-sed -i.bak -E "s/^GOR_MOBILE_VERSION=\".*\"/GOR_MOBILE_VERSION=\"$NEW\"/" lib/constants.sh
-rm -f lib/constants.sh.bak
+# Bump version across all sources of truth.
+sed -i.bak -E "s/\"version\": \".*\"/\"version\": \"$NEW\"/" package.json
+sed -i.bak -E "s/^export const GOR_MOBILE_VERSION = \".*\";$/export const GOR_MOBILE_VERSION = \"$NEW\";/" src/constants.ts
+sed -i.bak -E "s/\`v[0-9]+\.[0-9]+\.[0-9]+\`/\`v$NEW\`/" README.md
+rm -f package.json.bak src/constants.ts.bak README.md.bak
 
-git add lib/constants.sh
+# Rebuild dist/ so the tagged commit ships the matching artefact.
+npm run build
+
+git add package.json src/constants.ts README.md dist/
 git commit -m "chore: release v$NEW"
 git tag "v$NEW"
 
@@ -40,5 +47,4 @@ echo
 echo "Tagged v$NEW. Push with:"
 echo "  git push && git push --tags"
 echo
-echo "Then regenerate the brew formula:"
-echo "  ./scripts/build-formula.sh $NEW '$TARBALL' > ../homebrew-gor-mobile/Formula/gor-mobile.rb"
+echo "The release workflow will regenerate the brew formula automatically."
