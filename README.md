@@ -13,6 +13,9 @@ A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Cl
 
 - Node.js 20+ (`brew install node` on macOS)
 - `git`, `curl` on `PATH`
+- Supported platforms: `darwin/arm64`, `darwin/x64`, `linux/x64`,
+  `win32/x64`. The Google Android CLI is hard-mandatory and Google
+  ships installers only for these four.
 
 ## Install
 
@@ -71,7 +74,7 @@ Flags:
 The 8 steps:
 
 1. **Base dependencies.** Verifies `git`, `curl`, `node` are on `PATH`. Missing hard deps abort the wizard.
-2. **Google Android CLI** (https://developer.android.com/tools/agents). Detects the `android` binary. If absent, prints an info card and (with your consent) runs Google's official installer `curl -fsSL https://dl.google.com/android/cli/latest/darwin_arm64/install.sh | bash` — a ~5 MB launcher lands in `/usr/local/bin/android` (sudo may be prompted); the launcher lazily fetches the full CLI on first run. Auto-install is supported on ARM macOS and x86_64 Linux; on other platforms the step falls back to a manual-install note. Once present, runs `android init` to drop the official `android-cli` skill into `~/.claude/skills/android-cli/` so Claude gets the full command reference in-session.
+2. **Google Android CLI** (https://developer.android.com/tools/agents) — **hard-mandatory** after v0.1.0. Detects the `android` binary; if absent, runs Google's official installer for your platform (`darwin_arm64` / `darwin_x86_64` / `linux_x86_64` / `windows_x86_64`) — a ~5 MB launcher lands in `/usr/local/bin/android` (sudo may be prompted); the launcher lazily fetches the full CLI on first run. **Unsupported platforms (Linux ARM, FreeBSD, …) cause `init` to fail** with a clear error and a developer.android.com link. Declining the install or a failed install also fails the wizard. Once present, runs `android init` to drop the official `android-cli` skill into `~/.claude/skills/android-cli/`, and prints a hint pointing at `gor-mobile android-skills` for the optional skill catalog.
 3. **Rules pack.** Clones the default rules pack (or your `--rules <url>`) into `~/.gor-mobile/rules/`. If the directory already has `.git`, runs `git pull --ff-only` instead. Falls back to the minimal bundled `rules-default/` if the clone fails. Records the source URL + ref in `~/.config/gor-mobile/config.json`.
 4. **SessionStart + UserPromptSubmit hooks.** Copies `session-start-hook.sh` and `user-prompt-submit-hook.sh` to `~/.gor-mobile/templates/`, then merges matching entries into `~/.claude/settings.json` via pure-JS `JSON.parse` / `JSON.stringify` — your existing `Stop` / `PermissionRequest` / `Notification` / other matchers are preserved untouched. The SessionStart hook injects `gor-mobile-using-superpowers/SKILL.md` as `additionalContext` on each session start. The UserPromptSubmit hook fires on every user prompt and injects a short (~50-word) reminder — counters skills-discipline drift on long conversations.
 5. **Skills.** Copies 14 verbatim superpowers skills into `~/.claude/skills/gor-mobile-<skill>/`. Install-time transforms: cross-refs `superpowers:` → `gor-mobile-`, frontmatter id prefix `name: ` → `name: gor-mobile-`, and an optional overlay block appended from `templates/overlays/<skill>.md` for the 6 skills where Android rules, Task(model=...) routing, or a fix to a known upstream bug applies (`brainstorming`, `subagent-driven-development`, `test-driven-development`, `executing-plans`, `systematic-debugging`, `requesting-code-review`).
@@ -85,8 +88,9 @@ Setup & maintenance:
 
 ```
 gor-mobile init              # wizard
-gor-mobile doctor            # environment check (--verbose: hook payload; warns on missing android-cli skill)
+gor-mobile doctor            # environment check (--verbose: hook payload; android CLI is required)
 gor-mobile repair            # restore managed files; re-runs `android init` if the CLI is installed
+gor-mobile android-skills    # browse + install/remove optional Google skills (multi-select)
 gor-mobile update            # pull rules + `android update` + repair
 gor-mobile self-update       # update the CLI (curl-installer path)
 gor-mobile uninstall         # clean removal of gor-mobile; optionally the Android CLI too
@@ -166,7 +170,14 @@ which skills carry an Android-rules / Task(model=...) appendix.
 | `verification-before-completion` | superpowers | — |
 | `systematic-debugging` | superpowers | rules + Phase 2 evidence → Sonnet (read-only) |
 | `using-superpowers` | superpowers | — |
+| `using-android-cli` | gor-mobile (new) | phase→`android` CLI command map; authoritative for Android device ops |
 | `writing-skills` | superpowers | — |
+
+The 5 phase overlays (`brainstorming`, `executing-plans`,
+`systematic-debugging`, `test-driven-development`,
+`verification-before-completion`) each carry a one-line pointer at
+`[[gor-mobile-using-android-cli]]`, which holds the canonical
+phase→command mapping in one place.
 
 Agents:
 - `gor-mobile-code-reviewer` — Sonnet, dispatched via `requesting-code-review`.

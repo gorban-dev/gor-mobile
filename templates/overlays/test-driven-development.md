@@ -40,4 +40,11 @@ Never run `git commit` between RED / GREEN / REFACTOR cycles. Tests
 and code accumulate as uncommitted modifications in the working tree.
 The user decides when to commit.
 
+### Android CLI — phase command mapping
+
+For Android/Kotlin targets, the `android` CLI is the primary tool for
+this phase. Invoke `[[gor-mobile-using-android-cli]]` to get the
+phase→command map. That bridge skill is authoritative for Android
+device ops, replacing direct `adb` / `./gradlew` invocations.
+
 <!-- END gor-mobile overlay -->

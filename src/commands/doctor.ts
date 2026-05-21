@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { execa } from "execa";
 import {
   CLAUDE_AGENTS_DIR,
@@ -158,7 +159,10 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   reportDep("git", which("git"), true);
   reportDep("curl", which("curl"), true);
   reportDep("node", which("node"), true);
-  reportDep("android", androidCliPath(), false);
+  reportDep("android", androidCliPath(), true);
+  if (!androidCliPath()) {
+    log.info("  → run 'gor-mobile init' to install android CLI (hard-mandatory after v0.1.0)");
+  }
 
   log.step("Claude Code integration");
   checkFile(CLAUDE_SETTINGS, "settings.json");
@@ -168,6 +172,12 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
     log.ok("android-cli skill installed in ~/.claude/skills/");
   } else if (androidCliPath()) {
     log.warn("android-cli skill missing — run 'gor-mobile repair'");
+  }
+  const bridgePath = join(CLAUDE_SKILLS_DIR, "gor-mobile-using-android-cli", "SKILL.md");
+  if (existsSync(bridgePath)) {
+    log.ok("gor-mobile-using-android-cli bridge skill installed");
+  } else if (androidCliPath()) {
+    log.warn("gor-mobile-using-android-cli skill missing — run 'gor-mobile repair'");
   }
   checkClaudeMdSection();
 

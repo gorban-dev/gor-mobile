@@ -14,6 +14,7 @@ import {
 import { cmdDocs } from "./commands/docs.js";
 import { cmdSelfUpdate } from "./commands/self-update.js";
 import { cmdAndroid } from "./commands/android.js";
+import { cmdAndroidSkills } from "./commands/android-skills.js";
 import { cmdUpdate } from "./commands/update.js";
 
 const program = new Command();
@@ -56,6 +57,13 @@ program
   .description("Restore managed files in ~/.claude/")
   .action(async () => {
     await cmdRepair();
+  });
+
+program
+  .command("android-skills")
+  .description("Browse + install/remove optional Google Android CLI skills")
+  .action(async () => {
+    await cmdAndroidSkills();
   });
 
 program

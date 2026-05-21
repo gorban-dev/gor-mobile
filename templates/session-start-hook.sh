@@ -18,7 +18,11 @@ fi
 content=$(cat "$SKILL_FILE")
 addendum="Android/Kotlin projects: architecture rules live in \$HOME/.gor-mobile/rules/
 (read via manifest.json / examples/index.json). See overlay sections
-inside each SKILL.md for how to use them."
+inside each SKILL.md for how to use them.
+
+On Android-target sessions, invoke [[gor-mobile-using-android-cli]] before
+research/exec/verify phases — it owns the phase→CLI-command mapping and
+is authoritative for Android device ops."
 
 injection="<EXTREMELY_IMPORTANT>
 You have gor-mobile superpowers.

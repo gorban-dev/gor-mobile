@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.0 — Unreleased
+
+- change: Google Android CLI install is now **hard-mandatory** in
+  `gor-mobile init` step 2. Declining the install, an install failure,
+  or running on an unsupported platform (anything outside
+  `darwin/arm64`, `darwin/x64`, `linux/x64`, `win32/x64`) now fails the
+  wizard with a clear error. Auto-install now covers Mac Intel and
+  Windows in addition to Mac ARM and Linux x64. `doctor` reports a
+  missing `android` binary as `(required)` (was `optional`). Existing
+  users: run `gor-mobile init` (or `gor-mobile repair`) after upgrade.
+- add: new bridge skill `gor-mobile-using-android-cli` ships at
+  `~/.claude/skills/gor-mobile-using-android-cli/SKILL.md`. It maps
+  workflow phases (brainstorm/plan/execute/debug/verify) to specific
+  `android` CLI commands (`docs search`, `describe`, `run`,
+  `screen capture --annotate`, `layout --diff`, journeys, etc.) and is
+  authoritative for Android device ops — replacing direct `adb` /
+  `./gradlew` invocations for Android targets.
+  The 5 phase overlays (`brainstorming`, `executing-plans`,
+  `systematic-debugging`, `test-driven-development`,
+  `verification-before-completion`) point at it. The SessionStart
+  addendum and `~/.claude/CLAUDE.md` managed snippet also reference it.
+  Existing users: run `gor-mobile repair` to install the bridge skill
+  and refresh the overlays.
+- add: new `gor-mobile android-skills` command — interactive
+  multi-select that lists Google's upstream catalog
+  (`android skills list`) and installs/removes entries via
+  `android skills add --agent=claude-code --skill=<name>` /
+  `android skills remove …`. Initial selection reflects currently
+  installed skills (detected via `~/.claude/skills/<name>/SKILL.md`).
+  The wizard now prints a hint at this command after `android init`
+  completes.
+- add: `doctor` now checks for the
+  `gor-mobile-using-android-cli` bridge skill at
+  `~/.claude/skills/gor-mobile-using-android-cli/SKILL.md`; reports
+  `[warn] gor-mobile-using-android-cli skill missing — run 'gor-mobile repair'`
+  if absent.
+- add: the global `~/.claude/CLAUDE.md` managed snippet now carries an
+  "Android device ops (managed by gor-mobile)" rule pinning Android
+  device ops to the `android` CLI / bridge skill. The block is wrapped
+  by the existing managed-section markers and is removed cleanly by
+  `gor-mobile uninstall`.
+
 ## 0.1.0 — 2026-05-14
 
 First tagged release.

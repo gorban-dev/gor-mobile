@@ -44,4 +44,11 @@ low-quality changes that the user later had to revert or rewrite:
 If any of these apply, the work is NOT complete — it has slop attached
 to it. Strip the slop, then run verification again.
 
+### Android CLI — phase command mapping
+
+For Android/Kotlin targets, the `android` CLI is the primary tool for
+this phase. Invoke `[[gor-mobile-using-android-cli]]` to get the
+phase→command map. That bridge skill is authoritative for Android
+device ops, replacing direct `adb` / `./gradlew` invocations.
+
 <!-- END gor-mobile overlay -->

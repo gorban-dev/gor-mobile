@@ -75,7 +75,20 @@ function androidCliPath() {
 }
 
 // src/helpers/android-cli.ts
-var ANDROID_CLI_INSTALL_URL = "https://dl.google.com/android/cli/latest/darwin_arm64/install.sh";
+var DARWIN_ARM64_FALLBACK_URL = "https://dl.google.com/android/cli/latest/darwin_arm64/install.sh";
+var ANDROID_CLI_INSTALL_URLS = {
+  "darwin/arm64": DARWIN_ARM64_FALLBACK_URL,
+  "darwin/x64": "https://dl.google.com/android/cli/latest/darwin_x86_64/install.sh",
+  "linux/x64": "https://dl.google.com/android/cli/latest/linux_x86_64/install.sh",
+  "win32/x64": "https://dl.google.com/android/cli/latest/windows_x86_64/install.cmd"
+};
+function platformKey() {
+  return `${process.platform}/${process.arch}`;
+}
+function androidCliInstallUrl() {
+  return ANDROID_CLI_INSTALL_URLS[platformKey()] ?? null;
+}
+var ANDROID_CLI_INSTALL_URL = androidCliInstallUrl() ?? DARWIN_ARM64_FALLBACK_URL;
 function androidCliSkillPath() {
   return join3(CLAUDE_SKILLS_DIR, "android-cli", "SKILL.md");
 }
@@ -83,25 +96,25 @@ function androidCliSkillInstalled() {
   return existsSync(androidCliSkillPath());
 }
 function androidCliInstallSupported() {
-  const p = process.platform;
-  const a = process.arch;
-  if (p === "darwin" && a === "arm64") return true;
-  if (p === "linux" && a === "x64") return true;
-  return false;
+  return androidCliInstallUrl() !== null;
 }
 async function installAndroidCli() {
-  if (!androidCliInstallSupported()) {
+  const url = androidCliInstallUrl();
+  if (!url) {
     return {
       installed: false,
       error: `unsupported platform ${process.platform}/${process.arch}`
     };
   }
   try {
-    const res = await execa(
-      "bash",
-      ["-c", `curl -fsSL ${ANDROID_CLI_INSTALL_URL} | bash`],
-      { stdio: "inherit", reject: false, timeout: 18e4 }
-    );
+    const cmd = process.platform === "win32" ? `curl -fsSL ${url} -o "%TEMP%\\gm-android-i.cmd" && "%TEMP%\\gm-android-i.cmd"` : `curl -fsSL ${url} | bash`;
+    const shell = process.platform === "win32" ? "cmd.exe" : "bash";
+    const shellFlag = process.platform === "win32" ? "/c" : "-c";
+    const res = await execa(shell, [shellFlag, cmd], {
+      stdio: "inherit",
+      reject: false,
+      timeout: 18e4
+    });
     if (res.exitCode !== 0) {
       return { installed: false, error: `installer exit ${res.exitCode}` };
     }
@@ -126,6 +139,61 @@ async function runAndroidUpdate() {
     };
   } catch (err) {
     return { ran: true, ok: false, error: err.message };
+  }
+}
+async function listAndroidSkills() {
+  const cli = androidCliPath();
+  if (!cli) return { ok: false, names: [], error: "android CLI not on PATH" };
+  try {
+    const res = await execa(cli, ["skills", "list"], {
+      reject: false,
+      timeout: 6e4
+    });
+    if (res.exitCode !== 0) {
+      return {
+        ok: false,
+        names: [],
+        error: (res.stderr || res.stdout || "").toString().slice(0, 200)
+      };
+    }
+    const names = res.stdout.split("\n").map((s) => s.trim()).filter((s) => s.length > 0 && !s.startsWith("["));
+    return { ok: true, names };
+  } catch (err) {
+    return { ok: false, names: [], error: err.message };
+  }
+}
+async function addAndroidSkill(name) {
+  const cli = androidCliPath();
+  if (!cli) return { ok: false, error: "android CLI not on PATH" };
+  try {
+    const res = await execa(
+      cli,
+      ["skills", "add", "--agent=claude-code", `--skill=${name}`],
+      { reject: false, timeout: 12e4 }
+    );
+    return {
+      ok: res.exitCode === 0,
+      error: res.exitCode === 0 ? void 0 : (res.stderr || res.stdout || "").toString().slice(0, 200)
+    };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+async function removeAndroidSkill(name) {
+  const cli = androidCliPath();
+  if (!cli) return { ok: false, error: "android CLI not on PATH" };
+  try {
+    const res = await execa(
+      cli,
+      ["skills", "remove", "--agent=claude-code", `--skill=${name}`],
+      { reject: false, timeout: 6e4 }
+    );
+    return {
+      ok: res.exitCode === 0,
+      error: res.exitCode === 0 ? void 0 : (res.stderr || res.stdout || "").toString().slice(0, 200)
+    };
+  } catch (err) {
+    return { ok: false, error: err.message };
   }
 }
 function canWrite(path) {
@@ -840,10 +908,13 @@ async function runAndroidInitStep() {
   const res = await runAndroidInit();
   if (res.skillInstalled) {
     progressItem(2, 2, "initialize android skills", "ok", "~/.claude/skills/android-cli/");
+    log.info(
+      "Browse Google's skill catalog \u2014 run 'gor-mobile android-skills' to install optional skills (navigation-3, edge-to-edge, r8-analyzer, \u2026)."
+    );
   } else if (res.error) {
-    progressItem(2, 2, "initialize android skills", "warn", res.error);
+    throw new Error(`android init failed: ${res.error}`);
   } else {
-    progressItem(2, 2, "initialize android skills", "warn", "skill file not found after init");
+    throw new Error("android init succeeded but android-cli skill not found");
   }
 }
 async function step2Android(ctx) {
@@ -859,20 +930,23 @@ async function step2Android(ctx) {
     return;
   }
   if (!androidCliInstallSupported()) {
-    progressItem(1, 2, "android CLI", "warn", `unsupported platform ${process.platform}/${process.arch}`);
+    progressItem(1, 2, "android CLI", "fail", `unsupported platform ${process.platform}/${process.arch}`);
     const body2 = [
-      "The Google Android CLI is not installed and auto-install is not",
-      `supported on this platform (${process.platform}/${process.arch}).`,
+      `gor-mobile requires the Google Android CLI, and Google does not`,
+      `ship an installer for ${process.platform}/${process.arch}.`,
       "",
-      "Install manually from: https://developer.android.com/tools/agents",
-      "Then re-run 'gor-mobile init'."
+      "Supported platforms: darwin/arm64, darwin/x64, linux/x64, win32/x64.",
+      "",
+      "See https://developer.android.com/tools/agents \u2014 if Google later",
+      "publishes an installer for your platform, re-run 'gor-mobile init'."
     ].join("\n");
-    note(body2, "Android CLI missing");
-    progressItem(2, 2, "initialize android skills", "skip", "no CLI");
-    return;
+    note(body2, "Android CLI required");
+    throw new Error(`platform ${process.platform}/${process.arch} unsupported by Google Android CLI`);
   }
+  const displayCmd = process.platform === "win32" ? `curl -fsSL ${ANDROID_CLI_INSTALL_URL} -o "%TEMP%\\gm-android-i.cmd" && "%TEMP%\\gm-android-i.cmd"` : `curl -fsSL ${ANDROID_CLI_INSTALL_URL} | bash`;
   const body = [
-    "The Google Android CLI is not installed.",
+    "The Google Android CLI is required by gor-mobile and is not yet",
+    "installed on this machine.",
     "",
     "What it is:",
     "  An official Google CLI that lets AI agents drive the Android",
@@ -883,30 +957,27 @@ async function step2Android(ctx) {
     "Learn more: https://developer.android.com/tools/agents",
     "",
     "Install command (from Google):",
-    `  curl -fsSL ${ANDROID_CLI_INSTALL_URL} | bash`,
+    `  ${displayCmd}`,
     "",
     "This downloads a ~5 MB launcher into /usr/local/bin/android",
-    "(sudo may be required). The launcher then fetches the full CLI",
-    "on first run."
+    "(sudo may be required). The launcher fetches the full CLI on",
+    "first run."
   ].join("\n");
-  note(body, "Android CLI missing");
+  note(body, "Android CLI required");
   if (ctx.opts.dryRun) {
-    progressItem(1, 2, "android CLI", "skip", `dry-run: curl ${ANDROID_CLI_INSTALL_URL} | bash`);
+    progressItem(1, 2, "android CLI", "skip", `dry-run: ${displayCmd}`);
     progressItem(2, 2, "initialize android skills", "skip", "dry-run: android init");
     return;
   }
-  const install = ctx.opts.yes ? true : await confirmStep("Install the Android CLI now?", true);
+  const install = ctx.opts.yes ? true : await confirmStep("Install the Android CLI now? (required to continue)", true);
   if (!install) {
-    progressItem(1, 2, "android CLI", "skip", "declined \u2014 install manually, then re-run init");
-    progressItem(2, 2, "initialize android skills", "skip", "no CLI");
-    return;
+    progressItem(1, 2, "android CLI", "fail", "declined \u2014 gor-mobile requires the Android CLI");
+    throw new Error("user declined Android CLI install \u2014 gor-mobile cannot continue");
   }
   const res = await installAndroidCli();
   if (!res.installed) {
     progressItem(1, 2, "android CLI", "fail", res.error ?? "install failed");
-    progressItem(2, 2, "initialize android skills", "skip", "no CLI");
-    log.warn("Install the Android CLI manually, then re-run 'gor-mobile repair'.");
-    return;
+    throw new Error(`Android CLI install failed: ${res.error ?? "unknown error"}`);
   }
   progressItem(1, 2, "android CLI", "ok", androidCliPath() ?? "installed");
   await runAndroidInitStep();
@@ -1089,6 +1160,7 @@ async function cmdInit(opts = {}) {
 
 // src/commands/doctor.ts
 import { existsSync as existsSync9, readFileSync as readFileSync5 } from "fs";
+import { join as join8 } from "path";
 import { execa as execa4 } from "execa";
 function reportDep(name, path, required) {
   if (path) {
@@ -1191,12 +1263,12 @@ function verboseSkillsFrontmatter() {
     return;
   }
   const { readdirSync: readdirSync2 } = __require("fs");
-  const { join: join12 } = __require("path");
+  const { join: join14 } = __require("path");
   let count = 0;
   let bad = 0;
   for (const entry of readdirSync2(CLAUDE_SKILLS_DIR)) {
     if (!entry.startsWith("gor-mobile-")) continue;
-    const skillMd = join12(CLAUDE_SKILLS_DIR, entry, "SKILL.md");
+    const skillMd = join14(CLAUDE_SKILLS_DIR, entry, "SKILL.md");
     if (!existsSync9(skillMd)) continue;
     count++;
     const content = readFileSync5(skillMd, "utf8");
@@ -1217,7 +1289,10 @@ async function cmdDoctor(opts = {}) {
   reportDep("git", which("git"), true);
   reportDep("curl", which("curl"), true);
   reportDep("node", which("node"), true);
-  reportDep("android", androidCliPath(), false);
+  reportDep("android", androidCliPath(), true);
+  if (!androidCliPath()) {
+    log.info("  \u2192 run 'gor-mobile init' to install android CLI (hard-mandatory after v0.1.0)");
+  }
   log.step("Claude Code integration");
   checkFile(CLAUDE_SETTINGS, "settings.json");
   checkHooks();
@@ -1226,6 +1301,12 @@ async function cmdDoctor(opts = {}) {
     log.ok("android-cli skill installed in ~/.claude/skills/");
   } else if (androidCliPath()) {
     log.warn("android-cli skill missing \u2014 run 'gor-mobile repair'");
+  }
+  const bridgePath = join8(CLAUDE_SKILLS_DIR, "gor-mobile-using-android-cli", "SKILL.md");
+  if (existsSync9(bridgePath)) {
+    log.ok("gor-mobile-using-android-cli bridge skill installed");
+  } else if (androidCliPath()) {
+    log.warn("gor-mobile-using-android-cli skill missing \u2014 run 'gor-mobile repair'");
   }
   checkClaudeMdSection();
   log.step("Rules pack");
@@ -1246,7 +1327,7 @@ async function cmdDoctor(opts = {}) {
 }
 
 // src/commands/repair.ts
-import { join as join8 } from "path";
+import { join as join9 } from "path";
 
 // src/helpers/mcp-register.ts
 import { existsSync as existsSync10 } from "fs";
@@ -1302,14 +1383,14 @@ async function cmdRepair() {
   } else {
     log.warn("'android init' ran but ~/.claude/skills/android-cli/SKILL.md missing");
   }
-  writeClaudeMdSection(join8(gorMobileRoot(), "templates", "claude-md-snippet.md"));
+  writeClaudeMdSection(join9(gorMobileRoot(), "templates", "claude-md-snippet.md"));
   log.ok("CLAUDE.md managed section refreshed");
   log.ok("Done. Run 'gor-mobile doctor' to verify.");
 }
 
 // src/commands/uninstall.ts
 import { existsSync as existsSync11, readFileSync as readFileSync6, rmSync as rmSync4 } from "fs";
-import { join as join9 } from "path";
+import { join as join10 } from "path";
 import { confirm as confirm3, isCancel as isCancel5 } from "@clack/prompts";
 async function cmdUninstall(opts = {}) {
   if (!opts.yes) {
@@ -1335,7 +1416,7 @@ async function cmdUninstall(opts = {}) {
     const { readdirSync: readdirSync2 } = await import("fs");
     for (const entry of readdirSync2(CLAUDE_SKILLS_DIR)) {
       if (entry.startsWith("gor-mobile-")) {
-        rmSync4(join9(CLAUDE_SKILLS_DIR, entry), { recursive: true, force: true });
+        rmSync4(join10(CLAUDE_SKILLS_DIR, entry), { recursive: true, force: true });
       }
     }
   }
@@ -1344,10 +1425,10 @@ async function cmdUninstall(opts = {}) {
     const { readdirSync: readdirSync2 } = await import("fs");
     for (const entry of readdirSync2(CLAUDE_AGENTS_DIR)) {
       if (entry.startsWith("gor-mobile-") && entry.endsWith(".md")) {
-        rmSync4(join9(CLAUDE_AGENTS_DIR, entry), { force: true });
+        rmSync4(join10(CLAUDE_AGENTS_DIR, entry), { force: true });
       }
     }
-    const legacyCr = join9(CLAUDE_AGENTS_DIR, "code-reviewer.md");
+    const legacyCr = join10(CLAUDE_AGENTS_DIR, "code-reviewer.md");
     if (existsSync11(legacyCr)) {
       const head = readFileSync6(legacyCr, "utf8").split("\n").slice(0, 20).join("\n");
       if (/^name: code-reviewer/m.test(head)) {
@@ -1508,11 +1589,11 @@ async function cmdDocs(query) {
 
 // src/commands/self-update.ts
 import { existsSync as existsSync13 } from "fs";
-import { join as join10 } from "path";
+import { join as join11 } from "path";
 import { execa as execa6 } from "execa";
 async function cmdSelfUpdate() {
   const root = gorMobileRoot();
-  if (existsSync13(join10(root, ".git"))) {
+  if (existsSync13(join11(root, ".git"))) {
     log.step(`git pull in ${root}`);
     await execa6("git", ["-C", root, "pull", "--ff-only"], { stdio: "inherit" });
     log.step("npm install");
@@ -1559,13 +1640,85 @@ async function cmdAndroid(args) {
   process.exit(1);
 }
 
-// src/commands/update.ts
+// src/commands/android-skills.ts
 import { existsSync as existsSync15 } from "fs";
-import { join as join11 } from "path";
+import { join as join12 } from "path";
+import { cancel as cancel5, isCancel as isCancel6, multiselect, spinner } from "@clack/prompts";
+function isInstalled(name) {
+  return existsSync15(join12(CLAUDE_SKILLS_DIR, name, "SKILL.md"));
+}
+async function cmdAndroidSkills() {
+  if (!androidCliPath()) {
+    log.err(
+      "android CLI not on PATH. Run 'gor-mobile init' or 'gor-mobile repair' \u2014 android CLI is required after v0.1.0."
+    );
+    process.exit(1);
+  }
+  const sp = spinner();
+  sp.start("Fetching available Android skills");
+  const listed = await listAndroidSkills();
+  sp.stop(listed.ok ? `Fetched ${listed.names.length} skills` : "Failed to fetch skills");
+  if (!listed.ok) {
+    log.err(`android skills list failed: ${listed.error ?? "unknown error"}`);
+    process.exit(1);
+  }
+  if (listed.names.length === 0) {
+    log.warn("No skills returned by `android skills list`.");
+    return;
+  }
+  const options = listed.names.map((name) => ({
+    value: name,
+    label: isInstalled(name) ? `${name} (installed)` : name
+  }));
+  const preselected = listed.names.filter(isInstalled);
+  if (!isTuiOn()) {
+    log.info("Available skills:");
+    for (const o of options) log.info(`  ${o.label}`);
+    log.info("Run this command in a TTY to select/deselect interactively.");
+    return;
+  }
+  const picked = await multiselect({
+    message: "Select Android skills to keep installed (space to toggle, enter to confirm):",
+    options,
+    initialValues: preselected,
+    required: false
+  });
+  if (isCancel6(picked)) {
+    cancel5("Cancelled");
+    return;
+  }
+  const chosen = new Set(picked);
+  const current = new Set(preselected);
+  const toAdd = [...chosen].filter((n) => !current.has(n));
+  const toRemove = [...current].filter((n) => !chosen.has(n));
+  if (toAdd.length === 0 && toRemove.length === 0) {
+    log.ok("No changes.");
+    return;
+  }
+  for (const name of toAdd) {
+    const s = spinner();
+    s.start(`Installing ${name}`);
+    const r = await addAndroidSkill(name);
+    if (r.ok) s.stop(`Installed ${name}`);
+    else s.stop(`Failed to install ${name}${r.error ? `: ${r.error}` : ""}`);
+  }
+  for (const name of toRemove) {
+    const s = spinner();
+    s.start(`Removing ${name}`);
+    const r = await removeAndroidSkill(name);
+    if (r.ok) s.stop(`Removed ${name}`);
+    else s.stop(`Failed to remove ${name}${r.error ? `: ${r.error}` : ""}`);
+  }
+  log.ok("Done. Re-open Claude Code sessions to pick up skill changes.");
+}
+
+// src/commands/update.ts
+import { existsSync as existsSync16 } from "fs";
+import { join as join13 } from "path";
 import { execa as execa8 } from "execa";
 async function cmdUpdate() {
   log.step("Updating rules pack");
-  if (existsSync15(join11(GOR_MOBILE_RULES_DIR, ".git"))) {
+  if (existsSync16(join13(GOR_MOBILE_RULES_DIR, ".git"))) {
     const res = await execa8(
       "git",
       ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"],
@@ -1620,6 +1773,9 @@ program.command("doctor").description("Check environment (deps, hooks, MCP)").op
 });
 program.command("repair").description("Restore managed files in ~/.claude/").action(async () => {
   await cmdRepair();
+});
+program.command("android-skills").description("Browse + install/remove optional Google Android CLI skills").action(async () => {
+  await cmdAndroidSkills();
 });
 program.command("update").description("Pull latest rules, `android update`, then repair managed files").action(async () => {
   await cmdUpdate();

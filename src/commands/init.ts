@@ -109,10 +109,13 @@ async function runAndroidInitStep(): Promise<void> {
   const res = await runAndroidInit();
   if (res.skillInstalled) {
     progressItem(2, 2, "initialize android skills", "ok", "~/.claude/skills/android-cli/");
+    log.info(
+      "Browse Google's skill catalog — run 'gor-mobile android-skills' to install optional skills (navigation-3, edge-to-edge, r8-analyzer, …)."
+    );
   } else if (res.error) {
-    progressItem(2, 2, "initialize android skills", "warn", res.error);
+    throw new Error(`android init failed: ${res.error}`);
   } else {
-    progressItem(2, 2, "initialize android skills", "warn", "skill file not found after init");
+    throw new Error("android init succeeded but android-cli skill not found");
   }
 }
 
@@ -131,21 +134,28 @@ async function step2Android(ctx: RunCtx): Promise<void> {
   }
 
   if (!androidCliInstallSupported()) {
-    progressItem(1, 2, "android CLI", "warn", `unsupported platform ${process.platform}/${process.arch}`);
+    progressItem(1, 2, "android CLI", "fail", `unsupported platform ${process.platform}/${process.arch}`);
     const body = [
-      "The Google Android CLI is not installed and auto-install is not",
-      `supported on this platform (${process.platform}/${process.arch}).`,
+      `gor-mobile requires the Google Android CLI, and Google does not`,
+      `ship an installer for ${process.platform}/${process.arch}.`,
       "",
-      "Install manually from: https://developer.android.com/tools/agents",
-      "Then re-run 'gor-mobile init'."
+      "Supported platforms: darwin/arm64, darwin/x64, linux/x64, win32/x64.",
+      "",
+      "See https://developer.android.com/tools/agents — if Google later",
+      "publishes an installer for your platform, re-run 'gor-mobile init'."
     ].join("\n");
-    note(body, "Android CLI missing");
-    progressItem(2, 2, "initialize android skills", "skip", "no CLI");
-    return;
+    note(body, "Android CLI required");
+    throw new Error(`platform ${process.platform}/${process.arch} unsupported by Google Android CLI`);
   }
 
+  const displayCmd =
+    process.platform === "win32"
+      ? `curl -fsSL ${ANDROID_CLI_INSTALL_URL} -o "%TEMP%\\gm-android-i.cmd" && "%TEMP%\\gm-android-i.cmd"`
+      : `curl -fsSL ${ANDROID_CLI_INSTALL_URL} | bash`;
+
   const body = [
-    "The Google Android CLI is not installed.",
+    "The Google Android CLI is required by gor-mobile and is not yet",
+    "installed on this machine.",
     "",
     "What it is:",
     "  An official Google CLI that lets AI agents drive the Android",
@@ -156,35 +166,32 @@ async function step2Android(ctx: RunCtx): Promise<void> {
     "Learn more: https://developer.android.com/tools/agents",
     "",
     "Install command (from Google):",
-    `  curl -fsSL ${ANDROID_CLI_INSTALL_URL} | bash`,
+    `  ${displayCmd}`,
     "",
     "This downloads a ~5 MB launcher into /usr/local/bin/android",
-    "(sudo may be required). The launcher then fetches the full CLI",
-    "on first run."
+    "(sudo may be required). The launcher fetches the full CLI on",
+    "first run."
   ].join("\n");
-  note(body, "Android CLI missing");
+  note(body, "Android CLI required");
 
   if (ctx.opts.dryRun) {
-    progressItem(1, 2, "android CLI", "skip", `dry-run: curl ${ANDROID_CLI_INSTALL_URL} | bash`);
+    progressItem(1, 2, "android CLI", "skip", `dry-run: ${displayCmd}`);
     progressItem(2, 2, "initialize android skills", "skip", "dry-run: android init");
     return;
   }
 
   const install = ctx.opts.yes
     ? true
-    : await confirmStep("Install the Android CLI now?", true);
+    : await confirmStep("Install the Android CLI now? (required to continue)", true);
   if (!install) {
-    progressItem(1, 2, "android CLI", "skip", "declined — install manually, then re-run init");
-    progressItem(2, 2, "initialize android skills", "skip", "no CLI");
-    return;
+    progressItem(1, 2, "android CLI", "fail", "declined — gor-mobile requires the Android CLI");
+    throw new Error("user declined Android CLI install — gor-mobile cannot continue");
   }
 
   const res = await installAndroidCli();
   if (!res.installed) {
     progressItem(1, 2, "android CLI", "fail", res.error ?? "install failed");
-    progressItem(2, 2, "initialize android skills", "skip", "no CLI");
-    log.warn("Install the Android CLI manually, then re-run 'gor-mobile repair'.");
-    return;
+    throw new Error(`Android CLI install failed: ${res.error ?? "unknown error"}`);
   }
   progressItem(1, 2, "android CLI", "ok", androidCliPath() ?? "installed");
   await runAndroidInitStep();
