@@ -49,7 +49,19 @@ function transformSkillBody(content: string): string {
     )
     .replace(/all 5 tasks/g, "all tasks")
     .replace(/docs\/superpowers\/specs\//g, ".gor-mobile/specs/")
-    .replace(/docs\/superpowers\/plans\//g, ".gor-mobile/plans/");
+    .replace(/docs\/superpowers\/plans\//g, ".gor-mobile/plans/")
+    .replace(
+      /^[ \t]*-[^\n]*(using-git-worktrees|finishing-a-development-branch)[^\n]*\n/gm,
+      ""
+    )
+    .replace(
+      /"Use gor-mobile-finishing-a-development-branch"/g,
+      '"User decides next step"'
+    )
+    .replace(
+      /Use gor-mobile-finishing-a-development-branch/g,
+      "User decides next step"
+    );
 }
 
 export interface InstallSkillsResult {
@@ -88,6 +100,11 @@ export function installSkills(): InstallSkillsResult {
       writeFileSync(skillMd, body);
       if (!/^name: gor-mobile-/m.test(body)) {
         missingPrefix.push(skillMd);
+      }
+      if (/using-git-worktrees|finishing-a-development-branch/.test(body)) {
+        console.warn(
+          `[gor-mobile] warning: stale skill reference in ${skillMd}`
+        );
       }
     }
     installed.push(name);

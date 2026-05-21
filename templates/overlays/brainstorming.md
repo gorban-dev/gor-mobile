@@ -36,8 +36,6 @@ size or perceived complexity:
 - Write the spec file to `.gor-mobile/specs/...` and stop.
 - Never run `git commit`, `git branch`, `git checkout`, or
   `git worktree add` from inside this skill.
-- Never invoke `gor-mobile-using-git-worktrees` unless the user
-  explicitly asks for a worktree / new branch.
 - All artefacts (spec, plan, code) accumulate as uncommitted
   modifications in the current working tree. The user reviews
   `git status` / `git diff` at their own pace and commits when ready.

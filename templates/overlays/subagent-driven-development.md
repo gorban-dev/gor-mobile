@@ -68,8 +68,8 @@ Never run `git commit`, `git branch`, `git checkout`, or
 accumulate as uncommitted modifications in the working tree across
 the entire plan. The user reviews `git diff` and commits / branches /
 pushes at their own discretion. If the user explicitly asks for a
-worktree or branch, invoke `Skill(gor-mobile-using-git-worktrees)`
-or run the requested git command — otherwise do nothing.
+worktree or branch, run the requested git command — otherwise do
+nothing.
 
 ### Skill-vs-Agent dispatch (clarification — upstream bug obra/superpowers#1077)
 
@@ -80,9 +80,7 @@ types in a single bullet list, which causes the model to dispatch it via
 
 - **Skills** (invoke via `Skill` tool — these are *skills*, not agents):
   - `gor-mobile-requesting-code-review`
-  - `gor-mobile-using-git-worktrees`
   - `gor-mobile-writing-plans`
-  - `gor-mobile-finishing-a-development-branch`
 - **Agents** (dispatch via `Agent` tool with `subagent_type`):
   - `gor-mobile-code-reviewer` (Sonnet — default review path)
   - `gor-mobile-code-reviewer-deep` (Opus — security / large-diff path)

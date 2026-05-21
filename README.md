@@ -110,15 +110,10 @@ implementation code all accumulate as uncommitted modifications in your
 working tree. You review `git status` / `git diff` at your own pace and
 commit when you're ready — on whichever branch you want.
 
-If you want a feature branch or an isolated worktree, ask explicitly
-(e.g. "сделай worktree для этой задачи" / "create a worktree for X").
-gor-mobile then invokes `gor-mobile-using-git-worktrees` and runs the
-exact operation you asked for — nothing more.
-
-The same rule applies to `gor-mobile-finishing-a-development-branch`:
-its default behaviour is to print `git status` + `git diff --stat` and
-stop. The upstream merge / squash / branch-delete flow only runs when
-you explicitly request it by name.
+If you want a feature branch or an isolated worktree, just say so
+and gor-mobile runs the exact git command you asked for — nothing
+more. There's no built-in worktree workflow that fires
+automatically.
 
 ## How delegation works
 
@@ -162,7 +157,6 @@ which skills carry an Android-rules / Task(model=...) appendix.
 |-|-|-|
 | `brainstorming` | superpowers | rules-pack pointer |
 | `writing-plans` | superpowers | — |
-| `using-git-worktrees` | superpowers | — |
 | `subagent-driven-development` | superpowers | rules + implementer → Sonnet |
 | `test-driven-development` | superpowers | rules + GREEN → Sonnet |
 | `executing-plans` | superpowers | task-loop classification (Sonnet / Opus) |
@@ -171,7 +165,6 @@ which skills carry an Android-rules / Task(model=...) appendix.
 | `receiving-code-review` | superpowers | — |
 | `verification-before-completion` | superpowers | — |
 | `systematic-debugging` | superpowers | rules + Phase 2 evidence → Sonnet (read-only) |
-| `finishing-a-development-branch` | superpowers | no-op default; runs upstream merge/branch flow only on explicit user request |
 | `using-superpowers` | superpowers | — |
 | `writing-skills` | superpowers | — |
 
