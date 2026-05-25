@@ -332,6 +332,13 @@ function removeClaudeMdSection() {
   writeFileSync2(CLAUDE_CLAUDE_MD, stripped);
 }
 
+// src/helpers/ast-index.ts
+var AST_INDEX_REPO_URL = "https://github.com/defendend/Claude-ast-index-search";
+var AST_INDEX_INSTALL_SNIPPET = "brew tap defendend/ast-index && brew install ast-index";
+function astIndexPath() {
+  return which("ast-index");
+}
+
 // src/helpers/install-assets.ts
 import {
   cpSync,
@@ -818,6 +825,7 @@ function renderBanner() {
 var BULLETS = [
   "Check base deps (git, curl, node).",
   "Install (via curl) + initialize the Google Android CLI; drops ~/.claude/skills/android-cli/ SKILL.md.",
+  "Soft-check the ast-index CLI; warn + install hint if missing.",
   "Clone the architecture rules pack into ~/.gor-mobile/rules/.",
   "Merge SessionStart + UserPromptSubmit hooks into ~/.claude/settings.json.",
   "Install 14 gor-mobile-* skills into ~/.claude/skills/.",
@@ -875,7 +883,7 @@ ${label}`);
 };
 
 // src/commands/init.ts
-var TOTAL_STEPS = 8;
+var TOTAL_STEPS = 9;
 function dryLog(msg) {
   console.log(`    ${pc8.dim("[dry-run]")} ${msg}`);
 }
@@ -982,8 +990,35 @@ async function step2Android(ctx) {
   progressItem(1, 2, "android CLI", "ok", androidCliPath() ?? "installed");
   await runAndroidInitStep();
 }
-async function step3Rules(ctx) {
-  runStep(3, "Rules pack");
+async function step3AstIndex(ctx) {
+  runStep(3, "ast-index CLI (code search)");
+  if (ctx.opts.dryRun) {
+    progressItem(1, 1, "ast-index CLI", "skip", "dry-run: which ast-index");
+    return;
+  }
+  const path = astIndexPath();
+  if (path) {
+    progressItem(1, 1, "ast-index CLI", "ok", path);
+    return;
+  }
+  progressItem(1, 1, "ast-index CLI", "warn", "not found");
+  const body = [
+    "ast-index is recommended for fast structural code search in",
+    "Android/Kotlin/Java projects. gor-mobile installs the skill",
+    "(gor-mobile-ast-index) regardless \u2014 but search commands will",
+    "only work once the CLI is installed.",
+    "",
+    "Install (Homebrew):",
+    `  ${AST_INDEX_INSTALL_SNIPPET}`,
+    "",
+    `Other install options: ${AST_INDEX_REPO_URL}`,
+    "",
+    "Re-run 'gor-mobile doctor' after install to verify."
+  ].join("\n");
+  note(body, "ast-index recommended");
+}
+async function step4Rules(ctx) {
+  runStep(4, "Rules pack");
   if (ctx.mode === "advanced" && !ctx.opts.rules) {
     ctx.rulesUrl = await textPrompt(
       "Rules pack URL",
@@ -1023,8 +1058,8 @@ async function step3Rules(ctx) {
   saveConfig(ctx.rulesUrl, DEFAULT_RULES_REF);
   progressItem(2, 2, "save config", "ok", GOR_MOBILE_RULES_DIR);
 }
-async function step4Hooks(ctx) {
-  runStep(4, "SessionStart + UserPromptSubmit hooks");
+async function step5Hooks(ctx) {
+  runStep(5, "SessionStart + UserPromptSubmit hooks");
   if (ctx.opts.dryRun) {
     progressItem(1, 4, "copy session-start-hook.sh", "skip", "dry-run");
     progressItem(2, 4, "copy user-prompt-submit-hook.sh", "skip", "dry-run");
@@ -1042,8 +1077,8 @@ async function step4Hooks(ctx) {
   progressItem(4, 4, "merge UserPromptSubmit", "ok", CLAUDE_SETTINGS);
   ctx.counts.hooks = 2;
 }
-async function step5Skills(ctx) {
-  runStep(5, "Skills \u2192 ~/.claude/skills/gor-mobile-*/");
+async function step6Skills(ctx) {
+  runStep(6, "Skills \u2192 ~/.claude/skills/gor-mobile-*/");
   if (ctx.opts.dryRun) {
     const { readdirSync: readdirSync2 } = await import("fs");
     const src = join7(gorMobileRoot(), "templates", "skills");
@@ -1072,8 +1107,8 @@ async function step5Skills(ctx) {
   }
   ctx.counts.skills = total;
 }
-async function step6Agents(ctx) {
-  runStep(6, "Agents \u2192 ~/.claude/agents/");
+async function step7Agents(ctx) {
+  runStep(7, "Agents \u2192 ~/.claude/agents/");
   if (ctx.opts.dryRun) {
     const { readdirSync: readdirSync2 } = await import("fs");
     const src = join7(gorMobileRoot(), "templates", "agents");
@@ -1095,8 +1130,8 @@ async function step6Agents(ctx) {
   }
   ctx.counts.agents = total;
 }
-async function step7ClaudeMd(ctx) {
-  runStep(7, "CLAUDE.md managed section");
+async function step8ClaudeMd(ctx) {
+  runStep(8, "CLAUDE.md managed section");
   if (ctx.opts.dryRun) {
     progressItem(1, 1, "write managed section", "skip", "dry-run");
     return;
@@ -1104,13 +1139,13 @@ async function step7ClaudeMd(ctx) {
   writeClaudeMdSection(join7(gorMobileRoot(), "templates", "claude-md-snippet.md"));
   progressItem(1, 1, "write managed section", "ok", "~/.claude/CLAUDE.md");
 }
-async function step8Summary(ctx) {
+async function step9Summary(ctx) {
   if (ctx.opts.skipSanity) {
-    runStep(8, "Summary");
+    runStep(9, "Summary");
     log.info("Skipped (--skip-sanity)");
     return;
   }
-  runStep(8, "Summary");
+  runStep(9, "Summary");
   const skills = existsSync8(CLAUDE_SKILLS_DIR) ? (await import("fs")).readdirSync(CLAUDE_SKILLS_DIR).filter((n) => n.startsWith("gor-mobile-")).length : 0;
   const agents = existsSync8(CLAUDE_AGENTS_DIR) ? (await import("fs")).readdirSync(CLAUDE_AGENTS_DIR).filter((n) => n.endsWith(".md")).length : 0;
   progressItem(1, 4, "Skills", skills > 0 ? "ok" : "warn", String(skills));
@@ -1135,12 +1170,13 @@ async function cmdInit(opts = {}) {
   try {
     await step1Deps(ctx);
     await step2Android(ctx);
-    await step3Rules(ctx);
-    await step4Hooks(ctx);
-    await step5Skills(ctx);
-    await step6Agents(ctx);
-    await step7ClaudeMd(ctx);
-    await step8Summary(ctx);
+    await step3AstIndex(ctx);
+    await step4Rules(ctx);
+    await step5Hooks(ctx);
+    await step6Skills(ctx);
+    await step7Agents(ctx);
+    await step8ClaudeMd(ctx);
+    await step9Summary(ctx);
   } catch (err) {
     if (isCancel4(err)) {
       cancel4("Cancelled");
@@ -1293,6 +1329,12 @@ async function cmdDoctor(opts = {}) {
   if (!androidCliPath()) {
     log.info("  \u2192 run 'gor-mobile init' to install android CLI (hard-mandatory after v0.1.0)");
   }
+  reportDep("ast-index", astIndexPath(), false);
+  if (!astIndexPath()) {
+    log.info(
+      "  \u2192 install: brew tap defendend/ast-index && brew install ast-index"
+    );
+  }
   log.step("Claude Code integration");
   checkFile(CLAUDE_SETTINGS, "settings.json");
   checkHooks();
@@ -1307,6 +1349,12 @@ async function cmdDoctor(opts = {}) {
     log.ok("gor-mobile-using-android-cli bridge skill installed");
   } else if (androidCliPath()) {
     log.warn("gor-mobile-using-android-cli skill missing \u2014 run 'gor-mobile repair'");
+  }
+  const astIndexSkillPath = join8(CLAUDE_SKILLS_DIR, "gor-mobile-ast-index", "SKILL.md");
+  if (existsSync9(astIndexSkillPath)) {
+    log.ok("gor-mobile-ast-index skill installed");
+  } else {
+    log.warn("gor-mobile-ast-index skill missing \u2014 run 'gor-mobile repair'");
   }
   checkClaudeMdSection();
   log.step("Rules pack");

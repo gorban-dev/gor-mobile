@@ -6,6 +6,7 @@ import { isTuiOn } from "./tui-mode.js";
 const BULLETS = [
   "Check base deps (git, curl, node).",
   "Install (via curl) + initialize the Google Android CLI; drops ~/.claude/skills/android-cli/ SKILL.md.",
+  "Soft-check the ast-index CLI; warn + install hint if missing.",
   "Clone the architecture rules pack into ~/.gor-mobile/rules/.",
   "Merge SessionStart + UserPromptSubmit hooks into ~/.claude/settings.json.",
   "Install 14 gor-mobile-* skills into ~/.claude/skills/.",

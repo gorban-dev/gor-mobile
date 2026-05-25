@@ -50,4 +50,18 @@ this phase. Invoke `[[gor-mobile-using-android-cli]]` to get the
 phase→command map. That bridge skill is authoritative for Android
 device ops, replacing direct `adb` / `./gradlew` invocations.
 
+### Codebase exploration — ast-index first
+
+During the "Explore project context" checklist step, prefer the
+`[[gor-mobile-ast-index]]` skill over `Grep`/`Read` for any structural
+query (class layout, conventions, hot files, module dependencies).
+Use:
+
+- `ast-index map` — to understand module shape before asking questions.
+- `ast-index conventions` — to detect naming/architecture patterns the
+  spec must align with.
+- `ast-index search "<term>"` — for ad-hoc lookups during clarification.
+
+If `ast-index` is not installed or returns empty, fall back to `Grep`.
+
 <!-- END gor-mobile overlay -->

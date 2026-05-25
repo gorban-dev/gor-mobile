@@ -22,6 +22,11 @@ import {
 import { writeClaudeMdSection } from "../helpers/claude-md-section.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import {
+  AST_INDEX_INSTALL_SNIPPET,
+  AST_INDEX_REPO_URL,
+  astIndexPath
+} from "../helpers/ast-index.js";
+import {
   cleanupLegacyAgents,
   cleanupLegacyCommands,
   copyHookTemplates,
@@ -60,7 +65,7 @@ export interface InitOptions {
   rules?: string;
 }
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 
 interface RunCtx {
   mode: WizardMode;
@@ -197,8 +202,39 @@ async function step2Android(ctx: RunCtx): Promise<void> {
   await runAndroidInitStep();
 }
 
-async function step3Rules(ctx: RunCtx): Promise<void> {
-  runStep(3, "Rules pack");
+async function step3AstIndex(ctx: RunCtx): Promise<void> {
+  runStep(3, "ast-index CLI (code search)");
+
+  if (ctx.opts.dryRun) {
+    progressItem(1, 1, "ast-index CLI", "skip", "dry-run: which ast-index");
+    return;
+  }
+
+  const path = astIndexPath();
+  if (path) {
+    progressItem(1, 1, "ast-index CLI", "ok", path);
+    return;
+  }
+
+  progressItem(1, 1, "ast-index CLI", "warn", "not found");
+  const body = [
+    "ast-index is recommended for fast structural code search in",
+    "Android/Kotlin/Java projects. gor-mobile installs the skill",
+    "(gor-mobile-ast-index) regardless — but search commands will",
+    "only work once the CLI is installed.",
+    "",
+    "Install (Homebrew):",
+    `  ${AST_INDEX_INSTALL_SNIPPET}`,
+    "",
+    `Other install options: ${AST_INDEX_REPO_URL}`,
+    "",
+    "Re-run 'gor-mobile doctor' after install to verify."
+  ].join("\n");
+  note(body, "ast-index recommended");
+}
+
+async function step4Rules(ctx: RunCtx): Promise<void> {
+  runStep(4, "Rules pack");
 
   if (ctx.mode === "advanced" && !ctx.opts.rules) {
     ctx.rulesUrl = await textPrompt(
@@ -243,8 +279,8 @@ async function step3Rules(ctx: RunCtx): Promise<void> {
   progressItem(2, 2, "save config", "ok", GOR_MOBILE_RULES_DIR);
 }
 
-async function step4Hooks(ctx: RunCtx): Promise<void> {
-  runStep(4, "SessionStart + UserPromptSubmit hooks");
+async function step5Hooks(ctx: RunCtx): Promise<void> {
+  runStep(5, "SessionStart + UserPromptSubmit hooks");
 
   if (ctx.opts.dryRun) {
     progressItem(1, 4, "copy session-start-hook.sh", "skip", "dry-run");
@@ -265,8 +301,8 @@ async function step4Hooks(ctx: RunCtx): Promise<void> {
   ctx.counts.hooks = 2;
 }
 
-async function step5Skills(ctx: RunCtx): Promise<void> {
-  runStep(5, "Skills → ~/.claude/skills/gor-mobile-*/");
+async function step6Skills(ctx: RunCtx): Promise<void> {
+  runStep(6, "Skills → ~/.claude/skills/gor-mobile-*/");
 
   if (ctx.opts.dryRun) {
     const { readdirSync } = await import("node:fs");
@@ -300,8 +336,8 @@ async function step5Skills(ctx: RunCtx): Promise<void> {
   ctx.counts.skills = total;
 }
 
-async function step6Agents(ctx: RunCtx): Promise<void> {
-  runStep(6, "Agents → ~/.claude/agents/");
+async function step7Agents(ctx: RunCtx): Promise<void> {
+  runStep(7, "Agents → ~/.claude/agents/");
 
   if (ctx.opts.dryRun) {
     const { readdirSync } = await import("node:fs");
@@ -328,8 +364,8 @@ async function step6Agents(ctx: RunCtx): Promise<void> {
   ctx.counts.agents = total;
 }
 
-async function step7ClaudeMd(ctx: RunCtx): Promise<void> {
-  runStep(7, "CLAUDE.md managed section");
+async function step8ClaudeMd(ctx: RunCtx): Promise<void> {
+  runStep(8, "CLAUDE.md managed section");
 
   if (ctx.opts.dryRun) {
     progressItem(1, 1, "write managed section", "skip", "dry-run");
@@ -340,13 +376,13 @@ async function step7ClaudeMd(ctx: RunCtx): Promise<void> {
   progressItem(1, 1, "write managed section", "ok", "~/.claude/CLAUDE.md");
 }
 
-async function step8Summary(ctx: RunCtx): Promise<void> {
+async function step9Summary(ctx: RunCtx): Promise<void> {
   if (ctx.opts.skipSanity) {
-    runStep(8, "Summary");
+    runStep(9, "Summary");
     log.info("Skipped (--skip-sanity)");
     return;
   }
-  runStep(8, "Summary");
+  runStep(9, "Summary");
 
   const skills = existsSync(CLAUDE_SKILLS_DIR)
     ? (await import("node:fs")).readdirSync(CLAUDE_SKILLS_DIR).filter((n) => n.startsWith("gor-mobile-"))
@@ -368,8 +404,8 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
 
   // 1. Banner + what-will-happen.
   // 2. Mode select (QuickStart vs Advanced — the only behavioural
-  //    difference is whether step 3 prompts to override the rules URL).
-  // 3. Run all 8 steps in sequence, no per-step confirm.
+  //    difference is whether step 4 prompts to override the rules URL).
+  // 3. Run all 9 steps in sequence, no per-step confirm.
   await welcome(Boolean(opts.yes));
 
   const mode: WizardMode = opts.advanced
@@ -393,12 +429,13 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   try {
     await step1Deps(ctx);
     await step2Android(ctx);
-    await step3Rules(ctx);
-    await step4Hooks(ctx);
-    await step5Skills(ctx);
-    await step6Agents(ctx);
-    await step7ClaudeMd(ctx);
-    await step8Summary(ctx);
+    await step3AstIndex(ctx);
+    await step4Rules(ctx);
+    await step5Hooks(ctx);
+    await step6Skills(ctx);
+    await step7Agents(ctx);
+    await step8ClaudeMd(ctx);
+    await step9Summary(ctx);
   } catch (err) {
     if (isCancel(err as unknown)) {
       cancel("Cancelled");

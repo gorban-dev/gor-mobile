@@ -56,4 +56,18 @@ this phase. Invoke `[[gor-mobile-using-android-cli]]` to get the
 phase→command map. That bridge skill is authoritative for Android
 device ops, replacing direct `adb` / `./gradlew` invocations.
 
+### Entry-point lookup — ast-index first
+
+Before editing code for a task, locate the entry points via
+`[[gor-mobile-ast-index]]`:
+
+- `ast-index symbol "<Name>"` — exact class/function lookup.
+- `ast-index class "<Name>"` — class definition + supertype chain.
+- `ast-index usages "<Symbol>"` — every caller, for impact analysis.
+- `ast-index implementations "<Interface>"` — concrete classes for an
+  interface (useful before adding a new variant).
+
+Run this BEFORE `Grep`. The structured output narrows the file set you
+need to read.
+
 <!-- END gor-mobile overlay -->

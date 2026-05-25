@@ -12,3 +12,13 @@
   authoritative via `[[gor-mobile-using-android-cli]]`.
 - Never install Android APKs via `adb install` directly — `android run`
   replaces it.
+
+## Code search (managed by gor-mobile)
+
+- Use `[[gor-mobile-ast-index]]` (and the `ast-index` CLI) before
+  `Grep`/`Read` for any structural lookup — classes, symbols, usages,
+  call hierarchies. ast-index is 17-69× faster than `grep` and returns
+  structured results.
+- If `.claude/rules/ast-index.md` is missing in an Android repo, run
+  the upstream slash command `/ast-index:initialize-android` once
+  before searching.

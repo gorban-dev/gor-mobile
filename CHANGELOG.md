@@ -2,6 +2,32 @@
 
 ## 0.2.0 — Unreleased
 
+- add: `ast-index` integration. `gor-mobile init` gains a new step 3 of 9
+  (soft check: `which ast-index`) — a missing CLI prints a `warn` and
+  the install hint, init continues. A bundled skill
+  `gor-mobile-ast-index` ships at
+  `~/.claude/skills/gor-mobile-ast-index/SKILL.md` (verbatim upstream
+  body v3.29.1 + Android-scoped tail overlay; `references/` carries
+  only `android-commands.md` and `module-commands.md`). The three
+  process overlays `brainstorming`, `executing-plans`, and
+  `systematic-debugging` now instruct Claude to reach for `ast-index`
+  before `Grep`/`Read`. Project-level setup (`.claude/rules/ast-index.md`,
+  initial `ast-index rebuild`) stays the upstream plugin's job —
+  `gor-mobile` does NOT write into any project's `.claude/`. Install the
+  CLI separately: `brew tap defendend/ast-index && brew install ast-index`
+  (see https://github.com/defendend/Claude-ast-index-search). Existing
+  users: run `gor-mobile repair` after upgrade to pick up the new skill
+  and refreshed overlays.
+- add: `doctor` now reports `ast-index` CLI presence (in Environment,
+  status `optional`) and `gor-mobile-ast-index` skill presence (in
+  Claude Code integration); both fall back to `warn` with the standard
+  `run 'gor-mobile repair'` / brew-tap hint when missing.
+- add: the global `~/.claude/CLAUDE.md` managed snippet gains a new
+  "Code search (managed by gor-mobile)" rule pointing at
+  `[[gor-mobile-ast-index]]` and the `ast-index` CLI. The block is
+  inside the existing managed-section markers and is removed cleanly
+  by `gor-mobile uninstall`.
+
 - change: Google Android CLI install is now **hard-mandatory** in
   `gor-mobile init` step 2. Declining the install, an install failure,
   or running on an unsupported platform (anything outside

@@ -14,6 +14,7 @@ import {
 import { androidCliSkillInstalled } from "../helpers/android-cli.js";
 import { hasManagedHook } from "../helpers/settings-merge.js";
 import { androidCliPath, which } from "../helpers/deps.js";
+import { astIndexPath } from "../helpers/ast-index.js";
 import { readManifest } from "../helpers/rules-pack.js";
 import { log } from "../ui/log.js";
 
@@ -163,6 +164,12 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   if (!androidCliPath()) {
     log.info("  → run 'gor-mobile init' to install android CLI (hard-mandatory after v0.1.0)");
   }
+  reportDep("ast-index", astIndexPath(), false);
+  if (!astIndexPath()) {
+    log.info(
+      "  → install: brew tap defendend/ast-index && brew install ast-index"
+    );
+  }
 
   log.step("Claude Code integration");
   checkFile(CLAUDE_SETTINGS, "settings.json");
@@ -178,6 +185,12 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
     log.ok("gor-mobile-using-android-cli bridge skill installed");
   } else if (androidCliPath()) {
     log.warn("gor-mobile-using-android-cli skill missing — run 'gor-mobile repair'");
+  }
+  const astIndexSkillPath = join(CLAUDE_SKILLS_DIR, "gor-mobile-ast-index", "SKILL.md");
+  if (existsSync(astIndexSkillPath)) {
+    log.ok("gor-mobile-ast-index skill installed");
+  } else {
+    log.warn("gor-mobile-ast-index skill missing — run 'gor-mobile repair'");
   }
   checkClaudeMdSection();
 
