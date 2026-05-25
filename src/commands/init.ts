@@ -17,7 +17,10 @@ import {
   ANDROID_CLI_INSTALL_URL,
   androidCliInstallSupported,
   installAndroidCli,
-  runAndroidInit
+  installAndroidCliViaBrew,
+  runAndroidInit,
+  smokeTestContract,
+  tryBrewUpgrade
 } from "../helpers/android-cli.js";
 import { writeClaudeMdSection } from "../helpers/claude-md-section.js";
 import { androidCliPath, which } from "../helpers/deps.js";
@@ -115,12 +118,26 @@ async function runAndroidInitStep(): Promise<void> {
   if (res.skillInstalled) {
     progressItem(2, 2, "initialize android skills", "ok", "~/.claude/skills/android-cli/");
     log.info(
-      "Browse Google's skill catalog — run 'gor-mobile android-skills' to install optional skills (navigation-3, edge-to-edge, r8-analyzer, …)."
+      "Browse Google's skill catalog — run 'gor-mobile android-skills' to install optional skills."
     );
   } else if (res.error) {
     throw new Error(`android init failed: ${res.error}`);
   } else {
     throw new Error("android init succeeded but android-cli skill not found");
+  }
+
+  const smoke = await smokeTestContract();
+  if (!smoke.ok && smoke.belowFloor) {
+    log.warn(`android CLI v${smoke.version ?? "?"} below floor — attempting brew upgrade`);
+    await tryBrewUpgrade();
+  }
+  const after = await smokeTestContract();
+  if (after.missing.length > 0) {
+    log.warn(`android CLI is missing contract commands: ${after.missing.join(", ")} — update gor-mobile`);
+  } else if (after.belowFloor) {
+    log.warn(`android CLI contract commands present but v${after.version ?? "?"} still below floor — update gor-mobile`);
+  } else {
+    log.ok(`android CLI contract OK (v${after.version ?? "?"})`);
   }
 }
 
@@ -156,7 +173,9 @@ async function step2Android(ctx: RunCtx): Promise<void> {
   const displayCmd =
     process.platform === "win32"
       ? `curl -fsSL ${ANDROID_CLI_INSTALL_URL} -o "%TEMP%\\gm-android-i.cmd" && "%TEMP%\\gm-android-i.cmd"`
-      : `curl -fsSL ${ANDROID_CLI_INSTALL_URL} | bash`;
+      : process.platform === "darwin"
+        ? "brew tap android/tap && brew install android-cli"
+        : `curl -fsSL ${ANDROID_CLI_INSTALL_URL} | bash`;
 
   const body = [
     "The Google Android CLI is required by gor-mobile and is not yet",
@@ -173,8 +192,8 @@ async function step2Android(ctx: RunCtx): Promise<void> {
     "Install command (from Google):",
     `  ${displayCmd}`,
     "",
-    "This downloads a ~5 MB launcher into /usr/local/bin/android",
-    "(sudo may be required). The launcher fetches the full CLI on",
+    "This installs a ~5 MB launcher into ~/.local/bin/android",
+    "(user-local, no sudo). The launcher fetches the full CLI on",
     "first run."
   ].join("\n");
   note(body, "Android CLI required");
@@ -193,7 +212,12 @@ async function step2Android(ctx: RunCtx): Promise<void> {
     throw new Error("user declined Android CLI install — gor-mobile cannot continue");
   }
 
-  const res = await installAndroidCli();
+  let res = process.platform === "darwin" && which("brew") !== null
+    ? await installAndroidCliViaBrew()
+    : { installed: false as const, error: undefined };
+  if (!res.installed) {
+    res = await installAndroidCli();
+  }
   if (!res.installed) {
     progressItem(1, 2, "android CLI", "fail", res.error ?? "install failed");
     throw new Error(`Android CLI install failed: ${res.error ?? "unknown error"}`);

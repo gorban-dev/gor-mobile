@@ -11,7 +11,8 @@ import {
   GOR_MOBILE_RULES_DIR,
   SECTION_BEGIN
 } from "../constants.js";
-import { androidCliSkillInstalled } from "../helpers/android-cli.js";
+import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-cli.js";
+import { ANDROID_CONTRACT } from "../android-contract.js";
 import { hasManagedHook } from "../helpers/settings-merge.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
@@ -154,6 +155,39 @@ function verboseSkillsFrontmatter(): void {
   }
 }
 
+async function checkAndroidContract(): Promise<void> {
+  const smoke = await smokeTestContract();
+  if (smoke.version === null) {
+    log.warn("android CLI version unreadable — run 'gor-mobile repair'");
+    return;
+  }
+  if (smoke.missing.length > 0) {
+    log.err(`android CLI missing contract commands: ${smoke.missing.join(", ")} — update gor-mobile`);
+  } else if (smoke.belowFloor) {
+    log.warn(`android CLI v${smoke.version} is below floor — run 'gor-mobile init' to upgrade`);
+  } else {
+    log.ok(`android CLI contract OK (v${smoke.version}, ${ANDROID_CONTRACT.length} commands)`);
+  }
+}
+
+function verboseContractLint(): void {
+  const skill = join(CLAUDE_SKILLS_DIR, "gor-mobile-using-android-cli", "SKILL.md");
+  if (!existsSync(skill)) {
+    log.warn("bridge skill missing — cannot lint contract");
+    return;
+  }
+  const text = readFileSync(skill, "utf8");
+  const mentioned = new Set<string>();
+  const re = /`android ([a-z-]+(?: [a-z-]+)?)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) mentioned.add(m[1]!);
+  const known = new Set(ANDROID_CONTRACT.map((c) => c.command.join(" ")));
+  const knownTopLevel = new Set(ANDROID_CONTRACT.map((c) => c.command[0]!));
+  const stray = [...mentioned].filter((cmd) => !known.has(cmd) && !knownTopLevel.has(cmd.split(" ")[0]!));
+  if (stray.length === 0) log.ok(`bridge skill ↔ contract in sync (${mentioned.size} cmds referenced)`);
+  else log.warn(`bridge skill references commands NOT in contract: ${stray.join(", ")}`);
+}
+
 export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   log.step("Environment");
   reportDep("brew", which("brew"), false);
@@ -163,6 +197,8 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   reportDep("android", androidCliPath(), true);
   if (!androidCliPath()) {
     log.info("  → run 'gor-mobile init' to install android CLI (hard-mandatory after v0.1.0)");
+  } else {
+    await checkAndroidContract();
   }
   reportDep("ast-index", astIndexPath(), false);
   if (!astIndexPath()) {
@@ -205,6 +241,7 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
     await verboseHookEmulation();
     log.step("Skills frontmatter (verbose)");
     verboseSkillsFrontmatter();
+    verboseContractLint();
   }
 
   console.error("");

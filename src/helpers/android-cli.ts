@@ -3,6 +3,8 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { execa } from "execa";
 import { CLAUDE_SKILLS_DIR } from "../constants.js";
+import { ANDROID_CLI_FLOOR, requiredTopLevelCommands } from "../android-contract.js";
+import { meetsFloor } from "./version.js";
 import { androidCliPath } from "./deps.js";
 
 const DARWIN_ARM64_FALLBACK_URL =
@@ -268,5 +270,75 @@ export async function runAndroidInit(): Promise<AndroidInitResult> {
       skillInstalled: existsSync(skillPath),
       error: (err as Error).message
     };
+  }
+}
+
+/** Read `android --version` → "1.0.0" (first token). null if CLI missing/broken. */
+export async function androidCliVersion(): Promise<string | null> {
+  const cli = androidCliPath();
+  if (!cli) return null;
+  try {
+    const res = await execa(cli, ["--version"], { reject: false, timeout: 30_000 });
+    if (res.exitCode !== 0) return null;
+    const m = res.stdout.trim().split(/\s+/)[0];
+    return m && /\d/.test(m) ? m : null;
+  } catch {
+    return null;
+  }
+}
+
+/** macOS official channel: brew tap android/tap + cask android-cli. */
+export async function installAndroidCliViaBrew(): Promise<AndroidInstallResult> {
+  if (process.platform !== "darwin") {
+    return { installed: false, error: "brew path is macOS-only; use platform channel" };
+  }
+  try {
+    const tap = await execa("brew", ["tap", "android/tap"], { stdio: "inherit", reject: false, timeout: 120_000 });
+    if (tap.exitCode !== 0) return { installed: false, error: `brew tap exit ${tap.exitCode}` };
+    const inst = await execa("brew", ["install", "android-cli"], { stdio: "inherit", reject: false, timeout: 300_000 });
+    if (inst.exitCode !== 0) return { installed: false, error: `brew install exit ${inst.exitCode}` };
+    return { installed: androidCliPath() !== null };
+  } catch (err) {
+    return { installed: false, error: (err as Error).message };
+  }
+}
+
+export interface SmokeResult {
+  ok: boolean;
+  version: string | null;
+  belowFloor: boolean;
+  missing: string[]; // required commands absent from `android help`
+}
+
+/** Validate the capability contract against the installed CLI (REQ-4/5). */
+export async function smokeTestContract(): Promise<SmokeResult> {
+  const cli = androidCliPath();
+  const version = await androidCliVersion();
+  if (!cli) return { ok: false, version: null, belowFloor: false, missing: [] };
+
+  const belowFloor = version ? !meetsFloor(version, ANDROID_CLI_FLOOR) : true;
+
+  // REQ-5: existence only. `android help` lists all top-level commands.
+  let helpText = "";
+  try {
+    const res = await execa(cli, ["help"], { reject: false, timeout: 60_000 });
+    helpText = `${res.stdout}\n${res.stderr}`;
+  } catch {
+    helpText = "";
+  }
+  const missing = requiredTopLevelCommands().filter(
+    (cmd) => !new RegExp(`(^|\\s)${cmd}(\\s|$)`, "m").test(helpText)
+  );
+  return { ok: missing.length === 0 && !belowFloor, version, belowFloor, missing };
+}
+
+/** REQ-6 remediation: try brew upgrade to latest, then re-smoke. macOS only. */
+export async function tryBrewUpgrade(): Promise<boolean> {
+  if (process.platform !== "darwin") return false;
+  try {
+    const res = await execa("brew", ["upgrade", "android-cli"], { stdio: "inherit", reject: false, timeout: 300_000 });
+    return res.exitCode === 0;
+  } catch {
+    return false;
   }
 }

@@ -68,6 +68,16 @@
   by the existing managed-section markers and is removed cleanly by
   `gor-mobile uninstall`.
 
+- change: Android CLI integration redesigned around a **capability contract** (command
+  names + `>= 1.0.0` floor) instead of version pinning — Google ships android CLI
+  as always-latest, so a pin is neither possible nor aligned with their model.
+- change: Install now uses the official Homebrew tap (`brew tap android/tap`) on macOS.
+- change: Bridge skill `using-android-cli` rewritten as a thin orchestrator: no
+  duplicated flags, no hardcoded skill catalog, no deep-links into the stock skill.
+- change: `doctor` now validates the contract (floor + command existence + skill↔contract lint).
+
+**Requires `gor-mobile repair`** to pick up the rewritten bridge skill.
+
 ## 0.1.0 — 2026-05-14
 
 First tagged release.

@@ -51,6 +51,52 @@ import { homedir as homedir2 } from "os";
 import { dirname as dirname2, join as join3 } from "path";
 import { execa } from "execa";
 
+// src/android-contract.ts
+var ANDROID_CLI_FLOOR = "1.0.0";
+var ANDROID_CONTRACT = [
+  { command: ["describe"], phase: "plan", purpose: "JSON metadata: build targets + APK paths" },
+  { command: ["info"], phase: "plan", purpose: "SDK location / environment" },
+  { command: ["run"], phase: "execute", purpose: "deploy + launch APK (replaces adb install)" },
+  { command: ["sdk", "list"], phase: "execute", purpose: "installed vs available SDK packages" },
+  { command: ["sdk", "install"], phase: "execute", purpose: "pull a missing platform" },
+  { command: ["screen", "capture"], phase: "verify", purpose: "device screenshot (PNG)" },
+  { command: ["screen", "resolve"], phase: "verify", purpose: "annotated-label \u2192 tap coords" },
+  { command: ["layout"], phase: "verify", purpose: "UI tree as JSON" },
+  { command: ["emulator", "list"], phase: "execute", purpose: "list AVDs" },
+  { command: ["emulator", "start"], phase: "execute", purpose: "boot an AVD" },
+  { command: ["docs", "search"], phase: "research", purpose: "search authoritative Android docs" },
+  { command: ["docs", "fetch"], phase: "research", purpose: "fetch a doc article" },
+  { command: ["skills", "list"], phase: "meta", purpose: "browse Google's optional skill catalog" },
+  { command: ["skills", "add"], phase: "meta", purpose: "install an optional Google skill" },
+  { command: ["skills", "remove"], phase: "meta", purpose: "remove an optional Google skill" },
+  { command: ["init"], phase: "meta", purpose: "install the stock android-cli skill" },
+  // studio group — conditional: needs a running Android Studio (Quail+) instance.
+  { command: ["studio", "analyze-file"], phase: "debug", purpose: "IDE-level file inspection", conditional: true },
+  { command: ["studio", "render-compose-preview"], phase: "debug", purpose: "render a Compose preview", conditional: true },
+  { command: ["studio", "find-declaration"], phase: "plan", purpose: "semantic declaration lookup (after ast-index)", conditional: true },
+  { command: ["studio", "find-usages"], phase: "plan", purpose: "semantic usage lookup (after ast-index)", conditional: true },
+  { command: ["studio", "version-lookup"], phase: "research", purpose: "latest Maven/Android versions", conditional: true }
+];
+function requiredTopLevelCommands() {
+  return [...new Set(ANDROID_CONTRACT.filter((c) => !c.conditional).map((c) => c.command[0]))];
+}
+
+// src/helpers/version.ts
+function compareVersions(a, b) {
+  const pa = a.split(".").map((s) => parseInt(s, 10) || 0);
+  const pb = b.split(".").map((s) => parseInt(s, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const x = pa[i] ?? 0;
+    const y = pb[i] ?? 0;
+    if (x !== y) return x - y;
+  }
+  return 0;
+}
+function meetsFloor(installed, floor) {
+  return compareVersions(installed, floor) >= 0;
+}
+
 // src/helpers/deps.ts
 import { accessSync, constants } from "fs";
 import { delimiter, join as join2 } from "path";
@@ -259,6 +305,59 @@ async function runAndroidInit() {
       skillInstalled: existsSync(skillPath),
       error: err.message
     };
+  }
+}
+async function androidCliVersion() {
+  const cli = androidCliPath();
+  if (!cli) return null;
+  try {
+    const res = await execa(cli, ["--version"], { reject: false, timeout: 3e4 });
+    if (res.exitCode !== 0) return null;
+    const m = res.stdout.trim().split(/\s+/)[0];
+    return m && /\d/.test(m) ? m : null;
+  } catch {
+    return null;
+  }
+}
+async function installAndroidCliViaBrew() {
+  if (process.platform !== "darwin") {
+    return { installed: false, error: "brew path is macOS-only; use platform channel" };
+  }
+  try {
+    const tap = await execa("brew", ["tap", "android/tap"], { stdio: "inherit", reject: false, timeout: 12e4 });
+    if (tap.exitCode !== 0) return { installed: false, error: `brew tap exit ${tap.exitCode}` };
+    const inst = await execa("brew", ["install", "android-cli"], { stdio: "inherit", reject: false, timeout: 3e5 });
+    if (inst.exitCode !== 0) return { installed: false, error: `brew install exit ${inst.exitCode}` };
+    return { installed: androidCliPath() !== null };
+  } catch (err) {
+    return { installed: false, error: err.message };
+  }
+}
+async function smokeTestContract() {
+  const cli = androidCliPath();
+  const version = await androidCliVersion();
+  if (!cli) return { ok: false, version: null, belowFloor: false, missing: [] };
+  const belowFloor = version ? !meetsFloor(version, ANDROID_CLI_FLOOR) : true;
+  let helpText = "";
+  try {
+    const res = await execa(cli, ["help"], { reject: false, timeout: 6e4 });
+    helpText = `${res.stdout}
+${res.stderr}`;
+  } catch {
+    helpText = "";
+  }
+  const missing = requiredTopLevelCommands().filter(
+    (cmd) => !new RegExp(`(^|\\s)${cmd}(\\s|$)`, "m").test(helpText)
+  );
+  return { ok: missing.length === 0 && !belowFloor, version, belowFloor, missing };
+}
+async function tryBrewUpgrade() {
+  if (process.platform !== "darwin") return false;
+  try {
+    const res = await execa("brew", ["upgrade", "android-cli"], { stdio: "inherit", reject: false, timeout: 3e5 });
+    return res.exitCode === 0;
+  } catch {
+    return false;
   }
 }
 
@@ -917,12 +1016,25 @@ async function runAndroidInitStep() {
   if (res.skillInstalled) {
     progressItem(2, 2, "initialize android skills", "ok", "~/.claude/skills/android-cli/");
     log.info(
-      "Browse Google's skill catalog \u2014 run 'gor-mobile android-skills' to install optional skills (navigation-3, edge-to-edge, r8-analyzer, \u2026)."
+      "Browse Google's skill catalog \u2014 run 'gor-mobile android-skills' to install optional skills."
     );
   } else if (res.error) {
     throw new Error(`android init failed: ${res.error}`);
   } else {
     throw new Error("android init succeeded but android-cli skill not found");
+  }
+  const smoke = await smokeTestContract();
+  if (!smoke.ok && smoke.belowFloor) {
+    log.warn(`android CLI v${smoke.version ?? "?"} below floor \u2014 attempting brew upgrade`);
+    await tryBrewUpgrade();
+  }
+  const after = await smokeTestContract();
+  if (after.missing.length > 0) {
+    log.warn(`android CLI is missing contract commands: ${after.missing.join(", ")} \u2014 update gor-mobile`);
+  } else if (after.belowFloor) {
+    log.warn(`android CLI contract commands present but v${after.version ?? "?"} still below floor \u2014 update gor-mobile`);
+  } else {
+    log.ok(`android CLI contract OK (v${after.version ?? "?"})`);
   }
 }
 async function step2Android(ctx) {
@@ -951,7 +1063,7 @@ async function step2Android(ctx) {
     note(body2, "Android CLI required");
     throw new Error(`platform ${process.platform}/${process.arch} unsupported by Google Android CLI`);
   }
-  const displayCmd = process.platform === "win32" ? `curl -fsSL ${ANDROID_CLI_INSTALL_URL} -o "%TEMP%\\gm-android-i.cmd" && "%TEMP%\\gm-android-i.cmd"` : `curl -fsSL ${ANDROID_CLI_INSTALL_URL} | bash`;
+  const displayCmd = process.platform === "win32" ? `curl -fsSL ${ANDROID_CLI_INSTALL_URL} -o "%TEMP%\\gm-android-i.cmd" && "%TEMP%\\gm-android-i.cmd"` : process.platform === "darwin" ? "brew tap android/tap && brew install android-cli" : `curl -fsSL ${ANDROID_CLI_INSTALL_URL} | bash`;
   const body = [
     "The Google Android CLI is required by gor-mobile and is not yet",
     "installed on this machine.",
@@ -967,8 +1079,8 @@ async function step2Android(ctx) {
     "Install command (from Google):",
     `  ${displayCmd}`,
     "",
-    "This downloads a ~5 MB launcher into /usr/local/bin/android",
-    "(sudo may be required). The launcher fetches the full CLI on",
+    "This installs a ~5 MB launcher into ~/.local/bin/android",
+    "(user-local, no sudo). The launcher fetches the full CLI on",
     "first run."
   ].join("\n");
   note(body, "Android CLI required");
@@ -982,7 +1094,10 @@ async function step2Android(ctx) {
     progressItem(1, 2, "android CLI", "fail", "declined \u2014 gor-mobile requires the Android CLI");
     throw new Error("user declined Android CLI install \u2014 gor-mobile cannot continue");
   }
-  const res = await installAndroidCli();
+  let res = process.platform === "darwin" && which("brew") !== null ? await installAndroidCliViaBrew() : { installed: false, error: void 0 };
+  if (!res.installed) {
+    res = await installAndroidCli();
+  }
   if (!res.installed) {
     progressItem(1, 2, "android CLI", "fail", res.error ?? "install failed");
     throw new Error(`Android CLI install failed: ${res.error ?? "unknown error"}`);
@@ -1319,6 +1434,37 @@ function verboseSkillsFrontmatter() {
     log.warn(`Skills frontmatter: ${bad} of ${count} missing prefix \u2014 run 'gor-mobile repair'`);
   }
 }
+async function checkAndroidContract() {
+  const smoke = await smokeTestContract();
+  if (smoke.version === null) {
+    log.warn("android CLI version unreadable \u2014 run 'gor-mobile repair'");
+    return;
+  }
+  if (smoke.missing.length > 0) {
+    log.err(`android CLI missing contract commands: ${smoke.missing.join(", ")} \u2014 update gor-mobile`);
+  } else if (smoke.belowFloor) {
+    log.warn(`android CLI v${smoke.version} is below floor \u2014 run 'gor-mobile init' to upgrade`);
+  } else {
+    log.ok(`android CLI contract OK (v${smoke.version}, ${ANDROID_CONTRACT.length} commands)`);
+  }
+}
+function verboseContractLint() {
+  const skill = join8(CLAUDE_SKILLS_DIR, "gor-mobile-using-android-cli", "SKILL.md");
+  if (!existsSync9(skill)) {
+    log.warn("bridge skill missing \u2014 cannot lint contract");
+    return;
+  }
+  const text = readFileSync5(skill, "utf8");
+  const mentioned = /* @__PURE__ */ new Set();
+  const re = /`android ([a-z-]+(?: [a-z-]+)?)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) mentioned.add(m[1]);
+  const known = new Set(ANDROID_CONTRACT.map((c) => c.command.join(" ")));
+  const knownTopLevel = new Set(ANDROID_CONTRACT.map((c) => c.command[0]));
+  const stray = [...mentioned].filter((cmd) => !known.has(cmd) && !knownTopLevel.has(cmd.split(" ")[0]));
+  if (stray.length === 0) log.ok(`bridge skill \u2194 contract in sync (${mentioned.size} cmds referenced)`);
+  else log.warn(`bridge skill references commands NOT in contract: ${stray.join(", ")}`);
+}
 async function cmdDoctor(opts = {}) {
   log.step("Environment");
   reportDep("brew", which("brew"), false);
@@ -1328,6 +1474,8 @@ async function cmdDoctor(opts = {}) {
   reportDep("android", androidCliPath(), true);
   if (!androidCliPath()) {
     log.info("  \u2192 run 'gor-mobile init' to install android CLI (hard-mandatory after v0.1.0)");
+  } else {
+    await checkAndroidContract();
   }
   reportDep("ast-index", astIndexPath(), false);
   if (!astIndexPath()) {
@@ -1366,6 +1514,7 @@ async function cmdDoctor(opts = {}) {
     await verboseHookEmulation();
     log.step("Skills frontmatter (verbose)");
     verboseSkillsFrontmatter();
+    verboseContractLint();
   }
   console.error("");
   log.info("If anything is missing, run: gor-mobile repair");
