@@ -107,6 +107,21 @@
 
 **Requires `gor-mobile repair`** to pick up the rewritten bridge skill.
 
+## 0.1.1 — 2026-05-18
+
+- fix: UserPromptSubmit hook template no longer breaks on an embedded
+  apostrophe in `user's`. Bash was closing the single-quoted reminder
+  string mid-content, which surfaced as `behalf.: command not found`
+  warnings on every prompt submission (non-blocking, but noisy). The
+  phrasing is now `on behalf of the user`, which carries the same
+  meaning without the quoting hazard. Existing users: run
+  `gor-mobile repair` to pick up the fix.
+- fix: `scripts/release.sh` now bumps `package.json`, `src/constants.ts`,
+  and `README.md` and rebuilds `dist/` before tagging. The previous
+  script referenced a non-existent `lib/constants.sh` path left over from
+  the original bash prototype, and silently failed (`sed: lib/...: No
+  such file or directory`) without bumping anything.
+
 ## 0.1.0 — 2026-05-14
 
 First tagged release.

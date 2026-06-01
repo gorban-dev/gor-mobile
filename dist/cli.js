@@ -12,7 +12,7 @@ import { Command } from "commander";
 import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-var GOR_MOBILE_VERSION = "0.1.0";
+var GOR_MOBILE_VERSION = "0.1.1";
 var HOME = homedir();
 var GOR_MOBILE_HOME = process.env.GOR_MOBILE_HOME ?? join(HOME, ".gor-mobile");
 var GOR_MOBILE_RULES_DIR = join(GOR_MOBILE_HOME, "rules");
@@ -39,11 +39,11 @@ function gorMobileRoot() {
 }
 
 // src/commands/init.ts
-import { existsSync as existsSync8 } from "fs";
+import { existsSync as existsSync9 } from "fs";
 import { join as join7 } from "path";
 import { execa as execa3 } from "execa";
 import pc8 from "picocolors";
-import { cancel as cancel4, isCancel as isCancel4 } from "@clack/prompts";
+import { cancel as cancel5, isCancel as isCancel5 } from "@clack/prompts";
 
 // src/helpers/android-cli.ts
 import { accessSync as accessSync2, constants as constants2, existsSync, rmSync } from "fs";
@@ -453,7 +453,12 @@ import {
 import { basename, join as join4 } from "path";
 function copyHookTemplates() {
   ensureDir(GOR_MOBILE_TEMPLATES_DIR);
-  const names = ["session-start-hook.sh", "user-prompt-submit-hook.sh"];
+  const names = [
+    "session-start-hook.sh",
+    "user-prompt-submit-hook.sh",
+    "statusline-command.sh",
+    "statusline-cat.sh"
+  ];
   for (const name of names) {
     const src = join4(gorMobileRoot(), "templates", name);
     const dst = join4(GOR_MOBILE_TEMPLATES_DIR, name);
@@ -693,6 +698,17 @@ async function gitBranchAndRev() {
 
 // src/helpers/settings-merge.ts
 import { existsSync as existsSync6 } from "fs";
+var HOOK_MARKER = {
+  SessionStart: "templates/session-start-hook.sh",
+  UserPromptSubmit: "templates/user-prompt-submit-hook.sh"
+};
+function isManagedEntry(entry, hookType) {
+  if ((entry._managed_by ?? "") === MANAGED_TAG) return true;
+  const marker = HOOK_MARKER[hookType];
+  return (entry.hooks ?? []).some(
+    (h) => h.type === "command" && h.command.includes(marker)
+  );
+}
 function ensureSettingsFile() {
   ensureParentDir(CLAUDE_SETTINGS);
   if (!existsSync6(CLAUDE_SETTINGS)) {
@@ -703,9 +719,8 @@ function ensureSettingsFile() {
 function upsertHook(hookType, matcher, command) {
   const settings = ensureSettingsFile();
   settings.hooks = settings.hooks ?? {};
-  const previous = (settings.hooks[hookType] ?? []).filter(
-    (entry) => (entry._managed_by ?? "") !== MANAGED_TAG
-  );
+  const existing = settings.hooks[hookType] ?? [];
+  const previous = existing.filter((entry) => !isManagedEntry(entry, hookType));
   const next = {
     _managed_by: MANAGED_TAG,
     matcher,
@@ -713,13 +728,14 @@ function upsertHook(hookType, matcher, command) {
   };
   settings.hooks[hookType] = [...previous, next];
   writeJson(CLAUDE_SETTINGS, settings);
+  return { collapsed: existing.length - previous.length };
 }
 function removeHook(hookType) {
   if (!existsSync6(CLAUDE_SETTINGS)) return;
   const settings = readJsonSafe(CLAUDE_SETTINGS, {});
   if (!settings.hooks || !settings.hooks[hookType]) return;
   const remaining = settings.hooks[hookType].filter(
-    (entry) => (entry._managed_by ?? "") !== MANAGED_TAG
+    (entry) => !isManagedEntry(entry, hookType)
   );
   if (remaining.length === 0) {
     delete settings.hooks[hookType];
@@ -730,22 +746,22 @@ function removeHook(hookType) {
 }
 function installSessionStartHook() {
   const cmd = `bash ${GOR_MOBILE_HOME}/templates/session-start-hook.sh`;
-  upsertHook("SessionStart", "startup|clear|compact|resume", cmd);
+  return upsertHook("SessionStart", "startup|clear|compact|resume", cmd);
 }
 function removeSessionStartHook() {
   removeHook("SessionStart");
 }
 function installUserPromptSubmitHook() {
   const cmd = `bash ${GOR_MOBILE_HOME}/templates/user-prompt-submit-hook.sh`;
-  upsertHook("UserPromptSubmit", "", cmd);
+  return upsertHook("UserPromptSubmit", "", cmd);
 }
 function removeUserPromptSubmitHook() {
   removeHook("UserPromptSubmit");
 }
-function hasManagedHook(hookType) {
+function countManagedHooks(hookType) {
   const settings = readJsonSafe(CLAUDE_SETTINGS, {});
   const entries = settings.hooks?.[hookType] ?? [];
-  return entries.some((e) => (e._managed_by ?? "") === MANAGED_TAG);
+  return entries.filter((e) => isManagedEntry(e, hookType)).length;
 }
 
 // src/ui/confirm-step.ts
@@ -981,8 +997,93 @@ ${label}`);
   }
 };
 
+// src/ui/statusline-select.ts
+import { select as select2, isCancel as isCancel4, cancel as cancel4 } from "@clack/prompts";
+var CLASSIC_PREVIEW = [
+  "Context  \u2501\u2501\u2501\u2501\u2501\u2501\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500  42%  of 200k",
+  "5h limit \u2501\u2501\u2501\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500  18%  resets 14:30  \u25BD off-peak",
+  "7d limit \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2500\u2500\u2500\u2500\u2500\u2500  61%  resets Jun 04 09:00",
+  "(colored in a real terminal)"
+].join("\n");
+var CAT_PREVIEW = [
+  "                          /\\_/\\",
+  "                         ( o.o )",
+  "Sonnet 4.6 (200k) \u25AC\u25AC\u25AC\u25AC\u25AC\u25AC\u25AC\u25AC\u25AC\u25AC\u25AC\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500  42%",
+  "5h \u25AC\u2500\u2500\u2500\u2500\u2500\u2500 18% 14:30 \u25BD off-peak  |  7d \u25AC\u25AC\u25AC\u25AC\u2500\u2500\u2500 61% Jun 04  |  \u23F1 session 1h12m",
+  "(face shifts ^.^ \u2192 o.o \u2192 >.< \u2192 @.@ \u2192 x_x as context fills)"
+].join("\n");
+function showStatusLinePreviews() {
+  note(CLASSIC_PREVIEW, "Classic \u2014 3-line colored bars");
+  note(CAT_PREVIEW, "Cat \u2014 ASCII cat, reacts to context usage");
+}
+async function statusLineSelect(yes) {
+  if (yes || !isTuiOn()) return "skip";
+  showStatusLinePreviews();
+  const pick = await select2({
+    message: "Status line (optional)",
+    options: [
+      { value: "command", label: "Classic", hint: "3-line colored bars" },
+      { value: "cat", label: "Cat", hint: "ASCII cat that reacts to usage" },
+      { value: "skip", label: "Skip", hint: "don't install a status line" }
+    ],
+    initialValue: "skip"
+  });
+  if (isCancel4(pick)) {
+    cancel4("Cancelled");
+    process.exit(0);
+  }
+  return pick;
+}
+
+// src/helpers/settings-statusline.ts
+import { existsSync as existsSync8 } from "fs";
+var SCRIPT_FILE = {
+  command: "statusline-command.sh",
+  cat: "statusline-cat.sh"
+};
+var STATUSLINE_MARKER = "templates/statusline-";
+function isManaged(sl) {
+  if (!sl) return false;
+  if ((sl._managed_by ?? "") === MANAGED_TAG) return true;
+  return typeof sl.command === "string" && sl.command.includes(STATUSLINE_MARKER);
+}
+function variantOf(sl) {
+  if (!sl || typeof sl.command !== "string") return null;
+  if (sl.command.includes(SCRIPT_FILE.cat)) return "cat";
+  if (sl.command.includes(SCRIPT_FILE.command)) return "command";
+  return null;
+}
+function statusLineState() {
+  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
+  const sl = settings.statusLine;
+  const present = Boolean(sl);
+  const managed = isManaged(sl);
+  return { present, managed, foreign: present && !managed, variant: managed ? variantOf(sl) : null };
+}
+function installStatusLine(variant, opts = {}) {
+  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
+  if (settings.statusLine && !isManaged(settings.statusLine) && !opts.force) {
+    return false;
+  }
+  settings.statusLine = {
+    type: "command",
+    command: `bash ${GOR_MOBILE_HOME}/templates/${SCRIPT_FILE[variant]}`,
+    _managed_by: MANAGED_TAG
+  };
+  writeJson(CLAUDE_SETTINGS, settings);
+  return true;
+}
+function removeStatusLine() {
+  if (!existsSync8(CLAUDE_SETTINGS)) return;
+  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
+  if (isManaged(settings.statusLine)) {
+    delete settings.statusLine;
+    writeJson(CLAUDE_SETTINGS, settings);
+  }
+}
+
 // src/commands/init.ts
-var TOTAL_STEPS = 9;
+var TOTAL_STEPS = 10;
 function dryLog(msg) {
   console.log(`    ${pc8.dim("[dry-run]")} ${msg}`);
 }
@@ -1150,7 +1251,7 @@ async function step4Rules(ctx) {
     progressItem(2, 2, "save config", "skip", "dry-run");
     return;
   }
-  const alreadyCloned = existsSync8(join7(GOR_MOBILE_RULES_DIR, ".git"));
+  const alreadyCloned = existsSync9(join7(GOR_MOBILE_RULES_DIR, ".git"));
   if (alreadyCloned) {
     await execa3("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], { reject: false });
     const m = readManifest();
@@ -1197,7 +1298,7 @@ async function step6Skills(ctx) {
   if (ctx.opts.dryRun) {
     const { readdirSync: readdirSync2 } = await import("fs");
     const src = join7(gorMobileRoot(), "templates", "skills");
-    const names = existsSync8(src) ? readdirSync2(src).filter((n) => !n.startsWith(".")) : [];
+    const names = existsSync9(src) ? readdirSync2(src).filter((n) => !n.startsWith(".")) : [];
     for (let i = 0; i < names.length; i++) {
       dryLog(`install skill ${names[i]} (sed + overlay)`);
     }
@@ -1227,7 +1328,7 @@ async function step7Agents(ctx) {
   if (ctx.opts.dryRun) {
     const { readdirSync: readdirSync2 } = await import("fs");
     const src = join7(gorMobileRoot(), "templates", "agents");
-    const files2 = existsSync8(src) ? readdirSync2(src).filter((f) => f.endsWith(".md")) : [];
+    const files2 = existsSync9(src) ? readdirSync2(src).filter((f) => f.endsWith(".md")) : [];
     for (let i = 0; i < files2.length; i++) {
       dryLog(`install agent ${files2[i]}`);
     }
@@ -1254,15 +1355,43 @@ async function step8ClaudeMd(ctx) {
   writeClaudeMdSection(join7(gorMobileRoot(), "templates", "claude-md-snippet.md"));
   progressItem(1, 1, "write managed section", "ok", "~/.claude/CLAUDE.md");
 }
-async function step9Summary(ctx) {
+async function step9StatusLine(ctx) {
+  runStep(9, "Status line (optional)");
+  if (ctx.opts.dryRun) {
+    showStatusLinePreviews();
+    progressItem(1, 1, "status line", "skip", "dry-run: choose Classic / Cat / Skip");
+    return;
+  }
+  const choice = await statusLineSelect(Boolean(ctx.opts.yes));
+  if (choice === "skip") {
+    progressItem(1, 1, "status line", "skip", "not installed");
+    return;
+  }
+  if (!which("jq")) {
+    log.warn("jq not found \u2014 the status line needs jq to render (brew install jq); installing anyway");
+  }
+  const st = statusLineState();
+  let force = false;
+  if (st.foreign) {
+    force = await confirmStep("A non-gor-mobile statusLine already exists. Replace it?", false);
+    if (!force) {
+      progressItem(1, 1, "status line", "skip", "kept your existing statusLine");
+      return;
+    }
+  }
+  installStatusLine(choice, { force });
+  const label = choice === "cat" ? "Cat" : "Classic";
+  progressItem(1, 1, "status line", "ok", `${label} \u2192 ${CLAUDE_SETTINGS}`);
+}
+async function step10Summary(ctx) {
   if (ctx.opts.skipSanity) {
-    runStep(9, "Summary");
+    runStep(10, "Summary");
     log.info("Skipped (--skip-sanity)");
     return;
   }
-  runStep(9, "Summary");
-  const skills = existsSync8(CLAUDE_SKILLS_DIR) ? (await import("fs")).readdirSync(CLAUDE_SKILLS_DIR).filter((n) => n.startsWith("gor-mobile-")).length : 0;
-  const agents = existsSync8(CLAUDE_AGENTS_DIR) ? (await import("fs")).readdirSync(CLAUDE_AGENTS_DIR).filter((n) => n.endsWith(".md")).length : 0;
+  runStep(10, "Summary");
+  const skills = existsSync9(CLAUDE_SKILLS_DIR) ? (await import("fs")).readdirSync(CLAUDE_SKILLS_DIR).filter((n) => n.startsWith("gor-mobile-")).length : 0;
+  const agents = existsSync9(CLAUDE_AGENTS_DIR) ? (await import("fs")).readdirSync(CLAUDE_AGENTS_DIR).filter((n) => n.endsWith(".md")).length : 0;
   progressItem(1, 4, "Skills", skills > 0 ? "ok" : "warn", String(skills));
   progressItem(2, 4, "Agents", agents > 0 ? "ok" : "warn", String(agents));
   progressItem(3, 4, "Hooks", ctx.counts.hooks === 2 ? "ok" : "warn", String(ctx.counts.hooks));
@@ -1291,10 +1420,11 @@ async function cmdInit(opts = {}) {
     await step6Skills(ctx);
     await step7Agents(ctx);
     await step8ClaudeMd(ctx);
-    await step9Summary(ctx);
+    await step9StatusLine(ctx);
+    await step10Summary(ctx);
   } catch (err) {
-    if (isCancel4(err)) {
-      cancel4("Cancelled");
+    if (isCancel5(err)) {
+      cancel5("Cancelled");
       process.exit(130);
     }
     log.err(`init failed: ${err.message}`);
@@ -1310,7 +1440,7 @@ async function cmdInit(opts = {}) {
 }
 
 // src/commands/doctor.ts
-import { existsSync as existsSync9, readFileSync as readFileSync5 } from "fs";
+import { existsSync as existsSync10, readFileSync as readFileSync5 } from "fs";
 import { join as join8 } from "path";
 import { execa as execa4 } from "execa";
 function reportDep(name, path, required) {
@@ -1323,7 +1453,7 @@ function reportDep(name, path, required) {
   }
 }
 function checkFile(path, label) {
-  if (existsSync9(path)) {
+  if (existsSync10(path)) {
     log.ok(`${label} \u2192 ${path}`);
     return true;
   }
@@ -1331,23 +1461,23 @@ function checkFile(path, label) {
   return false;
 }
 function checkHooks() {
-  if (!existsSync9(CLAUDE_SETTINGS)) {
+  if (!existsSync10(CLAUDE_SETTINGS)) {
     log.warn(`No ${CLAUDE_SETTINGS}`);
     return;
   }
-  if (hasManagedHook("SessionStart")) {
-    log.ok("SessionStart hook registered");
-  } else {
-    log.warn("SessionStart hook NOT registered \u2014 run 'gor-mobile repair'");
-  }
-  if (hasManagedHook("UserPromptSubmit")) {
-    log.ok("UserPromptSubmit hook registered");
-  } else {
-    log.warn("UserPromptSubmit hook NOT registered \u2014 run 'gor-mobile repair'");
+  for (const hookType of ["SessionStart", "UserPromptSubmit"]) {
+    const n = countManagedHooks(hookType);
+    if (n === 0) {
+      log.warn(`${hookType} hook NOT registered \u2014 run 'gor-mobile repair'`);
+    } else if (n > 1) {
+      log.warn(`${hookType} has ${n} duplicate managed entries \u2014 run 'gor-mobile repair'`);
+    } else {
+      log.ok(`${hookType} hook registered`);
+    }
   }
 }
 function checkClaudeMdSection() {
-  if (!existsSync9(CLAUDE_CLAUDE_MD)) {
+  if (!existsSync10(CLAUDE_CLAUDE_MD)) {
     log.warn(`${CLAUDE_CLAUDE_MD} does not exist`);
     return;
   }
@@ -1357,8 +1487,19 @@ function checkClaudeMdSection() {
     log.warn("CLAUDE.md managed section missing \u2014 run 'gor-mobile repair'");
   }
 }
+function checkStatusLine() {
+  const st = statusLineState();
+  if (st.managed) {
+    log.ok(`Status line: ${st.variant === "cat" ? "Cat" : "Classic"} (managed)`);
+    if (!which("jq")) {
+      log.warn("  \u2192 status line needs jq to render \u2014 brew install jq");
+    }
+  } else if (st.foreign) {
+    log.info("Status line: custom (not managed by gor-mobile)");
+  }
+}
 function checkRulesPack() {
-  if (!existsSync9(GOR_MOBILE_RULES_DIR)) {
+  if (!existsSync10(GOR_MOBILE_RULES_DIR)) {
     log.warn(`Rules pack not installed (${GOR_MOBILE_RULES_DIR})`);
     return;
   }
@@ -1378,7 +1519,7 @@ async function verboseHookEmulation() {
   ];
   for (const [file, label] of hooks) {
     const path = `${GOR_MOBILE_HOME}/templates/${file}`;
-    if (!existsSync9(path)) {
+    if (!existsSync10(path)) {
       log.warn(`[${label}] template missing: ${path}`);
       continue;
     }
@@ -1409,7 +1550,7 @@ async function verboseHookEmulation() {
   }
 }
 function verboseSkillsFrontmatter() {
-  if (!existsSync9(CLAUDE_SKILLS_DIR)) {
+  if (!existsSync10(CLAUDE_SKILLS_DIR)) {
     log.warn(`${CLAUDE_SKILLS_DIR} missing`);
     return;
   }
@@ -1420,7 +1561,7 @@ function verboseSkillsFrontmatter() {
   for (const entry of readdirSync2(CLAUDE_SKILLS_DIR)) {
     if (!entry.startsWith("gor-mobile-")) continue;
     const skillMd = join14(CLAUDE_SKILLS_DIR, entry, "SKILL.md");
-    if (!existsSync9(skillMd)) continue;
+    if (!existsSync10(skillMd)) continue;
     count++;
     const content = readFileSync5(skillMd, "utf8");
     if (!/^name: gor-mobile-/m.test(content)) {
@@ -1450,7 +1591,7 @@ async function checkAndroidContract() {
 }
 function verboseContractLint() {
   const skill = join8(CLAUDE_SKILLS_DIR, "gor-mobile-using-android-cli", "SKILL.md");
-  if (!existsSync9(skill)) {
+  if (!existsSync10(skill)) {
     log.warn("bridge skill missing \u2014 cannot lint contract");
     return;
   }
@@ -1493,18 +1634,19 @@ async function cmdDoctor(opts = {}) {
     log.warn("android-cli skill missing \u2014 run 'gor-mobile repair'");
   }
   const bridgePath = join8(CLAUDE_SKILLS_DIR, "gor-mobile-using-android-cli", "SKILL.md");
-  if (existsSync9(bridgePath)) {
+  if (existsSync10(bridgePath)) {
     log.ok("gor-mobile-using-android-cli bridge skill installed");
   } else if (androidCliPath()) {
     log.warn("gor-mobile-using-android-cli skill missing \u2014 run 'gor-mobile repair'");
   }
   const astIndexSkillPath = join8(CLAUDE_SKILLS_DIR, "gor-mobile-ast-index", "SKILL.md");
-  if (existsSync9(astIndexSkillPath)) {
+  if (existsSync10(astIndexSkillPath)) {
     log.ok("gor-mobile-ast-index skill installed");
   } else {
     log.warn("gor-mobile-ast-index skill missing \u2014 run 'gor-mobile repair'");
   }
   checkClaudeMdSection();
+  checkStatusLine();
   log.step("Rules pack");
   checkRulesPack();
   log.step("Config");
@@ -1527,9 +1669,9 @@ async function cmdDoctor(opts = {}) {
 import { join as join9 } from "path";
 
 // src/helpers/mcp-register.ts
-import { existsSync as existsSync10 } from "fs";
+import { existsSync as existsSync11 } from "fs";
 function unregisterManaged() {
-  if (!existsSync10(CLAUDE_MCP)) return;
+  if (!existsSync11(CLAUDE_MCP)) return;
   const cfg = readJsonSafe(CLAUDE_MCP, {});
   if (!cfg.mcpServers) return;
   const filtered = {};
@@ -1546,10 +1688,19 @@ function unregisterManaged() {
 async function cmdRepair() {
   log.step("Repairing ~/.claude/ managed files");
   copyHookTemplates();
-  installSessionStartHook();
-  log.ok("SessionStart hook refreshed");
-  installUserPromptSubmitHook();
-  log.ok("UserPromptSubmit hook refreshed");
+  const ss = installSessionStartHook();
+  log.ok(
+    ss.collapsed > 1 ? `SessionStart hook refreshed (collapsed ${ss.collapsed} \u2192 1)` : "SessionStart hook refreshed"
+  );
+  const ups = installUserPromptSubmitHook();
+  log.ok(
+    ups.collapsed > 1 ? `UserPromptSubmit hook refreshed (collapsed ${ups.collapsed} \u2192 1)` : "UserPromptSubmit hook refreshed"
+  );
+  const sl = statusLineState();
+  if (sl.managed && sl.variant) {
+    installStatusLine(sl.variant, { force: true });
+    log.ok(`Status line (${sl.variant === "cat" ? "Cat" : "Classic"}) refreshed`);
+  }
   const legacyCmds = cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
   for (const f of legacyCmds) log.ok(`Removed legacy command ${f}`);
   const legacyAgents = cleanupLegacyAgents();
@@ -1586,16 +1737,16 @@ async function cmdRepair() {
 }
 
 // src/commands/uninstall.ts
-import { existsSync as existsSync11, readFileSync as readFileSync6, rmSync as rmSync4 } from "fs";
+import { existsSync as existsSync12, readFileSync as readFileSync6, rmSync as rmSync4 } from "fs";
 import { join as join10 } from "path";
-import { confirm as confirm3, isCancel as isCancel5 } from "@clack/prompts";
+import { confirm as confirm3, isCancel as isCancel6 } from "@clack/prompts";
 async function cmdUninstall(opts = {}) {
   if (!opts.yes) {
     const proceed = await confirm3({
       message: "Remove gor-mobile hooks, skills, agents, templates, rules pack, config, and managed CLAUDE.md section?",
       initialValue: false
     });
-    if (isCancel5(proceed) || proceed !== true) {
+    if (isCancel6(proceed) || proceed !== true) {
       log.info("Aborted");
       return;
     }
@@ -1606,10 +1757,13 @@ async function cmdUninstall(opts = {}) {
   log.step("Removing UserPromptSubmit hook");
   removeUserPromptSubmitHook();
   log.ok("UserPromptSubmit hook removed");
+  log.step("Removing managed status line");
+  removeStatusLine();
+  log.ok("Status line removed (only if managed)");
   log.step("Removing legacy commands/ (signature-matched)");
   cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
   log.step("Removing skills/");
-  if (existsSync11(CLAUDE_SKILLS_DIR)) {
+  if (existsSync12(CLAUDE_SKILLS_DIR)) {
     const { readdirSync: readdirSync2 } = await import("fs");
     for (const entry of readdirSync2(CLAUDE_SKILLS_DIR)) {
       if (entry.startsWith("gor-mobile-")) {
@@ -1618,7 +1772,7 @@ async function cmdUninstall(opts = {}) {
     }
   }
   log.step("Removing agents/");
-  if (existsSync11(CLAUDE_AGENTS_DIR)) {
+  if (existsSync12(CLAUDE_AGENTS_DIR)) {
     const { readdirSync: readdirSync2 } = await import("fs");
     for (const entry of readdirSync2(CLAUDE_AGENTS_DIR)) {
       if (entry.startsWith("gor-mobile-") && entry.endsWith(".md")) {
@@ -1626,7 +1780,7 @@ async function cmdUninstall(opts = {}) {
       }
     }
     const legacyCr = join10(CLAUDE_AGENTS_DIR, "code-reviewer.md");
-    if (existsSync11(legacyCr)) {
+    if (existsSync12(legacyCr)) {
       const head = readFileSync6(legacyCr, "utf8").split("\n").slice(0, 20).join("\n");
       if (/^name: code-reviewer/m.test(head)) {
         rmSync4(legacyCr);
@@ -1638,12 +1792,12 @@ async function cmdUninstall(opts = {}) {
   log.step("Cleaning CLAUDE.md managed section");
   removeClaudeMdSection();
   log.step(`Removing ${GOR_MOBILE_HOME} (templates, rules)`);
-  if (existsSync11(GOR_MOBILE_HOME)) {
+  if (existsSync12(GOR_MOBILE_HOME)) {
     rmSync4(GOR_MOBILE_HOME, { recursive: true, force: true });
   }
   log.step(`Removing ${GOR_MOBILE_CONFIG}`);
-  if (existsSync11(GOR_MOBILE_CONFIG)) rmSync4(GOR_MOBILE_CONFIG);
-  if (existsSync11(GOR_MOBILE_CONFIG_DIR)) {
+  if (existsSync12(GOR_MOBILE_CONFIG)) rmSync4(GOR_MOBILE_CONFIG);
+  if (existsSync12(GOR_MOBILE_CONFIG_DIR)) {
     try {
       rmSync4(GOR_MOBILE_CONFIG_DIR, { recursive: false });
     } catch {
@@ -1656,7 +1810,7 @@ async function cmdUninstall(opts = {}) {
       message: "Also uninstall the Android CLI (launcher + ~/.android/cli cache + android-cli skill)?",
       initialValue: false
     });
-    if (!isCancel5(removeAndroid) && removeAndroid === true) {
+    if (!isCancel6(removeAndroid) && removeAndroid === true) {
       log.step("Removing Android CLI");
       const res = await uninstallAndroidCli();
       for (const p of res.removed) log.ok(`removed ${p}`);
@@ -1667,14 +1821,14 @@ async function cmdUninstall(opts = {}) {
 }
 
 // src/commands/rules.ts
-import { existsSync as existsSync12, rmSync as rmSync5 } from "fs";
+import { existsSync as existsSync13, rmSync as rmSync5 } from "fs";
 async function rulesList() {
-  if (!existsSync12(GOR_MOBILE_RULES_DIR)) {
+  if (!existsSync13(GOR_MOBILE_RULES_DIR)) {
     log.warn("No rules pack installed. Run: gor-mobile rules use <url>");
     return;
   }
   const m = readManifest();
-  const cfg = existsSync12(GOR_MOBILE_CONFIG) ? readConfig() : {};
+  const cfg = existsSync13(GOR_MOBILE_CONFIG) ? readConfig() : {};
   const { branch, rev } = await gitBranchAndRev();
   console.log("Installed pack:");
   console.log(`  name:    ${m?.name ?? "?"}`);
@@ -1693,14 +1847,14 @@ async function rulesUse(target) {
     return;
   }
   const backup = `${GOR_MOBILE_RULES_DIR}.bak`;
-  if (existsSync12(GOR_MOBILE_RULES_DIR)) {
+  if (existsSync13(GOR_MOBILE_RULES_DIR)) {
     log.info(`Backing up existing pack to ${backup}`);
-    if (existsSync12(backup)) rmSync5(backup, { recursive: true, force: true });
+    if (existsSync13(backup)) rmSync5(backup, { recursive: true, force: true });
     const { renameSync } = await import("fs");
     renameSync(GOR_MOBILE_RULES_DIR, backup);
   }
   try {
-    if (existsSync12(target)) {
+    if (existsSync13(target)) {
       log.info(`Copying local pack from ${target}`);
       copyFromLocal(target);
     } else {
@@ -1709,10 +1863,10 @@ async function rulesUse(target) {
     }
   } catch (err) {
     log.err(`Install failed \u2014 restoring backup: ${err.message}`);
-    if (existsSync12(GOR_MOBILE_RULES_DIR)) {
+    if (existsSync13(GOR_MOBILE_RULES_DIR)) {
       rmSync5(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
     }
-    if (existsSync12(backup)) {
+    if (existsSync13(backup)) {
       const { renameSync } = await import("fs");
       renameSync(backup, GOR_MOBILE_RULES_DIR);
     }
@@ -1721,7 +1875,7 @@ async function rulesUse(target) {
   }
   saveConfig(target);
   log.ok(`Rules pack installed at ${GOR_MOBILE_RULES_DIR}`);
-  if (existsSync12(backup)) rmSync5(backup, { recursive: true, force: true });
+  if (existsSync13(backup)) rmSync5(backup, { recursive: true, force: true });
   const res = validateManifest();
   if (!res.ok) {
     for (const e of res.errors) log.err(e);
@@ -1785,12 +1939,12 @@ async function cmdDocs(query) {
 }
 
 // src/commands/self-update.ts
-import { existsSync as existsSync13 } from "fs";
+import { existsSync as existsSync14 } from "fs";
 import { join as join11 } from "path";
 import { execa as execa6 } from "execa";
 async function cmdSelfUpdate() {
   const root = gorMobileRoot();
-  if (existsSync13(join11(root, ".git"))) {
+  if (existsSync14(join11(root, ".git"))) {
     log.step(`git pull in ${root}`);
     await execa6("git", ["-C", root, "pull", "--ff-only"], { stdio: "inherit" });
     log.step("npm install");
@@ -1814,7 +1968,7 @@ async function cmdSelfUpdate() {
 }
 
 // src/commands/android.ts
-import { existsSync as existsSync14 } from "fs";
+import { existsSync as existsSync15 } from "fs";
 import { execa as execa7 } from "execa";
 async function cmdAndroid(args) {
   const cli = androidCliPath();
@@ -1823,7 +1977,7 @@ async function cmdAndroid(args) {
     process.exit(res.exitCode ?? 0);
   }
   const first = args[0];
-  if (first && ["build", "assemble", "assembleDebug", "assembleRelease"].includes(first) && existsSync14("./gradlew")) {
+  if (first && ["build", "assemble", "assembleDebug", "assembleRelease"].includes(first) && existsSync15("./gradlew")) {
     log.info(`Falling back to ./gradlew ${first}`);
     const res = await execa7("./gradlew", [first], { stdio: "inherit", reject: false });
     process.exit(res.exitCode ?? 0);
@@ -1838,11 +1992,11 @@ async function cmdAndroid(args) {
 }
 
 // src/commands/android-skills.ts
-import { existsSync as existsSync15 } from "fs";
+import { existsSync as existsSync16 } from "fs";
 import { join as join12 } from "path";
-import { cancel as cancel5, isCancel as isCancel6, multiselect, spinner } from "@clack/prompts";
+import { cancel as cancel6, isCancel as isCancel7, multiselect, spinner } from "@clack/prompts";
 function isInstalled(name) {
-  return existsSync15(join12(CLAUDE_SKILLS_DIR, name, "SKILL.md"));
+  return existsSync16(join12(CLAUDE_SKILLS_DIR, name, "SKILL.md"));
 }
 async function cmdAndroidSkills() {
   if (!androidCliPath()) {
@@ -1880,8 +2034,8 @@ async function cmdAndroidSkills() {
     initialValues: preselected,
     required: false
   });
-  if (isCancel6(picked)) {
-    cancel5("Cancelled");
+  if (isCancel7(picked)) {
+    cancel6("Cancelled");
     return;
   }
   const chosen = new Set(picked);
@@ -1910,12 +2064,12 @@ async function cmdAndroidSkills() {
 }
 
 // src/commands/update.ts
-import { existsSync as existsSync16 } from "fs";
+import { existsSync as existsSync17 } from "fs";
 import { join as join13 } from "path";
 import { execa as execa8 } from "execa";
 async function cmdUpdate() {
   log.step("Updating rules pack");
-  if (existsSync16(join13(GOR_MOBILE_RULES_DIR, ".git"))) {
+  if (existsSync17(join13(GOR_MOBILE_RULES_DIR, ".git"))) {
     const res = await execa8(
       "git",
       ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"],
