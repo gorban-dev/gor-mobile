@@ -13,7 +13,7 @@ import {
 } from "../constants.js";
 import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-cli.js";
 import { ANDROID_CONTRACT } from "../android-contract.js";
-import { hasManagedHook } from "../helpers/settings-merge.js";
+import { countManagedHooks } from "../helpers/settings-merge.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
 import { readManifest } from "../helpers/rules-pack.js";
@@ -47,15 +47,15 @@ function checkHooks(): void {
     log.warn(`No ${CLAUDE_SETTINGS}`);
     return;
   }
-  if (hasManagedHook("SessionStart")) {
-    log.ok("SessionStart hook registered");
-  } else {
-    log.warn("SessionStart hook NOT registered — run 'gor-mobile repair'");
-  }
-  if (hasManagedHook("UserPromptSubmit")) {
-    log.ok("UserPromptSubmit hook registered");
-  } else {
-    log.warn("UserPromptSubmit hook NOT registered — run 'gor-mobile repair'");
+  for (const hookType of ["SessionStart", "UserPromptSubmit"] as const) {
+    const n = countManagedHooks(hookType);
+    if (n === 0) {
+      log.warn(`${hookType} hook NOT registered — run 'gor-mobile repair'`);
+    } else if (n > 1) {
+      log.warn(`${hookType} has ${n} duplicate managed entries — run 'gor-mobile repair'`);
+    } else {
+      log.ok(`${hookType} hook registered`);
+    }
   }
 }
 

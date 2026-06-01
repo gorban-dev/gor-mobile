@@ -20,10 +20,18 @@ export async function cmdRepair(): Promise<void> {
   log.step("Repairing ~/.claude/ managed files");
 
   copyHookTemplates();
-  installSessionStartHook();
-  log.ok("SessionStart hook refreshed");
-  installUserPromptSubmitHook();
-  log.ok("UserPromptSubmit hook refreshed");
+  const ss = installSessionStartHook();
+  log.ok(
+    ss.collapsed > 1
+      ? `SessionStart hook refreshed (collapsed ${ss.collapsed} → 1)`
+      : "SessionStart hook refreshed"
+  );
+  const ups = installUserPromptSubmitHook();
+  log.ok(
+    ups.collapsed > 1
+      ? `UserPromptSubmit hook refreshed (collapsed ${ups.collapsed} → 1)`
+      : "UserPromptSubmit hook refreshed"
+  );
 
   const legacyCmds = cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
   for (const f of legacyCmds) log.ok(`Removed legacy command ${f}`);

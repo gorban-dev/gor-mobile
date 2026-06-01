@@ -2,6 +2,23 @@
 
 ## 0.2.0 — Unreleased
 
+- fix: hook deduplication no longer leaves duplicate `SessionStart` /
+  `UserPromptSubmit` entries. Identity of a managed hook entry was keyed
+  solely on the `_managed_by` tag, so any entry written without it (the
+  old bash CLI, a manual edit, a format migration, or a broken merge)
+  was never collapsed — `init`/`repair` stacked a fresh tagged entry on
+  top of the untagged ones, and every extra entry re-injected the full
+  hook payload into context on each event. `upsertHook` (and `removeHook`)
+  now recognize an entry as managed when it is tagged **or** its command
+  points at our `templates/<hook>.sh` (path-independent match), so the
+  duplicates self-heal to a single entry on the next `repair`. `doctor`
+  stops giving false "NOT registered" advice for untagged hooks and now
+  also warns when it finds `N` duplicate managed entries; `repair` logs
+  `collapsed N → 1` when it folds duplicates. Existing users: run
+  `gor-mobile repair` once to normalize an already-polluted
+  `~/.claude/settings.json`. Covered by a new regression test
+  (`npm test` → `test/hooks-idempotency.sh`).
+
 - add: `ast-index` integration. `gor-mobile init` gains a new step 3 of 9
   (soft check: `which ast-index`) — a missing CLI prints a `warn` and
   the install hint, init continues. A bundled skill
