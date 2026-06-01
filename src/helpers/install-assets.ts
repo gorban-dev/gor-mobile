@@ -20,7 +20,12 @@ import { ensureDir } from "./paths.js";
 
 export function copyHookTemplates(): void {
   ensureDir(GOR_MOBILE_TEMPLATES_DIR);
-  const names = ["session-start-hook.sh", "user-prompt-submit-hook.sh"];
+  const names = [
+    "session-start-hook.sh",
+    "user-prompt-submit-hook.sh",
+    "statusline-command.sh",
+    "statusline-cat.sh"
+  ];
   for (const name of names) {
     const src = join(gorMobileRoot(), "templates", name);
     const dst = join(GOR_MOBILE_TEMPLATES_DIR, name);

@@ -18,6 +18,7 @@ import {
   removeSessionStartHook,
   removeUserPromptSubmitHook
 } from "../helpers/settings-merge.js";
+import { removeStatusLine } from "../helpers/settings-statusline.js";
 import { log } from "../ui/log.js";
 
 interface UninstallOptions {
@@ -44,6 +45,10 @@ export async function cmdUninstall(opts: UninstallOptions = {}): Promise<void> {
   log.step("Removing UserPromptSubmit hook");
   removeUserPromptSubmitHook();
   log.ok("UserPromptSubmit hook removed");
+
+  log.step("Removing managed status line");
+  removeStatusLine();
+  log.ok("Status line removed (only if managed)");
 
   log.step("Removing legacy commands/ (signature-matched)");
   cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);

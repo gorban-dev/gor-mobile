@@ -47,7 +47,7 @@ gor-mobile init
 
 ## What the wizard does
 
-`gor-mobile init` drives a 9-step interactive install with `@clack/prompts`:
+`gor-mobile init` drives a 10-step interactive install with `@clack/prompts`:
 
 - **Banner + welcome.** ASCII banner, a 7-bullet summary of what will
   happen, and an Enter-to-start confirmation.
@@ -81,7 +81,12 @@ The 9 steps:
 6. **Skills.** Copies the bundled superpowers skills (plus `gor-mobile-using-android-cli` and `gor-mobile-ast-index`) into `~/.claude/skills/gor-mobile-<skill>/`. Install-time transforms: cross-refs `superpowers:` → `gor-mobile-`, frontmatter id prefix `name: ` → `name: gor-mobile-`, and an optional overlay block appended from `templates/overlays/<skill>.md` for the skills where Android rules, Task(model=...) routing, ast-index guidance, or a fix to a known upstream bug applies (`brainstorming`, `subagent-driven-development`, `test-driven-development`, `executing-plans`, `systematic-debugging`, `requesting-code-review`, `ast-index`).
 7. **Agents.** Copies every `templates/agents/*.md` into `~/.claude/agents/` — currently `gor-mobile-code-reviewer.md` (Sonnet, default review path) and `gor-mobile-code-reviewer-deep.md` (Opus, used for large / security-sensitive diffs).
 8. **CLAUDE.md managed section.** Writes the "Android Mobile Dev / Android device ops / Code search (managed by gor-mobile)" blocks between `<!-- BEGIN gor-mobile managed section -->` / `<!-- END ... -->` markers in `~/.claude/CLAUDE.md`. Content outside the markers is never modified.
-9. **Summary.** Skipped under `--skip-sanity`. Otherwise reports counts for skills / agents / hooks and the rules-pack version.
+9. **Status line (optional):** choose a Claude Code status line — **Classic**
+  (3-line colored usage bars) or **Cat** (ASCII cat that reacts to context
+  usage) — or skip. Writes a managed `statusLine` into `~/.claude/settings.json`
+  pointing at `~/.gor-mobile/templates/statusline-*.sh`. Needs `jq`. Never
+  overwrites a status line you already have without asking.
+10. **Summary.** Skipped under `--skip-sanity`. Otherwise reports counts for skills / agents / hooks and the rules-pack version.
 
 ## Commands
 

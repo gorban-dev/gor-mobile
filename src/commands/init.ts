@@ -57,6 +57,8 @@ import { forceNoTui } from "../ui/tui-mode.js";
 import { welcome } from "../ui/welcome.js";
 import { CLAUDE_COMMANDS_DIR } from "../constants.js";
 import { log } from "../ui/log.js";
+import { statusLineSelect, showStatusLinePreviews } from "../ui/statusline-select.js";
+import { installStatusLine, statusLineState } from "../helpers/settings-statusline.js";
 
 export interface InitOptions {
   dryRun?: boolean;
@@ -68,7 +70,7 @@ export interface InitOptions {
   rules?: string;
 }
 
-const TOTAL_STEPS = 9;
+const TOTAL_STEPS = 10;
 
 interface RunCtx {
   mode: WizardMode;
@@ -400,13 +402,49 @@ async function step8ClaudeMd(ctx: RunCtx): Promise<void> {
   progressItem(1, 1, "write managed section", "ok", "~/.claude/CLAUDE.md");
 }
 
-async function step9Summary(ctx: RunCtx): Promise<void> {
+async function step9StatusLine(ctx: RunCtx): Promise<void> {
+  runStep(9, "Status line (optional)");
+
+  if (ctx.opts.dryRun) {
+    showStatusLinePreviews();
+    progressItem(1, 1, "status line", "skip", "dry-run: choose Classic / Cat / Skip");
+    return;
+  }
+
+  const choice = await statusLineSelect(Boolean(ctx.opts.yes));
+  if (choice === "skip") {
+    progressItem(1, 1, "status line", "skip", "not installed");
+    return;
+  }
+
+  if (!which("jq")) {
+    log.warn("jq not found — the status line needs jq to render (brew install jq); installing anyway");
+  }
+
+  const st = statusLineState();
+  let force = false;
+  if (st.foreign) {
+    force = await confirmStep("A non-gor-mobile statusLine already exists. Replace it?", false);
+    if (!force) {
+      progressItem(1, 1, "status line", "skip", "kept your existing statusLine");
+      return;
+    }
+  }
+
+  // The st.foreign guard above already handled the only case installStatusLine
+  // refuses (foreign + no force), so this write always lands.
+  installStatusLine(choice, { force });
+  const label = choice === "cat" ? "Cat" : "Classic";
+  progressItem(1, 1, "status line", "ok", `${label} → ${CLAUDE_SETTINGS}`);
+}
+
+async function step10Summary(ctx: RunCtx): Promise<void> {
   if (ctx.opts.skipSanity) {
-    runStep(9, "Summary");
+    runStep(10, "Summary");
     log.info("Skipped (--skip-sanity)");
     return;
   }
-  runStep(9, "Summary");
+  runStep(10, "Summary");
 
   const skills = existsSync(CLAUDE_SKILLS_DIR)
     ? (await import("node:fs")).readdirSync(CLAUDE_SKILLS_DIR).filter((n) => n.startsWith("gor-mobile-"))
@@ -429,7 +467,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   // 1. Banner + what-will-happen.
   // 2. Mode select (QuickStart vs Advanced — the only behavioural
   //    difference is whether step 4 prompts to override the rules URL).
-  // 3. Run all 9 steps in sequence, no per-step confirm.
+  // 3. Run all 10 steps in sequence, no per-step confirm.
   await welcome(Boolean(opts.yes));
 
   const mode: WizardMode = opts.advanced
@@ -459,7 +497,8 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     await step6Skills(ctx);
     await step7Agents(ctx);
     await step8ClaudeMd(ctx);
-    await step9Summary(ctx);
+    await step9StatusLine(ctx);
+    await step10Summary(ctx);
   } catch (err) {
     if (isCancel(err as unknown)) {
       cancel("Cancelled");

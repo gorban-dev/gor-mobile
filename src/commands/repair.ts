@@ -14,6 +14,7 @@ import {
   installSessionStartHook,
   installUserPromptSubmitHook
 } from "../helpers/settings-merge.js";
+import { installStatusLine, statusLineState } from "../helpers/settings-statusline.js";
 import { log } from "../ui/log.js";
 
 export async function cmdRepair(): Promise<void> {
@@ -32,6 +33,12 @@ export async function cmdRepair(): Promise<void> {
       ? `UserPromptSubmit hook refreshed (collapsed ${ups.collapsed} → 1)`
       : "UserPromptSubmit hook refreshed"
   );
+
+  const sl = statusLineState();
+  if (sl.managed && sl.variant) {
+    installStatusLine(sl.variant, { force: true });
+    log.ok(`Status line (${sl.variant === "cat" ? "Cat" : "Classic"}) refreshed`);
+  }
 
   const legacyCmds = cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
   for (const f of legacyCmds) log.ok(`Removed legacy command ${f}`);

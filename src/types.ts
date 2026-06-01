@@ -9,8 +9,15 @@ export interface HookEntry {
   hooks: HookCommand[];
 }
 
+export interface StatusLineEntry {
+  type: "command";
+  command: string;
+  _managed_by?: string;
+}
+
 export interface ManagedSettings {
   hooks?: Record<string, HookEntry[]>;
+  statusLine?: StatusLineEntry;
   [key: string]: unknown;
 }
 

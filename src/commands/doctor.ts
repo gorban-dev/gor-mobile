@@ -14,6 +14,7 @@ import {
 import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-cli.js";
 import { ANDROID_CONTRACT } from "../android-contract.js";
 import { countManagedHooks } from "../helpers/settings-merge.js";
+import { statusLineState } from "../helpers/settings-statusline.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
 import { readManifest } from "../helpers/rules-pack.js";
@@ -68,6 +69,18 @@ function checkClaudeMdSection(): void {
     log.ok("CLAUDE.md managed section present");
   } else {
     log.warn("CLAUDE.md managed section missing — run 'gor-mobile repair'");
+  }
+}
+
+function checkStatusLine(): void {
+  const st = statusLineState();
+  if (st.managed) {
+    log.ok(`Status line: ${st.variant === "cat" ? "Cat" : "Classic"} (managed)`);
+    if (!which("jq")) {
+      log.warn("  → status line needs jq to render — brew install jq");
+    }
+  } else if (st.foreign) {
+    log.info("Status line: custom (not managed by gor-mobile)");
   }
 }
 
@@ -229,6 +242,7 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
     log.warn("gor-mobile-ast-index skill missing — run 'gor-mobile repair'");
   }
   checkClaudeMdSection();
+  checkStatusLine();
 
   log.step("Rules pack");
   checkRulesPack();

@@ -19,7 +19,19 @@
   `~/.claude/settings.json`. Covered by a new regression test
   (`npm test` → `test/hooks-idempotency.sh`).
 
-- add: `ast-index` integration. `gor-mobile init` gains a new step 3 of 9
+- add: optional **Status line** step in `gor-mobile init` (step 9 of 10).
+  Offers two Claude Code status lines with inline previews — `Classic`
+  (3-line colored bars) and `Cat` (ASCII cat that reacts to context usage) —
+  or `Skip`. The chosen variant is written as a managed `statusLine` in
+  `~/.claude/settings.json`; both scripts ship in `~/.gor-mobile/templates/`.
+  Non-interactive / `--yes` runs skip it, and an existing non-gor-mobile
+  `statusLine` is never overwritten without confirmation. `jq` is required to
+  render (a missing `jq` warns but does not block). `doctor` reports the
+  status line, `repair` re-points a managed one, `uninstall` removes it.
+  Existing users: run `gor-mobile repair` after upgrade to copy the new
+  template scripts, then re-run `gor-mobile init` to pick a status line.
+
+- add: `ast-index` integration. `gor-mobile init` gains a new step 3 of 10
   (soft check: `which ast-index`) — a missing CLI prints a `warn` and
   the install hint, init continues. A bundled skill
   `gor-mobile-ast-index` ships at

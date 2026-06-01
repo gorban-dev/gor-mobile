@@ -22,7 +22,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "clean": "rm -rf dist",
-    "test": "bash test/hooks-idempotency.sh"
+    "test": "bash test/hooks-idempotency.sh && bash test/statusline.sh"
   },
   "repository": {
     "type": "git",
