@@ -7,7 +7,7 @@
 
 A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Claude Code: a superpowers-style workflow (`brainstorm → plan → implement → review → verify`), a swappable rules pack, and two reviewer agents (Sonnet + Opus). Everything runs on Claude Code itself — no external inference, no local model runtime.
 
-> Status: `v0.1.1` — pre-release scaffolding, under active development on the `develop` branch. See `CHANGELOG.md`.
+> Status: `v0.2.0` — pre-release scaffolding, under active development on the `develop` branch. See `CHANGELOG.md`.
 
 ## Requirements
 

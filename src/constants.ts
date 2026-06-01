@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const GOR_MOBILE_VERSION = "0.1.1";
+export const GOR_MOBILE_VERSION = "0.2.0";
 export const GOR_MOBILE_NAME = "gor-mobile";
 
 const HOME = homedir();

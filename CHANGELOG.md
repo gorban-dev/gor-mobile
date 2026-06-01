@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 — Unreleased
+## 0.2.0 — 2026-06-01
 
 - fix: hook deduplication no longer leaves duplicate `SessionStart` /
   `UserPromptSubmit` entries. Identity of a managed hook entry was keyed
