@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { CLAUDE_COMMANDS_DIR, gorMobileRoot } from "../constants.js";
-import { runAndroidInit } from "../helpers/android-cli.js";
+import { ensureAndroidCliCurrent, runAndroidInit } from "../helpers/android-cli.js";
 import { writeClaudeMdSection } from "../helpers/claude-md-section.js";
 import {
   cleanupLegacyAgents,
@@ -17,7 +17,9 @@ import {
 import { installStatusLine, statusLineState } from "../helpers/settings-statusline.js";
 import { log } from "../ui/log.js";
 
-export async function cmdRepair(): Promise<void> {
+export async function cmdRepair(
+  opts: { skipAndroidUpdate?: boolean } = {}
+): Promise<void> {
   log.step("Repairing ~/.claude/ managed files");
 
   copyHookTemplates();
@@ -74,6 +76,8 @@ export async function cmdRepair(): Promise<void> {
   } else {
     log.warn("'android init' ran but ~/.claude/skills/android-cli/SKILL.md missing");
   }
+
+  await ensureAndroidCliCurrent({ skip: opts.skipAndroidUpdate });
 
   writeClaudeMdSection(join(gorMobileRoot(), "templates", "claude-md-snippet.md"));
   log.ok("CLAUDE.md managed section refreshed");

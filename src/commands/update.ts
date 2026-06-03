@@ -2,8 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { execa } from "execa";
 import { GOR_MOBILE_RULES_DIR } from "../constants.js";
-import { runAndroidUpdate } from "../helpers/android-cli.js";
-import { androidCliPath, has } from "../helpers/deps.js";
+import { has } from "../helpers/deps.js";
 import { log } from "../ui/log.js";
 import { cmdRepair } from "./repair.js";
 
@@ -41,13 +40,6 @@ export async function cmdUpdate(): Promise<void> {
         // ignore parse errors
       }
     }
-  }
-
-  if (androidCliPath()) {
-    log.step("Updating Android CLI");
-    const res = await runAndroidUpdate();
-    if (res.ok) log.ok("Android CLI updated");
-    else if (res.error) log.warn(`android update: ${res.error}`);
   }
 
   log.step("Repairing managed files");

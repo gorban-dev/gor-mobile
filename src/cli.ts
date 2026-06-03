@@ -41,6 +41,7 @@ program
   .option("--no-tui", "force plain-text prompts")
   .option("--advanced", "confirm each step and allow URL override")
   .option("--rules <url>", "custom rules-pack git URL")
+  .option("--skip-android-update", "do not auto-update the Android CLI")
   .action(async (opts) => {
     await cmdInit(opts);
   });
@@ -56,8 +57,9 @@ program
 program
   .command("repair")
   .description("Restore managed files in ~/.claude/")
-  .action(async () => {
-    await cmdRepair();
+  .option("--skip-android-update", "do not auto-update the Android CLI")
+  .action(async (opts) => {
+    await cmdRepair(opts);
   });
 
 program
@@ -76,7 +78,7 @@ program
 
 program
   .command("update")
-  .description("Pull latest rules, `android update`, then repair managed files")
+  .description("Pull latest rules, then repair managed files (also updates the Android CLI)")
   .action(async () => {
     await cmdUpdate();
   });

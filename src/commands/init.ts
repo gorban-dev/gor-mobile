@@ -16,11 +16,10 @@ import {
 import {
   ANDROID_CLI_INSTALL_URL,
   androidCliInstallSupported,
+  ensureAndroidCliCurrent,
   installAndroidCli,
   installAndroidCliViaBrew,
-  runAndroidInit,
-  smokeTestContract,
-  tryBrewUpgrade
+  runAndroidInit
 } from "../helpers/android-cli.js";
 import { writeClaudeMdSection } from "../helpers/claude-md-section.js";
 import { androidCliPath, which } from "../helpers/deps.js";
@@ -68,6 +67,7 @@ export interface InitOptions {
   tui?: boolean;
   advanced?: boolean;
   rules?: string;
+  skipAndroidUpdate?: boolean;
 }
 
 const TOTAL_STEPS = 10;
@@ -115,7 +115,10 @@ async function step1Deps(ctx: RunCtx): Promise<void> {
   }
 }
 
-async function runAndroidInitStep(): Promise<void> {
+async function runAndroidInitStep(opts: {
+  skipAndroidUpdate?: boolean;
+  dryRun?: boolean;
+}): Promise<void> {
   const res = await runAndroidInit();
   if (res.skillInstalled) {
     progressItem(2, 2, "initialize android skills", "ok", "~/.claude/skills/android-cli/");
@@ -128,19 +131,10 @@ async function runAndroidInitStep(): Promise<void> {
     throw new Error("android init succeeded but android-cli skill not found");
   }
 
-  const smoke = await smokeTestContract();
-  if (!smoke.ok && smoke.belowFloor) {
-    log.warn(`android CLI v${smoke.version ?? "?"} below floor — attempting brew upgrade`);
-    await tryBrewUpgrade();
-  }
-  const after = await smokeTestContract();
-  if (after.missing.length > 0) {
-    log.warn(`android CLI is missing contract commands: ${after.missing.join(", ")} — update gor-mobile`);
-  } else if (after.belowFloor) {
-    log.warn(`android CLI contract commands present but v${after.version ?? "?"} still below floor — update gor-mobile`);
-  } else {
-    log.ok(`android CLI contract OK (v${after.version ?? "?"})`);
-  }
+  await ensureAndroidCliCurrent({
+    skip: opts.skipAndroidUpdate,
+    dryRun: opts.dryRun
+  });
 }
 
 async function step2Android(ctx: RunCtx): Promise<void> {
@@ -153,7 +147,10 @@ async function step2Android(ctx: RunCtx): Promise<void> {
       progressItem(2, 2, "initialize android skills", "skip", "dry-run: android init");
       return;
     }
-    await runAndroidInitStep();
+    await runAndroidInitStep({
+      skipAndroidUpdate: ctx.opts.skipAndroidUpdate,
+      dryRun: ctx.opts.dryRun
+    });
     return;
   }
 
@@ -225,7 +222,10 @@ async function step2Android(ctx: RunCtx): Promise<void> {
     throw new Error(`Android CLI install failed: ${res.error ?? "unknown error"}`);
   }
   progressItem(1, 2, "android CLI", "ok", androidCliPath() ?? "installed");
-  await runAndroidInitStep();
+  await runAndroidInitStep({
+    skipAndroidUpdate: ctx.opts.skipAndroidUpdate,
+    dryRun: ctx.opts.dryRun
+  });
 }
 
 async function step3AstIndex(ctx: RunCtx): Promise<void> {

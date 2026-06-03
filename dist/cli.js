@@ -12,7 +12,7 @@ import { Command } from "commander";
 import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-var GOR_MOBILE_VERSION = "0.2.1";
+var GOR_MOBILE_VERSION = "0.2.2";
 var HOME = homedir();
 var GOR_MOBILE_HOME = process.env.GOR_MOBILE_HOME ?? join(HOME, ".gor-mobile");
 var GOR_MOBILE_RULES_DIR = join(GOR_MOBILE_HOME, "rules");
@@ -41,7 +41,7 @@ function gorMobileRoot() {
 // src/commands/init.ts
 import { existsSync as existsSync9 } from "fs";
 import { join as join7 } from "path";
-import { execa as execa3 } from "execa";
+import { execa as execa4 } from "execa";
 import pc8 from "picocolors";
 import { cancel as cancel5, isCancel as isCancel5 } from "@clack/prompts";
 
@@ -49,7 +49,7 @@ import { cancel as cancel5, isCancel as isCancel5 } from "@clack/prompts";
 import { accessSync as accessSync2, constants as constants2, existsSync, rmSync } from "fs";
 import { homedir as homedir2 } from "os";
 import { dirname as dirname2, join as join3 } from "path";
-import { execa } from "execa";
+import { execa as execa2 } from "execa";
 
 // src/android-contract.ts
 var ANDROID_CLI_FLOOR = "1.0.0";
@@ -120,6 +120,55 @@ function androidCliPath() {
   return which("android");
 }
 
+// src/helpers/net.ts
+import { execa } from "execa";
+async function isOnline() {
+  try {
+    const res = await execa(
+      "curl",
+      ["-sS", "--max-time", "3", "-o", "/dev/null", "-I", "https://dl.google.com"],
+      { reject: false, timeout: 5e3 }
+    );
+    return res.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+// src/ui/log.ts
+import pc from "picocolors";
+function isTty() {
+  return Boolean(process.stderr.isTTY) && !process.env.NO_COLOR;
+}
+function prefix(symbol, color) {
+  return isTty() ? color(symbol) : symbol;
+}
+var log = {
+  info(msg) {
+    console.error(`  ${prefix("i", pc.cyan)} ${msg}`);
+  },
+  ok(msg) {
+    console.error(`  ${prefix("\u2713", pc.green)} ${msg}`);
+  },
+  warn(msg) {
+    console.error(`  ${prefix("!", pc.yellow)} ${msg}`);
+  },
+  err(msg) {
+    console.error(`  ${prefix("\u2717", pc.red)} ${msg}`);
+  },
+  step(title) {
+    const label = isTty() ? pc.bold(pc.magenta(`\u25B8 ${title}`)) : `\u25B8 ${title}`;
+    console.error(`
+${label}`);
+  },
+  muted(msg) {
+    console.error(`  ${isTty() ? pc.dim(msg) : msg}`);
+  },
+  raw(msg) {
+    console.error(msg);
+  }
+};
+
 // src/helpers/android-cli.ts
 var DARWIN_ARM64_FALLBACK_URL = "https://dl.google.com/android/cli/latest/darwin_arm64/install.sh";
 var ANDROID_CLI_INSTALL_URLS = {
@@ -156,7 +205,7 @@ async function installAndroidCli() {
     const cmd = process.platform === "win32" ? `curl -fsSL ${url} -o "%TEMP%\\gm-android-i.cmd" && "%TEMP%\\gm-android-i.cmd"` : `curl -fsSL ${url} | bash`;
     const shell = process.platform === "win32" ? "cmd.exe" : "bash";
     const shellFlag = process.platform === "win32" ? "/c" : "-c";
-    const res = await execa(shell, [shellFlag, cmd], {
+    const res = await execa2(shell, [shellFlag, cmd], {
       stdio: "inherit",
       reject: false,
       timeout: 18e4
@@ -173,7 +222,7 @@ async function runAndroidUpdate() {
   const cli = androidCliPath();
   if (!cli) return { ran: false, ok: false };
   try {
-    const res = await execa(cli, ["update"], {
+    const res = await execa2(cli, ["update"], {
       reject: false,
       stdio: "inherit",
       timeout: 18e4
@@ -191,7 +240,7 @@ async function listAndroidSkills() {
   const cli = androidCliPath();
   if (!cli) return { ok: false, names: [], error: "android CLI not on PATH" };
   try {
-    const res = await execa(cli, ["skills", "list"], {
+    const res = await execa2(cli, ["skills", "list"], {
       reject: false,
       timeout: 6e4
     });
@@ -212,7 +261,7 @@ async function addAndroidSkill(name) {
   const cli = androidCliPath();
   if (!cli) return { ok: false, error: "android CLI not on PATH" };
   try {
-    const res = await execa(
+    const res = await execa2(
       cli,
       ["skills", "add", "--agent=claude-code", `--skill=${name}`],
       { reject: false, timeout: 12e4 }
@@ -229,7 +278,7 @@ async function removeAndroidSkill(name) {
   const cli = androidCliPath();
   if (!cli) return { ok: false, error: "android CLI not on PATH" };
   try {
-    const res = await execa(
+    const res = await execa2(
       cli,
       ["skills", "remove", "--agent=claude-code", `--skill=${name}`],
       { reject: false, timeout: 6e4 }
@@ -263,7 +312,7 @@ async function uninstallAndroidCli() {
         errors.push(`${cli}: ${err.message}`);
       }
     } else {
-      const res = await execa("sudo", ["rm", "-f", cli], {
+      const res = await execa2("sudo", ["rm", "-f", cli], {
         stdio: "inherit",
         reject: false
       });
@@ -292,7 +341,7 @@ async function runAndroidInit() {
   if (!cli) return { ran: false, skillInstalled: false };
   const skillPath = androidCliSkillPath();
   try {
-    const res = await execa(cli, ["init"], { reject: false, timeout: 3e4 });
+    const res = await execa2(cli, ["init"], { reject: false, timeout: 3e4 });
     const ok = res.exitCode === 0;
     return {
       ran: true,
@@ -311,7 +360,7 @@ async function androidCliVersion() {
   const cli = androidCliPath();
   if (!cli) return null;
   try {
-    const res = await execa(cli, ["--version"], { reject: false, timeout: 3e4 });
+    const res = await execa2(cli, ["--version"], { reject: false, timeout: 3e4 });
     if (res.exitCode !== 0) return null;
     const m = res.stdout.trim().split(/\s+/)[0];
     return m && /\d/.test(m) ? m : null;
@@ -324,9 +373,9 @@ async function installAndroidCliViaBrew() {
     return { installed: false, error: "brew path is macOS-only; use platform channel" };
   }
   try {
-    const tap = await execa("brew", ["tap", "android/tap"], { stdio: "inherit", reject: false, timeout: 12e4 });
+    const tap = await execa2("brew", ["tap", "android/tap"], { stdio: "inherit", reject: false, timeout: 12e4 });
     if (tap.exitCode !== 0) return { installed: false, error: `brew tap exit ${tap.exitCode}` };
-    const inst = await execa("brew", ["install", "android-cli"], { stdio: "inherit", reject: false, timeout: 3e5 });
+    const inst = await execa2("brew", ["install", "android-cli"], { stdio: "inherit", reject: false, timeout: 3e5 });
     if (inst.exitCode !== 0) return { installed: false, error: `brew install exit ${inst.exitCode}` };
     return { installed: androidCliPath() !== null };
   } catch (err) {
@@ -340,7 +389,7 @@ async function smokeTestContract() {
   const belowFloor = version ? !meetsFloor(version, ANDROID_CLI_FLOOR) : true;
   let helpText = "";
   try {
-    const res = await execa(cli, ["help"], { reject: false, timeout: 6e4 });
+    const res = await execa2(cli, ["help"], { reject: false, timeout: 6e4 });
     helpText = `${res.stdout}
 ${res.stderr}`;
   } catch {
@@ -354,10 +403,60 @@ ${res.stderr}`;
 async function tryBrewUpgrade() {
   if (process.platform !== "darwin") return false;
   try {
-    const res = await execa("brew", ["upgrade", "android-cli"], { stdio: "inherit", reject: false, timeout: 3e5 });
+    const res = await execa2("brew", ["upgrade", "android-cli"], { stdio: "inherit", reject: false, timeout: 3e5 });
     return res.exitCode === 0;
   } catch {
     return false;
+  }
+}
+async function androidInstallMethod() {
+  const cli = androidCliPath();
+  if (cli && (cli.startsWith("/opt/homebrew/") || cli.startsWith("/usr/local/") || cli.startsWith("/home/linuxbrew/"))) {
+    return "brew";
+  }
+  try {
+    const res = await execa2("brew", ["list", "android-cli"], {
+      reject: false,
+      timeout: 3e4
+    });
+    if (res.exitCode === 0) return "brew";
+  } catch {
+  }
+  return "standalone";
+}
+async function ensureAndroidCliCurrent(opts = {}) {
+  const cli = androidCliPath();
+  if (!cli) {
+    log.info("android CLI not on PATH \u2014 skipping update");
+    return;
+  }
+  if (opts.dryRun) {
+    log.info("dry-run: skipping android CLI update");
+    return;
+  }
+  const skipRequested = opts.skip || Boolean(process.env.GOR_MOBILE_SKIP_ANDROID_UPDATE);
+  let upgraded = false;
+  if (skipRequested) {
+    log.info("skipping android CLI update (requested)");
+  } else if (!await isOnline()) {
+    log.info("offline \u2014 skipping android CLI update");
+  } else {
+    const method = await androidInstallMethod();
+    log.step(`Updating android CLI (${method})`);
+    upgraded = method === "brew" ? await tryBrewUpgrade() : (await runAndroidUpdate()).ok;
+    if (!upgraded) log.warn("android CLI update did not complete");
+  }
+  const smoke = await smokeTestContract();
+  if (smoke.missing.length > 0) {
+    log.warn(
+      `android CLI missing contract commands: ${smoke.missing.join(", ")} \u2014 update gor-mobile`
+    );
+  } else if (smoke.belowFloor) {
+    log.warn(
+      `android CLI v${smoke.version ?? "?"} still below floor ${ANDROID_CLI_FLOOR} \u2014 check Google's update channel`
+    );
+  } else {
+    log.ok(`android CLI current (v${smoke.version ?? "?"})`);
   }
 }
 
@@ -592,7 +691,7 @@ function cleanupLegacyAgents() {
 // src/helpers/rules-pack.ts
 import { existsSync as existsSync5, cpSync as cpSync2, rmSync as rmSync3 } from "fs";
 import { join as join5 } from "path";
-import { execa as execa2 } from "execa";
+import { execa as execa3 } from "execa";
 function manifestPath() {
   return join5(GOR_MOBILE_RULES_DIR, "manifest.json");
 }
@@ -619,7 +718,7 @@ function saveConfig(source, ref = DEFAULT_RULES_REF) {
 }
 async function cloneOrPull(url, ref = DEFAULT_RULES_REF) {
   if (existsSync5(join5(GOR_MOBILE_RULES_DIR, ".git"))) {
-    await execa2("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], {
+    await execa3("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], {
       reject: false
     });
     return;
@@ -628,7 +727,7 @@ async function cloneOrPull(url, ref = DEFAULT_RULES_REF) {
     rmSync3(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
   }
   ensureDir(join5(GOR_MOBILE_RULES_DIR, ".."));
-  await execa2("git", [
+  await execa3("git", [
     "clone",
     "--depth",
     "1",
@@ -654,7 +753,7 @@ async function pullCurrent() {
   if (!existsSync5(join5(GOR_MOBILE_RULES_DIR, ".git"))) {
     throw new Error("Current pack is not a git checkout \u2014 cannot pull");
   }
-  await execa2("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], {
+  await execa3("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], {
     stdio: "inherit"
   });
 }
@@ -662,10 +761,10 @@ async function diffAgainstUpstream() {
   if (!existsSync5(join5(GOR_MOBILE_RULES_DIR, ".git"))) {
     throw new Error("Current pack is not a git checkout");
   }
-  await execa2("git", ["-C", GOR_MOBILE_RULES_DIR, "fetch", "origin"], {
+  await execa3("git", ["-C", GOR_MOBILE_RULES_DIR, "fetch", "origin"], {
     reject: false
   });
-  const { stdout } = await execa2(
+  const { stdout } = await execa3(
     "git",
     ["-C", GOR_MOBILE_RULES_DIR, "diff", "HEAD", "origin/HEAD", "--stat"],
     { reject: false }
@@ -692,8 +791,8 @@ function validateManifest() {
 }
 async function gitBranchAndRev() {
   if (!existsSync5(join5(GOR_MOBILE_RULES_DIR, ".git"))) return {};
-  const branch = await execa2("git", ["-C", GOR_MOBILE_RULES_DIR, "rev-parse", "--abbrev-ref", "HEAD"], { reject: false });
-  const rev = await execa2("git", ["-C", GOR_MOBILE_RULES_DIR, "rev-parse", "--short", "HEAD"], { reject: false });
+  const branch = await execa3("git", ["-C", GOR_MOBILE_RULES_DIR, "rev-parse", "--abbrev-ref", "HEAD"], { reject: false });
+  const rev = await execa3("git", ["-C", GOR_MOBILE_RULES_DIR, "rev-parse", "--short", "HEAD"], { reject: false });
   return { branch: branch.stdout.trim(), rev: rev.stdout.trim() };
 }
 
@@ -832,7 +931,7 @@ async function modeSelect(defaults) {
 
 // src/ui/note.ts
 import { note as clackNote } from "@clack/prompts";
-import pc from "picocolors";
+import pc2 from "picocolors";
 function note(body, title) {
   if (isTuiOn()) {
     clackNote(body, title);
@@ -840,7 +939,7 @@ function note(body, title) {
   }
   if (title) {
     console.log("");
-    console.log(pc.bold(title));
+    console.log(pc2.bold(title));
   }
   for (const line of body.split("\n")) {
     console.log(`  ${line}`);
@@ -849,7 +948,7 @@ function note(body, title) {
 }
 
 // src/ui/outro.ts
-import pc2 from "picocolors";
+import pc3 from "picocolors";
 var NEXT_STEPS = [
   "gor-mobile doctor           verify setup",
   "gor-mobile rules list       inspect installed architecture rules",
@@ -858,33 +957,33 @@ var NEXT_STEPS = [
 function finalOutro(s) {
   const summary = `Installed: ${s.skills} skills \xB7 ${s.agents} agents \xB7 ${s.hooks} hooks \xB7 rules v${s.rulesVersion}`;
   console.log("");
-  console.log(`  ${pc2.green("\u2713")} ${pc2.bold(summary)}`);
+  console.log(`  ${pc3.green("\u2713")} ${pc3.bold(summary)}`);
   console.log("");
-  console.log(pc2.bold("  Next steps:"));
-  for (const n of NEXT_STEPS) console.log(`    ${pc2.cyan(n)}`);
+  console.log(pc3.bold("  Next steps:"));
+  for (const n of NEXT_STEPS) console.log(`    ${pc3.cyan(n)}`);
   console.log("");
 }
 
 // src/ui/progress.ts
-import pc3 from "picocolors";
+import pc4 from "picocolors";
 var SYMBOLS = {
-  ok: pc3.green("\u2713"),
-  fail: pc3.red("\u2717"),
-  warn: pc3.yellow("!"),
-  skip: pc3.dim("\u25CB")
+  ok: pc4.green("\u2713"),
+  fail: pc4.red("\u2717"),
+  warn: pc4.yellow("!"),
+  skip: pc4.dim("\u25CB")
 };
 function pad(n, total) {
   const width = String(total).length;
   return String(n).padStart(width, " ");
 }
 function progressItem(i, total, label, status, note2) {
-  const prefix2 = pc3.dim(`(${pad(i, total)}/${total})`);
-  const suffix = note2 ? pc3.dim(` ${note2}`) : "";
+  const prefix2 = pc4.dim(`(${pad(i, total)}/${total})`);
+  const suffix = note2 ? pc4.dim(` ${note2}`) : "";
   console.log(`    ${prefix2}  ${label.padEnd(38)} ${SYMBOLS[status]}${suffix}`);
 }
 
 // src/ui/section-header.ts
-import pc4 from "picocolors";
+import pc5 from "picocolors";
 var STEP_LABELS = [
   "deps",
   "android",
@@ -896,44 +995,44 @@ var STEP_LABELS = [
   "summary"
 ];
 function breadcrumb(current, labels) {
-  const sep = pc4.dim(" \u203A ");
+  const sep = pc5.dim(" \u203A ");
   return labels.map((label, i) => {
     const step = i + 1;
-    if (step < current) return pc4.green(`\u2713 ${label}`);
-    if (step === current) return pc4.bold(pc4.magenta(`\u25B8 ${label}`));
-    return pc4.dim(label);
+    if (step < current) return pc5.green(`\u2713 ${label}`);
+    if (step === current) return pc5.bold(pc5.magenta(`\u25B8 ${label}`));
+    return pc5.dim(label);
   }).join(sep);
 }
 function sectionHeader(n, total, title) {
   console.log("");
   const labels = STEP_LABELS.length === total ? STEP_LABELS : Array.from({ length: total }, (_, i) => String(i + 1));
   console.log(`  ${breadcrumb(n, labels)}`);
-  const lead = pc4.bold(pc4.magenta(`${n}/${total}`));
-  console.log(`  ${lead}  ${pc4.bold(title)}`);
+  const lead = pc5.bold(pc5.magenta(`${n}/${total}`));
+  console.log(`  ${lead}  ${pc5.bold(title)}`);
 }
 
 // src/ui/welcome.ts
 import { confirm as confirm2, isCancel as isCancel3, cancel as cancel3 } from "@clack/prompts";
-import pc6 from "picocolors";
+import pc7 from "picocolors";
 
 // src/ui/banner.ts
 import { existsSync as existsSync7, readFileSync as readFileSync4 } from "fs";
 import { join as join6 } from "path";
-import pc5 from "picocolors";
+import pc6 from "picocolors";
 function renderBanner() {
   const path = join6(gorMobileRoot(), "templates", "banner.txt");
   if (existsSync7(path)) {
     const raw = readFileSync4(path, "utf8");
     const trimmed = raw.replace(/\n+$/, "");
-    const colored = trimmed.split("\n").map((line) => pc5.magenta(line)).join("\n");
+    const colored = trimmed.split("\n").map((line) => pc6.magenta(line)).join("\n");
     console.log("");
     console.log(colored);
   } else {
     console.log("");
-    console.log(pc5.bold(pc5.magenta("GOR-MOBILE")));
+    console.log(pc6.bold(pc6.magenta("GOR-MOBILE")));
   }
   const subtitle = `Android-aware overlay installer for Claude Code  \xB7  v${GOR_MOBILE_VERSION}`;
-  console.log(pc5.dim(subtitle));
+  console.log(pc6.dim(subtitle));
   console.log("");
 }
 
@@ -950,8 +1049,8 @@ var BULLETS = [
 ];
 async function welcome(skip) {
   renderBanner();
-  console.log(pc6.bold("  What will happen:"));
-  for (const b of BULLETS) console.log(`    ${pc6.dim("\u2022")} ${b}`);
+  console.log(pc7.bold("  What will happen:"));
+  for (const b of BULLETS) console.log(`    ${pc7.dim("\u2022")} ${b}`);
   console.log("");
   if (skip || !isTuiOn()) return;
   const proceed = await confirm2({
@@ -963,40 +1062,6 @@ async function welcome(skip) {
     process.exit(0);
   }
 }
-
-// src/ui/log.ts
-import pc7 from "picocolors";
-function isTty() {
-  return Boolean(process.stderr.isTTY) && !process.env.NO_COLOR;
-}
-function prefix(symbol, color) {
-  return isTty() ? color(symbol) : symbol;
-}
-var log = {
-  info(msg) {
-    console.error(`  ${prefix("i", pc7.cyan)} ${msg}`);
-  },
-  ok(msg) {
-    console.error(`  ${prefix("\u2713", pc7.green)} ${msg}`);
-  },
-  warn(msg) {
-    console.error(`  ${prefix("!", pc7.yellow)} ${msg}`);
-  },
-  err(msg) {
-    console.error(`  ${prefix("\u2717", pc7.red)} ${msg}`);
-  },
-  step(title) {
-    const label = isTty() ? pc7.bold(pc7.magenta(`\u25B8 ${title}`)) : `\u25B8 ${title}`;
-    console.error(`
-${label}`);
-  },
-  muted(msg) {
-    console.error(`  ${isTty() ? pc7.dim(msg) : msg}`);
-  },
-  raw(msg) {
-    console.error(msg);
-  }
-};
 
 // src/ui/statusline-select.ts
 import { select as select2, isCancel as isCancel4, cancel as cancel4 } from "@clack/prompts";
@@ -1113,7 +1178,7 @@ async function step1Deps(ctx) {
     throw new Error(`Install missing deps first: ${missing.join(", ")}`);
   }
 }
-async function runAndroidInitStep() {
+async function runAndroidInitStep(opts) {
   const res = await runAndroidInit();
   if (res.skillInstalled) {
     progressItem(2, 2, "initialize android skills", "ok", "~/.claude/skills/android-cli/");
@@ -1125,19 +1190,10 @@ async function runAndroidInitStep() {
   } else {
     throw new Error("android init succeeded but android-cli skill not found");
   }
-  const smoke = await smokeTestContract();
-  if (!smoke.ok && smoke.belowFloor) {
-    log.warn(`android CLI v${smoke.version ?? "?"} below floor \u2014 attempting brew upgrade`);
-    await tryBrewUpgrade();
-  }
-  const after = await smokeTestContract();
-  if (after.missing.length > 0) {
-    log.warn(`android CLI is missing contract commands: ${after.missing.join(", ")} \u2014 update gor-mobile`);
-  } else if (after.belowFloor) {
-    log.warn(`android CLI contract commands present but v${after.version ?? "?"} still below floor \u2014 update gor-mobile`);
-  } else {
-    log.ok(`android CLI contract OK (v${after.version ?? "?"})`);
-  }
+  await ensureAndroidCliCurrent({
+    skip: opts.skipAndroidUpdate,
+    dryRun: opts.dryRun
+  });
 }
 async function step2Android(ctx) {
   runStep(2, "Google Android CLI");
@@ -1148,7 +1204,10 @@ async function step2Android(ctx) {
       progressItem(2, 2, "initialize android skills", "skip", "dry-run: android init");
       return;
     }
-    await runAndroidInitStep();
+    await runAndroidInitStep({
+      skipAndroidUpdate: ctx.opts.skipAndroidUpdate,
+      dryRun: ctx.opts.dryRun
+    });
     return;
   }
   if (!androidCliInstallSupported()) {
@@ -1205,7 +1264,10 @@ async function step2Android(ctx) {
     throw new Error(`Android CLI install failed: ${res.error ?? "unknown error"}`);
   }
   progressItem(1, 2, "android CLI", "ok", androidCliPath() ?? "installed");
-  await runAndroidInitStep();
+  await runAndroidInitStep({
+    skipAndroidUpdate: ctx.opts.skipAndroidUpdate,
+    dryRun: ctx.opts.dryRun
+  });
 }
 async function step3AstIndex(ctx) {
   runStep(3, "ast-index CLI (code search)");
@@ -1254,7 +1316,7 @@ async function step4Rules(ctx) {
   }
   const alreadyCloned = existsSync9(join7(GOR_MOBILE_RULES_DIR, ".git"));
   if (alreadyCloned) {
-    await execa3("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], { reject: false });
+    await execa4("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], { reject: false });
     const m = readManifest();
     ctx.rulesVersion = m?.version ?? "?";
     progressItem(1, 2, "pull existing pack", "ok", `v${ctx.rulesVersion} @ ${GOR_MOBILE_RULES_DIR}`);
@@ -1443,7 +1505,7 @@ async function cmdInit(opts = {}) {
 // src/commands/doctor.ts
 import { existsSync as existsSync10, readFileSync as readFileSync5 } from "fs";
 import { join as join8 } from "path";
-import { execa as execa4 } from "execa";
+import { execa as execa5 } from "execa";
 function reportDep(name, path, required) {
   if (path) {
     log.ok(`${name} \u2192 ${path}`);
@@ -1524,7 +1586,7 @@ async function verboseHookEmulation() {
       log.warn(`[${label}] template missing: ${path}`);
       continue;
     }
-    const result = await execa4("bash", [path], {
+    const result = await execa5("bash", [path], {
       reject: false,
       input: JSON.stringify({
         cwd: process.cwd(),
@@ -1593,7 +1655,7 @@ async function checkAndroidContract() {
   if (smoke.missing.length > 0) {
     log.err(`android CLI missing contract commands: ${smoke.missing.join(", ")} \u2014 update gor-mobile`);
   } else if (smoke.belowFloor) {
-    log.warn(`android CLI v${smoke.version} is below floor \u2014 run 'gor-mobile init' to upgrade`);
+    log.warn(`android CLI v${smoke.version} is below floor \u2014 run 'gor-mobile repair' to upgrade`);
   } else {
     log.ok(`android CLI contract OK (v${smoke.version}, ${ANDROID_CONTRACT.length} commands)`);
   }
@@ -1698,7 +1760,7 @@ function unregisterManaged() {
 }
 
 // src/commands/repair.ts
-async function cmdRepair() {
+async function cmdRepair(opts = {}) {
   log.step("Repairing ~/.claude/ managed files");
   copyHookTemplates();
   const ss = installSessionStartHook();
@@ -1744,6 +1806,7 @@ async function cmdRepair() {
   } else {
     log.warn("'android init' ran but ~/.claude/skills/android-cli/SKILL.md missing");
   }
+  await ensureAndroidCliCurrent({ skip: opts.skipAndroidUpdate });
   writeClaudeMdSection(join9(gorMobileRoot(), "templates", "claude-md-snippet.md"));
   log.ok("CLAUDE.md managed section refreshed");
   log.ok("Done. Run 'gor-mobile doctor' to verify.");
@@ -1930,7 +1993,7 @@ async function rulesValidate() {
 }
 
 // src/commands/docs.ts
-import { execa as execa5 } from "execa";
+import { execa as execa6 } from "execa";
 async function cmdDocs(query) {
   const q = query.join(" ").trim();
   if (!q) {
@@ -1941,7 +2004,7 @@ async function cmdDocs(query) {
   const cli = androidCliPath();
   if (cli) {
     log.info(`\u2192 android docs "${q}"`);
-    const res = await execa5(cli, ["docs", q], { stdio: "inherit", reject: false });
+    const res = await execa6(cli, ["docs", q], { stdio: "inherit", reject: false });
     if (res.exitCode === 0) return;
     log.warn("android docs returned nothing; falling back to web search");
   }
@@ -1954,21 +2017,21 @@ async function cmdDocs(query) {
 // src/commands/self-update.ts
 import { existsSync as existsSync14 } from "fs";
 import { join as join11 } from "path";
-import { execa as execa6 } from "execa";
+import { execa as execa7 } from "execa";
 async function cmdSelfUpdate() {
   const root = gorMobileRoot();
   if (existsSync14(join11(root, ".git"))) {
     log.step(`git pull in ${root}`);
-    await execa6("git", ["-C", root, "pull", "--ff-only"], { stdio: "inherit" });
+    await execa7("git", ["-C", root, "pull", "--ff-only"], { stdio: "inherit" });
     log.step("npm install");
-    await execa6("npm", ["install", "--production=false"], { cwd: root, stdio: "inherit" });
+    await execa7("npm", ["install", "--production=false"], { cwd: root, stdio: "inherit" });
     log.step("npm run build");
-    await execa6("npm", ["run", "build"], { cwd: root, stdio: "inherit" });
+    await execa7("npm", ["run", "build"], { cwd: root, stdio: "inherit" });
     log.ok("CLI updated");
     return;
   }
   if (has("brew")) {
-    const res = await execa6("brew", ["list", "gor-mobile"], { reject: false });
+    const res = await execa7("brew", ["list", "gor-mobile"], { reject: false });
     if (res.exitCode === 0) {
       log.info("Brew-managed install \u2014 use: brew upgrade gor-mobile");
       return;
@@ -1982,17 +2045,17 @@ async function cmdSelfUpdate() {
 
 // src/commands/android.ts
 import { existsSync as existsSync15 } from "fs";
-import { execa as execa7 } from "execa";
+import { execa as execa8 } from "execa";
 async function cmdAndroid(args) {
   const cli = androidCliPath();
   if (cli) {
-    const res = await execa7(cli, args, { stdio: "inherit", reject: false });
+    const res = await execa8(cli, args, { stdio: "inherit", reject: false });
     process.exit(res.exitCode ?? 0);
   }
   const first = args[0];
   if (first && ["build", "assemble", "assembleDebug", "assembleRelease"].includes(first) && existsSync15("./gradlew")) {
     log.info(`Falling back to ./gradlew ${first}`);
-    const res = await execa7("./gradlew", [first], { stdio: "inherit", reject: false });
+    const res = await execa8("./gradlew", [first], { stdio: "inherit", reject: false });
     process.exit(res.exitCode ?? 0);
   }
   if (!first) {
@@ -2079,11 +2142,11 @@ async function cmdAndroidSkills() {
 // src/commands/update.ts
 import { existsSync as existsSync17 } from "fs";
 import { join as join13 } from "path";
-import { execa as execa8 } from "execa";
+import { execa as execa9 } from "execa";
 async function cmdUpdate() {
   log.step("Updating rules pack");
   if (existsSync17(join13(GOR_MOBILE_RULES_DIR, ".git"))) {
-    const res = await execa8(
+    const res = await execa9(
       "git",
       ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"],
       { reject: false, stdio: "inherit" }
@@ -2094,12 +2157,12 @@ async function cmdUpdate() {
     log.warn("Rules pack is not a git repo \u2014 skipping pull");
   }
   if (has("brew")) {
-    const list = await execa8("brew", ["list", "gor-mobile"], { reject: false });
+    const list = await execa9("brew", ["list", "gor-mobile"], { reject: false });
     if (list.exitCode === 0) {
       log.step("Checking for brew update");
-      await execa8("brew", ["update"], { reject: false });
-      const info = await execa8("brew", ["info", "--json=v2", "gor-mobile"], { reject: false });
-      const versions = await execa8("brew", ["list", "--versions", "gor-mobile"], { reject: false });
+      await execa9("brew", ["update"], { reject: false });
+      const info = await execa9("brew", ["info", "--json=v2", "gor-mobile"], { reject: false });
+      const versions = await execa9("brew", ["list", "--versions", "gor-mobile"], { reject: false });
       try {
         const parsed = JSON.parse(info.stdout);
         const latest = parsed?.formulae?.[0]?.versions?.stable;
@@ -2112,12 +2175,6 @@ async function cmdUpdate() {
       } catch {
       }
     }
-  }
-  if (androidCliPath()) {
-    log.step("Updating Android CLI");
-    const res = await runAndroidUpdate();
-    if (res.ok) log.ok("Android CLI updated");
-    else if (res.error) log.warn(`android update: ${res.error}`);
   }
   log.step("Repairing managed files");
   await cmdRepair();
@@ -2143,14 +2200,14 @@ program.name("gor-mobile").description("Android-aware overlay installer for Clau
 program.command("version").description("Print version").action(() => {
   console.log(`gor-mobile ${GOR_MOBILE_VERSION}`);
 });
-program.command("init").description("Run the install wizard (Android CLI, hooks, skills, MCP)").option("--dry-run", "print planned actions; no filesystem changes").option("-y, --yes", "assume yes to all prompts (non-interactive)").option("--skip-sanity", "skip final summary step").option("--no-tui", "force plain-text prompts").option("--advanced", "confirm each step and allow URL override").option("--rules <url>", "custom rules-pack git URL").action(async (opts) => {
+program.command("init").description("Run the install wizard (Android CLI, hooks, skills, MCP)").option("--dry-run", "print planned actions; no filesystem changes").option("-y, --yes", "assume yes to all prompts (non-interactive)").option("--skip-sanity", "skip final summary step").option("--no-tui", "force plain-text prompts").option("--advanced", "confirm each step and allow URL override").option("--rules <url>", "custom rules-pack git URL").option("--skip-android-update", "do not auto-update the Android CLI").action(async (opts) => {
   await cmdInit(opts);
 });
 program.command("doctor").description("Check environment (deps, hooks, MCP)").option("-v, --verbose", "dump hook payload + skill frontmatter").action(async (opts) => {
   await cmdDoctor(opts);
 });
-program.command("repair").description("Restore managed files in ~/.claude/").action(async () => {
-  await cmdRepair();
+program.command("repair").description("Restore managed files in ~/.claude/").option("--skip-android-update", "do not auto-update the Android CLI").action(async (opts) => {
+  await cmdRepair(opts);
 });
 program.command("enable").description("Mark the current repo as a gor-mobile (mobile) project").action(() => {
   cmdEnable();
@@ -2158,7 +2215,7 @@ program.command("enable").description("Mark the current repo as a gor-mobile (mo
 program.command("android-skills").description("Browse + install/remove optional Google Android CLI skills").action(async () => {
   await cmdAndroidSkills();
 });
-program.command("update").description("Pull latest rules, `android update`, then repair managed files").action(async () => {
+program.command("update").description("Pull latest rules, then repair managed files (also updates the Android CLI)").action(async () => {
   await cmdUpdate();
 });
 program.command("self-update").description("Update the CLI itself (curl-install path)").action(async () => {

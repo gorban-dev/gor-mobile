@@ -185,7 +185,7 @@ async function checkAndroidContract(): Promise<void> {
   if (smoke.missing.length > 0) {
     log.err(`android CLI missing contract commands: ${smoke.missing.join(", ")} — update gor-mobile`);
   } else if (smoke.belowFloor) {
-    log.warn(`android CLI v${smoke.version} is below floor — run 'gor-mobile init' to upgrade`);
+    log.warn(`android CLI v${smoke.version} is below floor — run 'gor-mobile repair' to upgrade`);
   } else {
     log.ok(`android CLI contract OK (v${smoke.version}, ${ANDROID_CONTRACT.length} commands)`);
   }

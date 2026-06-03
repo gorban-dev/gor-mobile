@@ -6,6 +6,8 @@ import { CLAUDE_SKILLS_DIR } from "../constants.js";
 import { ANDROID_CLI_FLOOR, requiredTopLevelCommands } from "../android-contract.js";
 import { meetsFloor } from "./version.js";
 import { androidCliPath } from "./deps.js";
+import { isOnline } from "./net.js";
+import { log } from "../ui/log.js";
 
 const DARWIN_ARM64_FALLBACK_URL =
   "https://dl.google.com/android/cli/latest/darwin_arm64/install.sh";
@@ -340,5 +342,81 @@ export async function tryBrewUpgrade(): Promise<boolean> {
     return res.exitCode === 0;
   } catch {
     return false;
+  }
+}
+
+/** Detect how the android CLI was installed: brew cask vs standalone (curl). */
+export async function androidInstallMethod(): Promise<"brew" | "standalone"> {
+  const cli = androidCliPath();
+  if (
+    cli &&
+    (cli.startsWith("/opt/homebrew/") ||
+      cli.startsWith("/usr/local/") ||
+      cli.startsWith("/home/linuxbrew/"))
+  ) {
+    return "brew";
+  }
+  try {
+    const res = await execa("brew", ["list", "android-cli"], {
+      reject: false,
+      timeout: 30_000
+    });
+    if (res.exitCode === 0) return "brew";
+  } catch {
+    // brew absent — fall through to standalone
+  }
+  return "standalone";
+}
+
+export interface EnsureCurrentOpts {
+  skip?: boolean;
+  dryRun?: boolean;
+}
+
+/**
+ * Proactively bring the installed android CLI to latest, install-method-aware.
+ * Best-effort: never throws. Skips on dry-run, --skip flag / env, offline, or
+ * when the CLI is not on PATH. Always re-validates the contract and reports.
+ */
+export async function ensureAndroidCliCurrent(
+  opts: EnsureCurrentOpts = {}
+): Promise<void> {
+  const cli = androidCliPath();
+  if (!cli) {
+    log.info("android CLI not on PATH — skipping update");
+    return;
+  }
+  if (opts.dryRun) {
+    log.info("dry-run: skipping android CLI update");
+    return;
+  }
+
+  const skipRequested =
+    opts.skip || Boolean(process.env.GOR_MOBILE_SKIP_ANDROID_UPDATE);
+
+  let upgraded = false;
+  if (skipRequested) {
+    log.info("skipping android CLI update (requested)");
+  } else if (!(await isOnline())) {
+    log.info("offline — skipping android CLI update");
+  } else {
+    const method = await androidInstallMethod();
+    log.step(`Updating android CLI (${method})`);
+    upgraded =
+      method === "brew" ? await tryBrewUpgrade() : (await runAndroidUpdate()).ok;
+    if (!upgraded) log.warn("android CLI update did not complete");
+  }
+
+  const smoke = await smokeTestContract();
+  if (smoke.missing.length > 0) {
+    log.warn(
+      `android CLI missing contract commands: ${smoke.missing.join(", ")} — update gor-mobile`
+    );
+  } else if (smoke.belowFloor) {
+    log.warn(
+      `android CLI v${smoke.version ?? "?"} still below floor ${ANDROID_CLI_FLOOR} — check Google's update channel`
+    );
+  } else {
+    log.ok(`android CLI current (v${smoke.version ?? "?"})`);
   }
 }

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2 — 2026-06-03
+
+- change: gor-mobile now proactively keeps the Android CLI current. `init` and
+  `repair` run an install-method-aware upgrade (`brew upgrade android-cli` for
+  brew casks, `android update` for standalone `~/.local/bin` installs), then
+  re-validate the capability contract. Best-effort and non-fatal: skipped on
+  `--dry-run`, when offline, or via `--skip-android-update` /
+  `GOR_MOBILE_SKIP_ANDROID_UPDATE=1`. `doctor`'s below-floor hint now points at
+  `gor-mobile repair`. Existing users: `brew upgrade gor-mobile`, then
+  `gor-mobile repair`.
+
 ## 0.2.1 — 2026-06-03
 
 - change: hooks now inject into the system prompt **only** in a mobile
