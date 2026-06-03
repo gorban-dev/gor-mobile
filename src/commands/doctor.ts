@@ -110,7 +110,15 @@ async function verboseHookEmulation(): Promise<void> {
       log.warn(`[${label}] template missing: ${path}`);
       continue;
     }
-    const result = await execa("bash", [path], { reject: false });
+    const result = await execa("bash", [path], {
+      reject: false,
+      input: JSON.stringify({
+        cwd: process.cwd(),
+        session_id: "gor-mobile-doctor",
+        prompt: "gor-mobile doctor"
+      }),
+      env: { ...process.env, GORM_FORCE_MOBILE: "1" }
+    });
     if (result.exitCode !== 0) {
       log.warn(`[${label}] hook exited ${result.exitCode}:`);
       console.error(result.stdout || result.stderr);
@@ -223,6 +231,10 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   log.step("Claude Code integration");
   checkFile(CLAUDE_SETTINGS, "settings.json");
   checkHooks();
+  checkFile(
+    join(GOR_MOBILE_HOME, "templates", "detect-mobile-context.sh"),
+    "mobile-context detector"
+  );
   checkFile(CLAUDE_AGENTS_DIR, "agents/");
   if (androidCliSkillInstalled()) {
     log.ok("android-cli skill installed in ~/.claude/skills/");

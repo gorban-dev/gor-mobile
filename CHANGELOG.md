@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.1 — 2026-06-03
+
+- change: hooks now inject into the system prompt **only** in a mobile
+  (Android/iOS) context, when an opt-in `.gor-mobile.json` marker is present at
+  the repo root, or on explicit request (a prompt mentioning `gor-mobile`, or a
+  mobile platform word plus a create/build verb). Non-mobile sessions stay clean
+  — the `SessionStart` block and the `UserPromptSubmit` turn-reminder are
+  suppressed (the hook emits `{}`). Activation is **sticky** for the rest of a
+  session once triggered (per-`session_id` flag under `$TMPDIR`). Gating lives
+  in a new shared detector `templates/detect-mobile-context.sh` that both hooks
+  call; if it is absent (an old install not yet repaired) the hooks fall through
+  and inject as before. Skill/agent visibility is unchanged. Existing users: run
+  `gor-mobile repair` to copy the detector and the gated hook scripts into
+  `~/.gor-mobile/templates/`.
+
+- add: `gor-mobile enable` — writes an opt-in `.gor-mobile.json` marker at the
+  current repo root so gor-mobile activates there deterministically (commit it
+  to share with the team). `doctor` now also verifies the detector is installed,
+  and `doctor --verbose` forces the detector on so it still dumps the hook
+  payload.
+
+- change: the `gor-mobile-test-driven-development` skill now applies a **TDD
+  applicability gate** before the RED-GREEN-REFACTOR cycle. TDD engages only
+  when the change carries behavioral logic **and** the target module has a test
+  harness; otherwise it defers (no harness → surface test-debt instead of
+  fabricating one) or skips (non-behavioral wiring / config / resources →
+  one-line reason), then still routes to `verification-before-completion`. The
+  gate keys on the *category* of change, never its size. Lives in the overlay
+  (`templates/overlays/test-driven-development.md`); the upstream SKILL.md body
+  is untouched. Existing users: run `gor-mobile repair` to pick it up.
+
 ## 0.2.0 — 2026-06-01
 
 - fix: hook deduplication no longer leaves duplicate `SessionStart` /

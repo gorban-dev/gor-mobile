@@ -12,7 +12,7 @@ import { Command } from "commander";
 import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-var GOR_MOBILE_VERSION = "0.2.0";
+var GOR_MOBILE_VERSION = "0.2.1";
 var HOME = homedir();
 var GOR_MOBILE_HOME = process.env.GOR_MOBILE_HOME ?? join(HOME, ".gor-mobile");
 var GOR_MOBILE_RULES_DIR = join(GOR_MOBILE_HOME, "rules");
@@ -456,6 +456,7 @@ function copyHookTemplates() {
   const names = [
     "session-start-hook.sh",
     "user-prompt-submit-hook.sh",
+    "detect-mobile-context.sh",
     "statusline-command.sh",
     "statusline-cat.sh"
   ];
@@ -1523,7 +1524,15 @@ async function verboseHookEmulation() {
       log.warn(`[${label}] template missing: ${path}`);
       continue;
     }
-    const result = await execa4("bash", [path], { reject: false });
+    const result = await execa4("bash", [path], {
+      reject: false,
+      input: JSON.stringify({
+        cwd: process.cwd(),
+        session_id: "gor-mobile-doctor",
+        prompt: "gor-mobile doctor"
+      }),
+      env: { ...process.env, GORM_FORCE_MOBILE: "1" }
+    });
     if (result.exitCode !== 0) {
       log.warn(`[${label}] hook exited ${result.exitCode}:`);
       console.error(result.stdout || result.stderr);
@@ -1555,12 +1564,12 @@ function verboseSkillsFrontmatter() {
     return;
   }
   const { readdirSync: readdirSync2 } = __require("fs");
-  const { join: join14 } = __require("path");
+  const { join: join15 } = __require("path");
   let count = 0;
   let bad = 0;
   for (const entry of readdirSync2(CLAUDE_SKILLS_DIR)) {
     if (!entry.startsWith("gor-mobile-")) continue;
-    const skillMd = join14(CLAUDE_SKILLS_DIR, entry, "SKILL.md");
+    const skillMd = join15(CLAUDE_SKILLS_DIR, entry, "SKILL.md");
     if (!existsSync10(skillMd)) continue;
     count++;
     const content = readFileSync5(skillMd, "utf8");
@@ -1627,6 +1636,10 @@ async function cmdDoctor(opts = {}) {
   log.step("Claude Code integration");
   checkFile(CLAUDE_SETTINGS, "settings.json");
   checkHooks();
+  checkFile(
+    join8(GOR_MOBILE_HOME, "templates", "detect-mobile-context.sh"),
+    "mobile-context detector"
+  );
   checkFile(CLAUDE_AGENTS_DIR, "agents/");
   if (androidCliSkillInstalled()) {
     log.ok("android-cli skill installed in ~/.claude/skills/");
@@ -2110,6 +2123,20 @@ async function cmdUpdate() {
   await cmdRepair();
 }
 
+// src/commands/enable.ts
+import { existsSync as existsSync18, writeFileSync as writeFileSync4 } from "fs";
+import { join as join14 } from "path";
+function cmdEnable() {
+  const marker = join14(process.cwd(), ".gor-mobile.json");
+  if (existsSync18(marker)) {
+    log.ok(`Already enabled \u2014 ${marker} exists`);
+    return;
+  }
+  writeFileSync4(marker, "{}\n");
+  log.ok(`gor-mobile enabled for this repo \u2192 ${marker}`);
+  log.info("Commit this file so the whole team's sessions activate gor-mobile here.");
+}
+
 // src/cli.ts
 var program = new Command();
 program.name("gor-mobile").description("Android-aware overlay installer for Claude Code").version(`gor-mobile ${GOR_MOBILE_VERSION}`, "-v, --version", "print version");
@@ -2124,6 +2151,9 @@ program.command("doctor").description("Check environment (deps, hooks, MCP)").op
 });
 program.command("repair").description("Restore managed files in ~/.claude/").action(async () => {
   await cmdRepair();
+});
+program.command("enable").description("Mark the current repo as a gor-mobile (mobile) project").action(() => {
+  cmdEnable();
 });
 program.command("android-skills").description("Browse + install/remove optional Google Android CLI skills").action(async () => {
   await cmdAndroidSkills();

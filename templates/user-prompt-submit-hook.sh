@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: directive reminder injected before every user prompt.
-# Counteracts drift — the SessionStart injection dissolves after a few
-# turns on Opus 4.x, so the skills-discipline signal needs a refresher
-# on each turn.
+# UserPromptSubmit hook: directive reminder injected before a user prompt, but
+# ONLY in a mobile (Android/iOS) context or on explicit request — otherwise stay
+# silent. Gating is delegated to detect-mobile-context.sh (next to this script).
 #
 # Kept intentionally directive (not just "check skills") because the mild
 # variant was empirically ignored: the model would match a generic skill
@@ -10,6 +9,21 @@
 # gor-mobile process skills entirely.
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DETECTOR="$SCRIPT_DIR/detect-mobile-context.sh"
+
+input="$(cat)"
+cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null || true)"
+session_id="$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null || true)"
+prompt="$(printf '%s' "$input" | jq -r '.prompt // empty' 2>/dev/null || true)"
+
+# Gate: detector present and says "not mobile" → stay silent. Prompt is passed
+# via GORM_PROMPT so the detector can honor explicit-request keywords.
+if [[ -f "$DETECTOR" ]] && ! GORM_PROMPT="$prompt" bash "$DETECTOR" "$cwd" "$session_id"; then
+    printf '{}\n'
+    exit 0
+fi
 
 reminder='<gor-mobile-turn-reminder>
 CRITICAL skill-discipline rule (overrides default behavior).

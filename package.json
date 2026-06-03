@@ -1,6 +1,6 @@
 {
   "name": "gor-mobile",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Android-aware overlay installer for Claude Code — superpowers-style workflow",
   "type": "module",
   "bin": {
@@ -22,7 +22,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "clean": "rm -rf dist",
-    "test": "bash test/hooks-idempotency.sh && bash test/statusline.sh"
+    "test": "bash test/hooks-idempotency.sh && bash test/statusline.sh && bash test/detect-mobile-context.test.sh"
   },
   "repository": {
     "type": "git",

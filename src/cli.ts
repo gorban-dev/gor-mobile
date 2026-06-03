@@ -16,6 +16,7 @@ import { cmdSelfUpdate } from "./commands/self-update.js";
 import { cmdAndroid } from "./commands/android.js";
 import { cmdAndroidSkills } from "./commands/android-skills.js";
 import { cmdUpdate } from "./commands/update.js";
+import { cmdEnable } from "./commands/enable.js";
 
 const program = new Command();
 
@@ -57,6 +58,13 @@ program
   .description("Restore managed files in ~/.claude/")
   .action(async () => {
     await cmdRepair();
+  });
+
+program
+  .command("enable")
+  .description("Mark the current repo as a gor-mobile (mobile) project")
+  .action(() => {
+    cmdEnable();
   });
 
 program

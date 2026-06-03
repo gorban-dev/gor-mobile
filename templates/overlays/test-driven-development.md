@@ -5,6 +5,52 @@
 The skill body above runs verbatim. The following ADD to it when the target
 is an Android/Kotlin codebase.
 
+### TDD applicability gate (run this FIRST)
+
+This gate is gor-mobile project policy and runs **before** the body's
+"When to Use" / "Iron Law" and before the RED-GREEN-REFACTOR cycle. Its outcome
+decides whether that cycle engages at all. Precedence is legitimate: per
+`[[gor-mobile-using-superpowers]]`, the project layer overrides default skill
+behavior, and this overlay is that layer.
+
+Answer two **objective** questions about the change:
+
+**Q1 — Does it carry behavioral logic?**
+Logic expressible as input→output or a state transition: branching, computation,
+parsing, mapping/transformation, validation, error handling, business rules,
+use-cases, reducers.
+NOT behavioral: DI / module wiring (Hilt/Koin/Dagger), navigation graph,
+resources / XML / layout / strings / drawables, gradle / build config,
+dependency bumps, DTO / data-class with no logic, plain delegation /
+pass-through, generated code, logging-only changes, bare constants.
+
+**Q2 — Is a test harness reachable for the target module?**
+The module has a test sourceset (`src/test/…` JVM unit, or `src/androidTest/…`
+instrumented) AND a test-runner dependency. Check structurally
+(`ast-index map` or file presence) — not deep analysis.
+
+| Q1 | Q2 | Verdict | Action |
+|----|----|---------|--------|
+| YES | YES | **TDD applies** | Proceed to the sections below (Architecture rules + Stage-to-model assignment), unchanged. |
+| YES | NO | **TDD deferred** | Do NOT fabricate a harness — that is unrelated infra work. Implement via the normal path and surface the gap: tell the user "module `<x>` has no test harness; this logic is untested — set up testing, or I can in a separate task." |
+| NO | — | **TDD not warranted** | Skip the cycle. Record one line in the summary, e.g. "TDD skipped: DI wiring, no behavioral logic." |
+
+**The gate tests the CATEGORY of change, never its size.** A one-line change to
+real logic (e.g. `<` → `<=` in a boundary check) still gets a test — that is
+where tests pay off most. "Too small to test" is not a verdict here; if a change
+feels too small, it is almost always because it is non-behavioral (Q1 = NO),
+which the gate already handles. Never use line-count or effort as a reason to
+skip — that is exactly the rationalization the body above correctly forbids.
+
+When the gate returns **deferred** or **not warranted**:
+- You still owe verification before claiming done — invoke
+  `[[gor-mobile-verification-before-completion]]`. "No TDD" never means "no checks".
+- State the verdict in one line so the user has a record and can object.
+- The user can override either way ("write a test anyway" / "skip it here"); the
+  gate is the default, not a law.
+- The gate outranks a plan's prescribed step: if a `writing-plans` plan hardcodes
+  "Write the failing test" but the gate returns *not warranted*, skip that step.
+
 ### Architecture rules
 Before writing tests or implementation, load the relevant rules sections
 from `$HOME/.gor-mobile/rules/` (always `core` + `architecture`; plus

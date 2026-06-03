@@ -23,6 +23,7 @@ export function copyHookTemplates(): void {
   const names = [
     "session-start-hook.sh",
     "user-prompt-submit-hook.sh",
+    "detect-mobile-context.sh",
     "statusline-command.sh",
     "statusline-cat.sh"
   ];
