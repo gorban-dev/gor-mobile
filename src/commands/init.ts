@@ -1,12 +1,9 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { execa } from "execa";
 import pc from "picocolors";
 import { cancel, isCancel } from "@clack/prompts";
 import {
-  CLAUDE_AGENTS_DIR,
-  CLAUDE_SETTINGS,
-  CLAUDE_SKILLS_DIR,
   DEFAULT_RULES_REF,
   DEFAULT_RULES_URL,
   GOR_MOBILE_RULES_DIR,
@@ -21,7 +18,7 @@ import {
   installAndroidCliViaBrew,
   runAndroidInit
 } from "../helpers/android-cli.js";
-import { writeClaudeMdSection } from "../helpers/claude-md-section.js";
+import { writeManagedSection } from "../helpers/claude-md-section.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import {
   AST_INDEX_INSTALL_SNIPPET,
@@ -45,6 +42,8 @@ import {
   installSessionStartHook,
   installUserPromptSubmitHook
 } from "../helpers/settings-merge.js";
+import type { TargetId, TargetSpec } from "../targets.js";
+import { resolveTargets } from "../ui/target-select.js";
 import { renderBanner } from "../ui/banner.js";
 import { confirmStep, textPrompt } from "../ui/confirm-step.js";
 import { modeSelect, type WizardMode } from "../ui/mode-select.js";
@@ -52,12 +51,17 @@ import { note } from "../ui/note.js";
 import { finalOutro } from "../ui/outro.js";
 import { progressItem } from "../ui/progress.js";
 import { sectionHeader } from "../ui/section-header.js";
-import { forceNoTui } from "../ui/tui-mode.js";
+import { forceNoTui, isTuiOn } from "../ui/tui-mode.js";
 import { welcome } from "../ui/welcome.js";
-import { CLAUDE_COMMANDS_DIR } from "../constants.js";
+import { CLAUDE_COMMANDS_DIR, CODEX_CONFIG_TOML } from "../constants.js";
 import { log } from "../ui/log.js";
 import { statusLineSelect, showStatusLinePreviews } from "../ui/statusline-select.js";
 import { installStatusLine, statusLineState } from "../helpers/settings-statusline.js";
+import {
+  CODEX_STATUS_LINE_ITEMS,
+  codexStatusLineState,
+  installCodexStatusLine
+} from "../helpers/codex-statusline.js";
 
 export interface InitOptions {
   dryRun?: boolean;
@@ -68,32 +72,43 @@ export interface InitOptions {
   advanced?: boolean;
   rules?: string;
   skipAndroidUpdate?: boolean;
+  target?: string;
 }
 
-const TOTAL_STEPS = 10;
+interface TargetCounts {
+  skills: number;
+  agents: number;
+  hooks: number;
+}
 
 interface RunCtx {
   mode: WizardMode;
   opts: InitOptions;
   rulesUrl: string;
-  counts: {
-    skills: number;
-    agents: number;
-    hooks: number;
-  };
   rulesVersion: string;
+  targets: TargetSpec[];
+  perTarget: Map<TargetId, TargetCounts>;
+  androidInitRan: boolean;
 }
+
+// Global steps (deps, android binary, ast-index, rules) run once, then one
+// integration section per target, then the summary.
+const GLOBAL_STEPS = 4;
 
 function dryLog(msg: string): void {
   console.log(`    ${pc.dim("[dry-run]")} ${msg}`);
 }
 
-function runStep(stepNum: number, title: string): void {
-  sectionHeader(stepNum, TOTAL_STEPS, title);
+function totalSteps(ctx: RunCtx): number {
+  return GLOBAL_STEPS + ctx.targets.length + 1;
+}
+
+function runStep(ctx: RunCtx, stepNum: number, title: string): void {
+  sectionHeader(stepNum, totalSteps(ctx), title);
 }
 
 async function step1Deps(ctx: RunCtx): Promise<void> {
-  runStep(1, "Base dependencies");
+  runStep(ctx, 1, "Base dependencies");
   const required: Array<[string, string | null]> = [
     ["git", which("git")],
     ["curl", which("curl")],
@@ -115,47 +130,26 @@ async function step1Deps(ctx: RunCtx): Promise<void> {
   }
 }
 
-async function runAndroidInitStep(opts: {
-  skipAndroidUpdate?: boolean;
-  dryRun?: boolean;
-}): Promise<void> {
-  const res = await runAndroidInit();
-  if (res.skillInstalled) {
-    progressItem(2, 2, "initialize android skills", "ok", "~/.claude/skills/android-cli/");
-    log.info(
-      "Browse Google's skill catalog — run 'gor-mobile android-skills' to install optional skills."
-    );
-  } else if (res.error) {
-    throw new Error(`android init failed: ${res.error}`);
-  } else {
-    throw new Error("android init succeeded but android-cli skill not found");
-  }
-
-  await ensureAndroidCliCurrent({
-    skip: opts.skipAndroidUpdate,
-    dryRun: opts.dryRun
-  });
-}
-
-async function step2Android(ctx: RunCtx): Promise<void> {
-  runStep(2, "Google Android CLI");
+// Global: ensure the android binary is on PATH (hard-mandatory). The per-target
+// `android init --agent=<flag>` that drops the stock skill runs later, inside
+// each integration section.
+async function step2AndroidBinary(ctx: RunCtx): Promise<void> {
+  runStep(ctx, 2, "Google Android CLI");
 
   const existing = androidCliPath();
   if (existing) {
-    progressItem(1, 2, "android CLI", "ok", existing);
-    if (ctx.opts.dryRun) {
-      progressItem(2, 2, "initialize android skills", "skip", "dry-run: android init");
-      return;
+    progressItem(1, 1, "android CLI", "ok", existing);
+    if (!ctx.opts.dryRun) {
+      await ensureAndroidCliCurrent({
+        skip: ctx.opts.skipAndroidUpdate,
+        dryRun: ctx.opts.dryRun
+      });
     }
-    await runAndroidInitStep({
-      skipAndroidUpdate: ctx.opts.skipAndroidUpdate,
-      dryRun: ctx.opts.dryRun
-    });
     return;
   }
 
   if (!androidCliInstallSupported()) {
-    progressItem(1, 2, "android CLI", "fail", `unsupported platform ${process.platform}/${process.arch}`);
+    progressItem(1, 1, "android CLI", "fail", `unsupported platform ${process.platform}/${process.arch}`);
     const body = [
       `gor-mobile requires the Google Android CLI, and Google does not`,
       `ship an installer for ${process.platform}/${process.arch}.`,
@@ -183,8 +177,8 @@ async function step2Android(ctx: RunCtx): Promise<void> {
     "What it is:",
     "  An official Google CLI that lets AI agents drive the Android",
     "  toolchain (build, install, run, SDK) without shelling out to",
-    "  adb/gradle directly. It also ships a Claude skill",
-    "  (~/.claude/skills/android-cli/) via `android init`.",
+    "  adb/gradle directly. It also ships a skill (via `android init`)",
+    "  into each agent's skills folder.",
     "",
     "Learn more: https://developer.android.com/tools/agents",
     "",
@@ -198,8 +192,7 @@ async function step2Android(ctx: RunCtx): Promise<void> {
   note(body, "Android CLI required");
 
   if (ctx.opts.dryRun) {
-    progressItem(1, 2, "android CLI", "skip", `dry-run: ${displayCmd}`);
-    progressItem(2, 2, "initialize android skills", "skip", "dry-run: android init");
+    progressItem(1, 1, "android CLI", "skip", `dry-run: ${displayCmd}`);
     return;
   }
 
@@ -207,7 +200,7 @@ async function step2Android(ctx: RunCtx): Promise<void> {
     ? true
     : await confirmStep("Install the Android CLI now? (required to continue)", true);
   if (!install) {
-    progressItem(1, 2, "android CLI", "fail", "declined — gor-mobile requires the Android CLI");
+    progressItem(1, 1, "android CLI", "fail", "declined — gor-mobile requires the Android CLI");
     throw new Error("user declined Android CLI install — gor-mobile cannot continue");
   }
 
@@ -218,18 +211,18 @@ async function step2Android(ctx: RunCtx): Promise<void> {
     res = await installAndroidCli();
   }
   if (!res.installed) {
-    progressItem(1, 2, "android CLI", "fail", res.error ?? "install failed");
+    progressItem(1, 1, "android CLI", "fail", res.error ?? "install failed");
     throw new Error(`Android CLI install failed: ${res.error ?? "unknown error"}`);
   }
-  progressItem(1, 2, "android CLI", "ok", androidCliPath() ?? "installed");
-  await runAndroidInitStep({
-    skipAndroidUpdate: ctx.opts.skipAndroidUpdate,
+  progressItem(1, 1, "android CLI", "ok", androidCliPath() ?? "installed");
+  await ensureAndroidCliCurrent({
+    skip: ctx.opts.skipAndroidUpdate,
     dryRun: ctx.opts.dryRun
   });
 }
 
 async function step3AstIndex(ctx: RunCtx): Promise<void> {
-  runStep(3, "ast-index CLI (code search)");
+  runStep(ctx, 3, "ast-index CLI (code search)");
 
   if (ctx.opts.dryRun) {
     progressItem(1, 1, "ast-index CLI", "skip", "dry-run: which ast-index");
@@ -260,7 +253,7 @@ async function step3AstIndex(ctx: RunCtx): Promise<void> {
 }
 
 async function step4Rules(ctx: RunCtx): Promise<void> {
-  runStep(4, "Rules pack");
+  runStep(ctx, 4, "Rules pack");
 
   if (ctx.mode === "advanced" && !ctx.opts.rules) {
     ctx.rulesUrl = await textPrompt(
@@ -305,169 +298,162 @@ async function step4Rules(ctx: RunCtx): Promise<void> {
   progressItem(2, 2, "save config", "ok", GOR_MOBILE_RULES_DIR);
 }
 
-async function step5Hooks(ctx: RunCtx): Promise<void> {
-  runStep(5, "SessionStart + UserPromptSubmit hooks");
-
-  if (ctx.opts.dryRun) {
-    progressItem(1, 4, "copy session-start-hook.sh", "skip", "dry-run");
-    progressItem(2, 4, "copy user-prompt-submit-hook.sh", "skip", "dry-run");
-    progressItem(3, 4, "merge SessionStart", "skip", "dry-run");
-    progressItem(4, 4, "merge UserPromptSubmit", "skip", "dry-run");
-    ctx.counts.hooks = 2;
-    return;
-  }
-
-  copyHookTemplates();
-  progressItem(1, 4, "copy session-start-hook.sh", "ok");
-  progressItem(2, 4, "copy user-prompt-submit-hook.sh", "ok");
-  installSessionStartHook();
-  progressItem(3, 4, "merge SessionStart", "ok", CLAUDE_SETTINGS);
-  installUserPromptSubmitHook();
-  progressItem(4, 4, "merge UserPromptSubmit", "ok", CLAUDE_SETTINGS);
-  ctx.counts.hooks = 2;
+function templateSkillCount(): number {
+  const src = join(gorMobileRoot(), "templates", "skills");
+  return existsSync(src) ? readdirSync(src).filter((n) => !n.startsWith(".")).length : 0;
 }
 
-async function step6Skills(ctx: RunCtx): Promise<void> {
-  runStep(6, "Skills → ~/.claude/skills/gor-mobile-*/");
-
-  if (ctx.opts.dryRun) {
-    const { readdirSync } = await import("node:fs");
-    const src = join(gorMobileRoot(), "templates", "skills");
-    const names = existsSync(src)
-      ? readdirSync(src).filter((n) => !n.startsWith("."))
-      : [];
-    for (let i = 0; i < names.length; i++) {
-      dryLog(`install skill ${names[i]} (sed + overlay)`);
-    }
-    ctx.counts.skills = names.length;
-    return;
-  }
-
-  cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
-  const res = installSkills();
-  const total = res.installed.length;
-  for (let i = 0; i < total; i++) {
-    const name = res.installed[i]!;
-    const hasPrefixIssue = res.missingPrefix.some((p) => p.includes(`gor-mobile-${name}/`));
-    progressItem(
-      i + 1,
-      total,
-      `gor-mobile-${name}`,
-      hasPrefixIssue ? "warn" : "ok"
-    );
-  }
-  if (res.missingPrefix.length > 0) {
-    log.warn(`Frontmatter rewrite issues in ${res.missingPrefix.length} skill(s)`);
-  }
-  ctx.counts.skills = total;
+function templateAgentCount(target: TargetSpec): number {
+  const sub = target.agentFormat === "toml" ? "agents-codex" : "agents";
+  const src = join(gorMobileRoot(), "templates", sub);
+  return existsSync(src)
+    ? readdirSync(src).filter((f) => f.endsWith(`.${target.agentFormat}`)).length
+    : 0;
 }
 
-async function step7Agents(ctx: RunCtx): Promise<void> {
-  runStep(7, "Agents → ~/.claude/agents/");
-
-  if (ctx.opts.dryRun) {
-    const { readdirSync } = await import("node:fs");
-    const src = join(gorMobileRoot(), "templates", "agents");
-    const files = existsSync(src)
-      ? readdirSync(src).filter((f) => f.endsWith(".md"))
-      : [];
-    for (let i = 0; i < files.length; i++) {
-      dryLog(`install agent ${files[i]}`);
-    }
-    ctx.counts.agents = files.length;
-    return;
-  }
-
-  cleanupLegacyAgents();
-  const files = installAgents();
-  const total = files.length;
-  for (let i = 0; i < total; i++) {
-    const name = files[i]!;
-    const label = name.replace(/\.md$/, "");
-    const model = /reviewer/.test(label) && /deep/.test(label) ? "Opus" : "Sonnet";
-    progressItem(i + 1, total, label, "ok", model);
-  }
-  ctx.counts.agents = total;
-}
-
-async function step8ClaudeMd(ctx: RunCtx): Promise<void> {
-  runStep(8, "CLAUDE.md managed section");
-
-  if (ctx.opts.dryRun) {
-    progressItem(1, 1, "write managed section", "skip", "dry-run");
-    return;
-  }
-
-  writeClaudeMdSection(join(gorMobileRoot(), "templates", "claude-md-snippet.md"));
-  progressItem(1, 1, "write managed section", "ok", "~/.claude/CLAUDE.md");
-}
-
-async function step9StatusLine(ctx: RunCtx): Promise<void> {
-  runStep(9, "Status line (optional)");
-
-  if (ctx.opts.dryRun) {
-    showStatusLinePreviews();
-    progressItem(1, 1, "status line", "skip", "dry-run: choose Classic / Cat / Skip");
-    return;
-  }
-
+async function statusLineFor(ctx: RunCtx, idx: number, total: number): Promise<void> {
   const choice = await statusLineSelect(Boolean(ctx.opts.yes));
   if (choice === "skip") {
-    progressItem(1, 1, "status line", "skip", "not installed");
+    progressItem(idx, total, "status line", "skip", "not installed");
     return;
   }
-
   if (!which("jq")) {
     log.warn("jq not found — the status line needs jq to render (brew install jq); installing anyway");
   }
-
   const st = statusLineState();
   let force = false;
   if (st.foreign) {
     force = await confirmStep("A non-gor-mobile statusLine already exists. Replace it?", false);
     if (!force) {
-      progressItem(1, 1, "status line", "skip", "kept your existing statusLine");
+      progressItem(idx, total, "status line", "skip", "kept your existing statusLine");
       return;
     }
   }
-
-  // The st.foreign guard above already handled the only case installStatusLine
-  // refuses (foreign + no force), so this write always lands.
   installStatusLine(choice, { force });
   const label = choice === "cat" ? "Cat" : "Classic";
-  progressItem(1, 1, "status line", "ok", `${label} → ${CLAUDE_SETTINGS}`);
+  progressItem(idx, total, "status line", "ok", label);
 }
 
-async function step10Summary(ctx: RunCtx): Promise<void> {
+async function codexStatusLineFor(ctx: RunCtx, idx: number, total: number): Promise<void> {
+  // Mirror Claude's status-line UX: offered interactively, skipped under
+  // --yes / non-TTY so a non-interactive run never imposes a footer.
+  if (ctx.opts.yes || !isTuiOn()) {
+    progressItem(idx, total, "status line", "skip", "non-interactive");
+    return;
+  }
+  const st = codexStatusLineState();
+  if (st.foreign) {
+    const replace = await confirmStep(
+      "~/.codex/config.toml already has a status_line. Replace it with the gor-mobile default?",
+      false
+    );
+    if (!replace) {
+      progressItem(idx, total, "status line", "skip", "kept your existing status_line");
+      return;
+    }
+    installCodexStatusLine({ force: true });
+    progressItem(idx, total, "status line", "ok", "replaced in config.toml");
+    return;
+  }
+  const install = await confirmStep(
+    "Install the recommended Codex status line (model · context · usage limits · task)?",
+    true
+  );
+  if (!install) {
+    progressItem(idx, total, "status line", "skip", "not installed");
+    return;
+  }
+  installCodexStatusLine();
+  progressItem(idx, total, "status line", "ok", CODEX_CONFIG_TOML);
+}
+
+async function targetSection(ctx: RunCtx, target: TargetSpec, stepNum: number): Promise<void> {
+  runStep(ctx, stepNum, `${target.label} integration`);
+  const counts: TargetCounts = { skills: 0, agents: 0, hooks: 0 };
+  ctx.perTarget.set(target.id, counts);
+  const steps = target.supportsStatusLine ? 6 : 5;
+
+  if (ctx.opts.dryRun) {
+    dryLog(`merge SessionStart + UserPromptSubmit → ${target.hooksFile}`);
+    dryLog(`install ${templateSkillCount()} skills → ${target.skillsDir}`);
+    dryLog(`install agents (${target.agentFormat}) → ${target.agentsDir}`);
+    dryLog(`write managed section → ${target.instructionsFile}`);
+    dryLog("android init (stock android-cli skill for detected agents)");
+    if (target.statusLineKind === "claude-command") {
+      showStatusLinePreviews();
+      dryLog("status line: choose Classic / Cat / Skip");
+    } else if (target.statusLineKind === "codex-config") {
+      dryLog(`status line: tui.status_line = [${CODEX_STATUS_LINE_ITEMS.join(", ")}]`);
+    }
+    counts.hooks = 2;
+    counts.skills = templateSkillCount();
+    counts.agents = templateAgentCount(target);
+    return;
+  }
+
+  installSessionStartHook(target);
+  installUserPromptSubmitHook(target);
+  counts.hooks = 2;
+  progressItem(1, steps, "hooks (SessionStart + UserPromptSubmit)", "ok", target.hooksFile);
+
+  if (target.id === "claude") cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
+  const skillsRes = installSkills(target);
+  counts.skills = skillsRes.installed.length;
+  if (skillsRes.missingPrefix.length > 0) {
+    log.warn(`Frontmatter rewrite issues in ${skillsRes.missingPrefix.length} skill(s)`);
+  }
+  progressItem(
+    2,
+    steps,
+    `${counts.skills} gor-mobile-* skills`,
+    skillsRes.missingPrefix.length > 0 ? "warn" : "ok",
+    target.skillsDir
+  );
+
+  if (target.id === "claude") cleanupLegacyAgents();
+  const agents = installAgents(target);
+  counts.agents = agents.length;
+  progressItem(3, steps, `${counts.agents} review agents (${target.agentFormat})`, "ok", target.agentsDir);
+
+  writeManagedSection(target.instructionsFile, join(gorMobileRoot(), "templates", "claude-md-snippet.md"));
+  progressItem(4, steps, "managed instructions section", "ok", target.instructionsFile);
+
+  const androidRes = await runAndroidInit(target);
+  if (androidRes.ran && androidRes.skillInstalled) {
+    ctx.androidInitRan = true;
+    progressItem(5, steps, "android init (android-cli skill)", "ok", `${target.skillsDir}/android-cli/`);
+  } else if (!androidRes.ran) {
+    progressItem(5, steps, "android init", "warn", "android CLI not on PATH");
+  } else {
+    ctx.androidInitRan = androidRes.ran;
+    progressItem(5, steps, "android init", "warn", androidRes.error ?? "stock android-cli skill not placed here");
+  }
+
+  if (target.statusLineKind === "claude-command") {
+    await statusLineFor(ctx, 6, steps);
+  } else if (target.statusLineKind === "codex-config") {
+    await codexStatusLineFor(ctx, 6, steps);
+  }
+}
+
+async function stepSummary(ctx: RunCtx, stepNum: number): Promise<void> {
+  runStep(ctx, stepNum, "Summary");
   if (ctx.opts.skipSanity) {
-    runStep(10, "Summary");
     log.info("Skipped (--skip-sanity)");
     return;
   }
-  runStep(10, "Summary");
-
-  const skills = existsSync(CLAUDE_SKILLS_DIR)
-    ? (await import("node:fs")).readdirSync(CLAUDE_SKILLS_DIR).filter((n) => n.startsWith("gor-mobile-"))
-        .length
-    : 0;
-  const agents = existsSync(CLAUDE_AGENTS_DIR)
-    ? (await import("node:fs")).readdirSync(CLAUDE_AGENTS_DIR).filter((n) => n.endsWith(".md"))
-        .length
-    : 0;
-
-  progressItem(1, 4, "Skills", skills > 0 ? "ok" : "warn", String(skills));
-  progressItem(2, 4, "Agents", agents > 0 ? "ok" : "warn", String(agents));
-  progressItem(3, 4, "Hooks", ctx.counts.hooks === 2 ? "ok" : "warn", String(ctx.counts.hooks));
-  progressItem(4, 4, "Rules pack", ctx.rulesVersion !== "?" ? "ok" : "warn", `v${ctx.rulesVersion}`);
+  for (const target of ctx.targets) {
+    const c = ctx.perTarget.get(target.id) ?? { skills: 0, agents: 0, hooks: 0 };
+    log.info(
+      `${target.label}: ${c.skills} skills · ${c.agents} agents · ${c.hooks} hooks → ${target.home}`
+    );
+  }
+  log.info(`Rules pack: v${ctx.rulesVersion}`);
 }
 
 export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   if (opts.noTui || opts.tui === false) forceNoTui();
 
-  // 1. Banner + what-will-happen.
-  // 2. Mode select (QuickStart vs Advanced — the only behavioural
-  //    difference is whether step 4 prompts to override the rules URL).
-  // 3. Run all 10 steps in sequence, no per-step confirm.
   await welcome(Boolean(opts.yes));
 
   const mode: WizardMode = opts.advanced
@@ -480,25 +466,39 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     log.info("DRY RUN — no changes will be made");
   }
 
+  let targets: TargetSpec[];
+  try {
+    targets = await resolveTargets(opts);
+  } catch (err) {
+    log.err(`init failed: ${(err as Error).message}`);
+    process.exit(1);
+  }
+
   const ctx: RunCtx = {
     mode,
     opts,
     rulesUrl: opts.rules ?? DEFAULT_RULES_URL,
-    counts: { skills: 0, agents: 0, hooks: 0 },
-    rulesVersion: "?"
+    rulesVersion: "?",
+    targets,
+    perTarget: new Map(),
+    androidInitRan: false
   };
 
   try {
     await step1Deps(ctx);
-    await step2Android(ctx);
+    await step2AndroidBinary(ctx);
     await step3AstIndex(ctx);
     await step4Rules(ctx);
-    await step5Hooks(ctx);
-    await step6Skills(ctx);
-    await step7Agents(ctx);
-    await step8ClaudeMd(ctx);
-    await step9StatusLine(ctx);
-    await step10Summary(ctx);
+
+    if (!ctx.opts.dryRun) copyHookTemplates();
+
+    let step = GLOBAL_STEPS;
+    for (const target of ctx.targets) {
+      step++;
+      await targetSection(ctx, target, step);
+    }
+
+    await stepSummary(ctx, totalSteps(ctx));
   } catch (err) {
     if (isCancel(err as unknown)) {
       cancel("Cancelled");
@@ -508,10 +508,24 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     process.exit(1);
   }
 
+  if (ctx.androidInitRan) {
+    log.info(
+      "Browse Google's skill catalog — run 'gor-mobile android-skills' to install optional skills."
+    );
+  }
+
+  const totals = [...ctx.perTarget.values()].reduce(
+    (acc, c) => ({
+      skills: acc.skills + c.skills,
+      agents: acc.agents + c.agents,
+      hooks: acc.hooks + c.hooks
+    }),
+    { skills: 0, agents: 0, hooks: 0 }
+  );
   finalOutro({
-    skills: ctx.counts.skills,
-    agents: ctx.counts.agents,
-    hooks: ctx.counts.hooks,
+    skills: totals.skills,
+    agents: totals.agents,
+    hooks: totals.hooks,
     rulesVersion: ctx.rulesVersion
   });
 

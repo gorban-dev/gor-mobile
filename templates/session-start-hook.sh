@@ -26,7 +26,7 @@ if [[ -f "$DETECTOR" ]] && ! bash "$DETECTOR" "$cwd" "$session_id"; then
     exit 0
 fi
 
-SKILL_FILE="${CLAUDE_DIR:-$HOME/.claude}/skills/gor-mobile-using-superpowers/SKILL.md"
+SKILL_FILE="${GORM_SKILLS_DIR:-${CLAUDE_DIR:-$HOME/.claude}/skills}/gor-mobile-using-superpowers/SKILL.md"
 if [[ ! -f "$SKILL_FILE" ]]; then
     printf '{}\n'
     exit 0
@@ -44,7 +44,7 @@ is authoritative for Android device ops."
 injection="<EXTREMELY_IMPORTANT>
 You have gor-mobile superpowers.
 
-**Below is the full content of your 'gor-mobile-using-superpowers' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**
+**Below is the full content of your 'gor-mobile-using-superpowers' skill - your introduction to using skills. For all other skills, invoke them by name:**
 
 ${content}
 </EXTREMELY_IMPORTANT>

@@ -24,6 +24,20 @@ resources / XML / layout / strings / drawables, gradle / build config,
 dependency bumps, DTO / data-class with no logic, plain delegation /
 pass-through, generated code, logging-only changes, bare constants.
 
+Also NOT behavioral — **UI-interaction wiring observable only on-device**:
+swapping or tuning a pre-built Compose `Modifier` (`debounceClickable` ⇄
+`clickable`, ripple, click / long-press plumbing, padding, arrangement,
+size), theming, and `@Composable` layout assembly that holds no logic of
+its own. A difference you can see only by tapping the running app —
+throttled-vs-immediate clicks, visual layout — is not a JVM input→output,
+so a unit test is the wrong tool: this is **Q1 = NO → TDD not warranted**,
+and you verify it on-device per `[[gor-mobile-verification-before-completion]]`
+(and `[[gor-mobile-using-android-cli]]`). Boundary: this covers
+choosing / tuning a framework modifier, NOT authoring new logic inside the
+handler — if the lambda computes, branches, validates, or drives a state
+reducer, that logic IS behavioral (Q1 = YES); extract it from the UI and
+test it.
+
 **Q2 — Is a test harness reachable for the target module?**
 The module has a test sourceset (`src/test/…` JVM unit, or `src/androidTest/…`
 instrumented) AND a test-runner dependency. Check structurally

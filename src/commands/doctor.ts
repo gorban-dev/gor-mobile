@@ -1,11 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { execa } from "execa";
 import {
-  CLAUDE_AGENTS_DIR,
-  CLAUDE_CLAUDE_MD,
-  CLAUDE_SETTINGS,
-  CLAUDE_SKILLS_DIR,
   GOR_MOBILE_CONFIG,
   GOR_MOBILE_HOME,
   GOR_MOBILE_RULES_DIR,
@@ -15,13 +11,22 @@ import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-
 import { ANDROID_CONTRACT } from "../android-contract.js";
 import { countManagedHooks } from "../helpers/settings-merge.js";
 import { statusLineState } from "../helpers/settings-statusline.js";
+import { codexStatusLineState } from "../helpers/codex-statusline.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
 import { readManifest } from "../helpers/rules-pack.js";
+import {
+  detectGorMobileTargets,
+  detectInstalledTargets,
+  parseTargetFlag,
+  targetSpecs,
+  type TargetSpec
+} from "../targets.js";
 import { log } from "../ui/log.js";
 
 interface DoctorOptions {
   verbose?: boolean;
+  target?: string;
 }
 
 function reportDep(name: string, path: string | null, required: boolean): void {
@@ -43,13 +48,13 @@ function checkFile(path: string, label: string): boolean {
   return false;
 }
 
-function checkHooks(): void {
-  if (!existsSync(CLAUDE_SETTINGS)) {
-    log.warn(`No ${CLAUDE_SETTINGS}`);
+function checkHooks(target: TargetSpec): void {
+  if (!existsSync(target.hooksFile)) {
+    log.warn(`No ${target.hooksFile}`);
     return;
   }
   for (const hookType of ["SessionStart", "UserPromptSubmit"] as const) {
-    const n = countManagedHooks(hookType);
+    const n = countManagedHooks(hookType, target);
     if (n === 0) {
       log.warn(`${hookType} hook NOT registered — run 'gor-mobile repair'`);
     } else if (n > 1) {
@@ -60,15 +65,15 @@ function checkHooks(): void {
   }
 }
 
-function checkClaudeMdSection(): void {
-  if (!existsSync(CLAUDE_CLAUDE_MD)) {
-    log.warn(`${CLAUDE_CLAUDE_MD} does not exist`);
+function checkInstructionsSection(target: TargetSpec): void {
+  if (!existsSync(target.instructionsFile)) {
+    log.warn(`${target.instructionsFile} does not exist`);
     return;
   }
-  if (readFileSync(CLAUDE_CLAUDE_MD, "utf8").includes(SECTION_BEGIN)) {
-    log.ok("CLAUDE.md managed section present");
+  if (readFileSync(target.instructionsFile, "utf8").includes(SECTION_BEGIN)) {
+    log.ok("managed instructions section present");
   } else {
-    log.warn("CLAUDE.md managed section missing — run 'gor-mobile repair'");
+    log.warn("managed instructions section missing — run 'gor-mobile repair'");
   }
 }
 
@@ -79,6 +84,15 @@ function checkStatusLine(): void {
     if (!which("jq")) {
       log.warn("  → status line needs jq to render — brew install jq");
     }
+  } else if (st.foreign) {
+    log.info("Status line: custom (not managed by gor-mobile)");
+  }
+}
+
+function checkCodexStatusLine(): void {
+  const st = codexStatusLineState();
+  if (st.managed) {
+    log.ok("Status line: managed (tui.status_line in config.toml)");
   } else if (st.foreign) {
     log.info("Status line: custom (not managed by gor-mobile)");
   }
@@ -99,7 +113,7 @@ function checkRulesPack(): void {
   );
 }
 
-async function verboseHookEmulation(): Promise<void> {
+async function verboseHookEmulation(target: TargetSpec): Promise<void> {
   const hooks: Array<[string, string]> = [
     ["session-start-hook.sh", "SessionStart"],
     ["user-prompt-submit-hook.sh", "UserPromptSubmit"]
@@ -117,7 +131,11 @@ async function verboseHookEmulation(): Promise<void> {
         session_id: "gor-mobile-doctor",
         prompt: "gor-mobile doctor"
       }),
-      env: { ...process.env, GORM_FORCE_MOBILE: "1" }
+      env: {
+        ...process.env,
+        GORM_FORCE_MOBILE: "1",
+        GORM_SKILLS_DIR: target.skillsDir
+      }
     });
     if (result.exitCode !== 0) {
       log.warn(`[${label}] hook exited ${result.exitCode}:`);
@@ -149,18 +167,16 @@ async function verboseHookEmulation(): Promise<void> {
   }
 }
 
-function verboseSkillsFrontmatter(): void {
-  if (!existsSync(CLAUDE_SKILLS_DIR)) {
-    log.warn(`${CLAUDE_SKILLS_DIR} missing`);
+function verboseSkillsFrontmatter(target: TargetSpec): void {
+  if (!existsSync(target.skillsDir)) {
+    log.warn(`${target.skillsDir} missing`);
     return;
   }
-  const { readdirSync } = require("node:fs");
-  const { join } = require("node:path");
   let count = 0;
   let bad = 0;
-  for (const entry of readdirSync(CLAUDE_SKILLS_DIR)) {
+  for (const entry of readdirSync(target.skillsDir)) {
     if (!entry.startsWith("gor-mobile-")) continue;
-    const skillMd = join(CLAUDE_SKILLS_DIR, entry, "SKILL.md");
+    const skillMd = join(target.skillsDir, entry, "SKILL.md");
     if (!existsSync(skillMd)) continue;
     count++;
     const content = readFileSync(skillMd, "utf8");
@@ -191,8 +207,8 @@ async function checkAndroidContract(): Promise<void> {
   }
 }
 
-function verboseContractLint(): void {
-  const skill = join(CLAUDE_SKILLS_DIR, "gor-mobile-using-android-cli", "SKILL.md");
+function verboseContractLint(target: TargetSpec): void {
+  const skill = join(target.skillsDir, "gor-mobile-using-android-cli", "SKILL.md");
   if (!existsSync(skill)) {
     log.warn("bridge skill missing — cannot lint contract");
     return;
@@ -209,7 +225,44 @@ function verboseContractLint(): void {
   else log.warn(`bridge skill references commands NOT in contract: ${stray.join(", ")}`);
 }
 
+function doctorTargets(target?: string): TargetSpec[] {
+  if (target) return targetSpecs(parseTargetFlag(target));
+  const gm = detectGorMobileTargets();
+  if (gm.length > 0) return targetSpecs(gm);
+  const installed = detectInstalledTargets();
+  return targetSpecs(installed.length > 0 ? installed : ["claude"]);
+}
+
+function checkTarget(target: TargetSpec): void {
+  log.step(`${target.label} integration`);
+  checkFile(target.hooksFile, target.hooksKind === "codex-hooks-json" ? "hooks.json" : "settings.json");
+  checkHooks(target);
+  checkFile(target.agentsDir, "agents/");
+  if (androidCliSkillInstalled(target.skillsDir)) {
+    log.ok(`android-cli skill installed in ${target.skillsDir}`);
+  } else if (androidCliPath()) {
+    log.warn("android-cli skill missing — run 'gor-mobile repair'");
+  }
+  const bridgePath = join(target.skillsDir, "gor-mobile-using-android-cli", "SKILL.md");
+  if (existsSync(bridgePath)) {
+    log.ok("gor-mobile-using-android-cli bridge skill installed");
+  } else if (androidCliPath()) {
+    log.warn("gor-mobile-using-android-cli skill missing — run 'gor-mobile repair'");
+  }
+  const astIndexSkillPath = join(target.skillsDir, "gor-mobile-ast-index", "SKILL.md");
+  if (existsSync(astIndexSkillPath)) {
+    log.ok("gor-mobile-ast-index skill installed");
+  } else {
+    log.warn("gor-mobile-ast-index skill missing — run 'gor-mobile repair'");
+  }
+  checkInstructionsSection(target);
+  if (target.statusLineKind === "claude-command") checkStatusLine();
+  else if (target.statusLineKind === "codex-config") checkCodexStatusLine();
+}
+
 export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
+  const targets = doctorTargets(opts.target);
+
   log.step("Environment");
   reportDep("brew", which("brew"), false);
   reportDep("git", which("git"), true);
@@ -227,34 +280,14 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
       "  → install: brew tap defendend/ast-index && brew install ast-index"
     );
   }
-
-  log.step("Claude Code integration");
-  checkFile(CLAUDE_SETTINGS, "settings.json");
-  checkHooks();
   checkFile(
     join(GOR_MOBILE_HOME, "templates", "detect-mobile-context.sh"),
     "mobile-context detector"
   );
-  checkFile(CLAUDE_AGENTS_DIR, "agents/");
-  if (androidCliSkillInstalled()) {
-    log.ok("android-cli skill installed in ~/.claude/skills/");
-  } else if (androidCliPath()) {
-    log.warn("android-cli skill missing — run 'gor-mobile repair'");
+
+  for (const target of targets) {
+    checkTarget(target);
   }
-  const bridgePath = join(CLAUDE_SKILLS_DIR, "gor-mobile-using-android-cli", "SKILL.md");
-  if (existsSync(bridgePath)) {
-    log.ok("gor-mobile-using-android-cli bridge skill installed");
-  } else if (androidCliPath()) {
-    log.warn("gor-mobile-using-android-cli skill missing — run 'gor-mobile repair'");
-  }
-  const astIndexSkillPath = join(CLAUDE_SKILLS_DIR, "gor-mobile-ast-index", "SKILL.md");
-  if (existsSync(astIndexSkillPath)) {
-    log.ok("gor-mobile-ast-index skill installed");
-  } else {
-    log.warn("gor-mobile-ast-index skill missing — run 'gor-mobile repair'");
-  }
-  checkClaudeMdSection();
-  checkStatusLine();
 
   log.step("Rules pack");
   checkRulesPack();
@@ -263,11 +296,13 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   checkFile(GOR_MOBILE_CONFIG, "config.json");
 
   if (opts.verbose) {
-    log.step("Hooks emulation (verbose)");
-    await verboseHookEmulation();
-    log.step("Skills frontmatter (verbose)");
-    verboseSkillsFrontmatter();
-    verboseContractLint();
+    for (const target of targets) {
+      log.step(`Hooks emulation (verbose) — ${target.label}`);
+      await verboseHookEmulation(target);
+      log.step(`Skills frontmatter (verbose) — ${target.label}`);
+      verboseSkillsFrontmatter(target);
+      verboseContractLint(target);
+    }
   }
 
   console.error("");

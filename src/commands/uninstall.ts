@@ -1,35 +1,103 @@
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { confirm, isCancel } from "@clack/prompts";
 import {
-  CLAUDE_AGENTS_DIR,
-  CLAUDE_COMMANDS_DIR,
-  CLAUDE_SKILLS_DIR,
   GOR_MOBILE_CONFIG,
   GOR_MOBILE_CONFIG_DIR,
   GOR_MOBILE_HOME
 } from "../constants.js";
 import { uninstallAndroidCli } from "../helpers/android-cli.js";
-import { removeClaudeMdSection } from "../helpers/claude-md-section.js";
+import { removeManagedSection } from "../helpers/claude-md-section.js";
 import { androidCliPath } from "../helpers/deps.js";
 import { cleanupLegacyCommands } from "../helpers/install-assets.js";
+import { CLAUDE_COMMANDS_DIR } from "../constants.js";
 import { unregisterManaged } from "../helpers/mcp-register.js";
 import {
   removeSessionStartHook,
   removeUserPromptSubmitHook
 } from "../helpers/settings-merge.js";
 import { removeStatusLine } from "../helpers/settings-statusline.js";
+import { removeCodexStatusLine } from "../helpers/codex-statusline.js";
+import {
+  detectInstalledTargets,
+  parseTargetFlag,
+  targetSpecs,
+  type TargetSpec
+} from "../targets.js";
 import { log } from "../ui/log.js";
 
 interface UninstallOptions {
   yes?: boolean;
+  target?: string;
+}
+
+function uninstallTargets(target?: string): TargetSpec[] {
+  if (target) return targetSpecs(parseTargetFlag(target));
+  const installed = detectInstalledTargets();
+  return targetSpecs(installed.length > 0 ? installed : ["claude"]);
+}
+
+function removeTarget(target: TargetSpec): void {
+  log.step(`Removing gor-mobile from ${target.label} (${target.home})`);
+
+  removeSessionStartHook(target);
+  removeUserPromptSubmitHook(target);
+  log.ok("Hooks removed");
+
+  if (target.statusLineKind === "claude-command") {
+    removeStatusLine();
+    log.ok("Status line removed (only if managed)");
+  } else if (target.statusLineKind === "codex-config") {
+    removeCodexStatusLine();
+    log.ok("Codex status line removed (only if managed)");
+  }
+
+  if (target.id === "claude") {
+    cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
+  }
+
+  if (existsSync(target.skillsDir)) {
+    for (const entry of readdirSync(target.skillsDir)) {
+      if (entry.startsWith("gor-mobile-")) {
+        rmSync(join(target.skillsDir, entry), { recursive: true, force: true });
+      }
+    }
+  }
+  log.ok(`Skills removed (${target.skillsDir})`);
+
+  if (existsSync(target.agentsDir)) {
+    const ext = `.${target.agentFormat}`;
+    for (const entry of readdirSync(target.agentsDir)) {
+      if (entry.startsWith("gor-mobile-") && entry.endsWith(ext)) {
+        rmSync(join(target.agentsDir, entry), { force: true });
+      }
+    }
+    if (target.id === "claude") {
+      const legacyCr = join(target.agentsDir, "code-reviewer.md");
+      if (existsSync(legacyCr)) {
+        const head = readFileSync(legacyCr, "utf8").split("\n").slice(0, 20).join("\n");
+        if (/^name: code-reviewer/m.test(head)) {
+          rmSync(legacyCr);
+        }
+      }
+    }
+  }
+  log.ok(`Agents removed (${target.agentsDir})`);
+
+  if (target.supportsMcpPrune) {
+    unregisterManaged();
+    log.ok("Managed MCP entries removed");
+  }
+
+  removeManagedSection(target.instructionsFile);
+  log.ok(`Managed instructions section cleaned (${target.instructionsFile})`);
 }
 
 export async function cmdUninstall(opts: UninstallOptions = {}): Promise<void> {
   if (!opts.yes) {
     const proceed = await confirm({
       message:
-        "Remove gor-mobile hooks, skills, agents, templates, rules pack, config, and managed CLAUDE.md section?",
+        "Remove gor-mobile hooks, skills, agents, templates, rules pack, config, and managed instruction sections?",
       initialValue: false
     });
     if (isCancel(proceed) || proceed !== true) {
@@ -38,53 +106,10 @@ export async function cmdUninstall(opts: UninstallOptions = {}): Promise<void> {
     }
   }
 
-  log.step("Removing SessionStart hook");
-  removeSessionStartHook();
-  log.ok("SessionStart hook removed");
-
-  log.step("Removing UserPromptSubmit hook");
-  removeUserPromptSubmitHook();
-  log.ok("UserPromptSubmit hook removed");
-
-  log.step("Removing managed status line");
-  removeStatusLine();
-  log.ok("Status line removed (only if managed)");
-
-  log.step("Removing legacy commands/ (signature-matched)");
-  cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
-
-  log.step("Removing skills/");
-  if (existsSync(CLAUDE_SKILLS_DIR)) {
-    const { readdirSync } = await import("node:fs");
-    for (const entry of readdirSync(CLAUDE_SKILLS_DIR)) {
-      if (entry.startsWith("gor-mobile-")) {
-        rmSync(join(CLAUDE_SKILLS_DIR, entry), { recursive: true, force: true });
-      }
-    }
+  const targets = uninstallTargets(opts.target);
+  for (const target of targets) {
+    removeTarget(target);
   }
-
-  log.step("Removing agents/");
-  if (existsSync(CLAUDE_AGENTS_DIR)) {
-    const { readdirSync } = await import("node:fs");
-    for (const entry of readdirSync(CLAUDE_AGENTS_DIR)) {
-      if (entry.startsWith("gor-mobile-") && entry.endsWith(".md")) {
-        rmSync(join(CLAUDE_AGENTS_DIR, entry), { force: true });
-      }
-    }
-    const legacyCr = join(CLAUDE_AGENTS_DIR, "code-reviewer.md");
-    if (existsSync(legacyCr)) {
-      const head = readFileSync(legacyCr, "utf8").split("\n").slice(0, 20).join("\n");
-      if (/^name: code-reviewer/m.test(head)) {
-        rmSync(legacyCr);
-      }
-    }
-  }
-
-  log.step("Removing MCP entries");
-  unregisterManaged();
-
-  log.step("Cleaning CLAUDE.md managed section");
-  removeClaudeMdSection();
 
   log.step(`Removing ${GOR_MOBILE_HOME} (templates, rules)`);
   if (existsSync(GOR_MOBILE_HOME)) {

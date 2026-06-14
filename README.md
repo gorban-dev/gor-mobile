@@ -1,13 +1,15 @@
-# gor-mobile — Android-aware overlay installer for Claude Code
+# gor-mobile — Android-aware overlay installer for Claude Code and Codex
 
 [![release](https://img.shields.io/github/v/release/gorban-dev/gor-mobile?label=release&color=blue)](https://github.com/gorban-dev/gor-mobile/releases)
 [![license](https://img.shields.io/github/license/gorban-dev/gor-mobile)](./LICENSE)
 [![homebrew](https://img.shields.io/badge/homebrew-gorban--dev%2Fgor--mobile-orange)](https://github.com/gorban-dev/homebrew-gor-mobile)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)]()
 
-A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Claude Code: a superpowers-style workflow (`brainstorm → plan → implement → review → verify`), a swappable rules pack, and two reviewer agents (Sonnet + Opus). Everything runs on Claude Code itself — no external inference, no local model runtime.
+A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Claude Code **and OpenAI Codex CLI**: a superpowers-style workflow (`brainstorm → plan → implement → review → verify`), a swappable rules pack, and two reviewer agents (Sonnet + Opus). Everything runs on the host agent itself — no external inference, no local model runtime.
 
-> Status: `v0.2.0` — pre-release scaffolding, under active development on the `develop` branch. See `CHANGELOG.md`.
+The same workflow installs into `~/.claude/` (Claude Code) and/or `~/.codex/` (Codex, honoring `$CODEX_HOME`). Pick agents with `--target claude,codex`; with no flag, `init` auto-detects which agent homes exist. Skills are shared (cross-compatible `SKILL.md`); hooks, reviewer agents, and the global-instructions section adapt to each agent's format. See [Targets](#targets-claude--codex).
+
+> Status: `v0.2.3` — pre-release scaffolding, under active development on the `develop` branch. See `CHANGELOG.md`.
 
 ## Requirements
 
@@ -47,7 +49,11 @@ gor-mobile init
 
 ## What the wizard does
 
-`gor-mobile init` drives a 10-step interactive install with `@clack/prompts`:
+`gor-mobile init` drives an interactive install with `@clack/prompts`. It runs
+four **global** steps (base deps, Google Android CLI, ast-index, rules pack),
+then one **integration section per selected target** (hooks, skills, agents,
+managed instructions section, `android init`; plus the status line for Claude),
+then a summary:
 
 - **Banner + welcome.** ASCII banner, a 7-bullet summary of what will
   happen, and an Enter-to-start confirmation.
@@ -70,8 +76,11 @@ Flags:
 - `--no-tui` (or `NO_TUI=1`) forces plain-text output even on a TTY.
 - `--advanced` forces Advanced mode (per-step confirm, editable rules URL).
 - `--rules <git-url>` overrides the default rules pack URL.
+- `--target <claude,codex>` picks which agents to install into. Without it,
+  `init` auto-detects installed homes (interactive: a multiselect pre-checking
+  the detected ones; `--yes`: the detected set, or `claude` if none).
 
-The 9 steps:
+The steps (4 global, then per-target, then summary):
 
 1. **Base dependencies.** Verifies `git`, `curl`, `node` are on `PATH`. Missing hard deps abort the wizard.
 2. **Google Android CLI** (https://developer.android.com/tools/agents) — **hard-mandatory** after v0.1.0. Detects the `android` binary; if absent, installs it: on macOS via the official Homebrew tap (`brew tap android/tap && brew install android-cli`); on other platforms via Google's curl installer. **Unsupported platforms (Linux ARM, FreeBSD, …) cause `init` to fail** with a clear error and a developer.android.com link. Declining the install or a failed install also fails the wizard. Once present, gor-mobile validates a **capability contract** (a set of required command names + a `>= 1.0.0` floor) against whatever version is installed — Google ships android CLI as always-latest/self-updating, so no version is pinned. Then runs `android init` to drop the official `android-cli` skill into `~/.claude/skills/android-cli/`, and prints a hint pointing at `gor-mobile android-skills` to browse the optional skill catalog at runtime.
@@ -93,15 +102,20 @@ The 9 steps:
 Setup & maintenance:
 
 ```
-gor-mobile init              # wizard
-gor-mobile doctor            # environment check (--verbose: hook payload; android CLI is required)
-gor-mobile repair            # restore managed files; re-runs `android init` if the CLI is installed
+gor-mobile init              # wizard (--target claude,codex; default: auto-detect)
+gor-mobile doctor            # per-target environment check (--target; --verbose: hook payload)
+gor-mobile repair            # restore managed files for each target; re-runs `android init`
 gor-mobile enable            # mark current repo as a mobile project (writes .gor-mobile.json)
 gor-mobile android-skills    # browse + install/remove optional Google skills (multi-select)
 gor-mobile update            # pull rules + `android update` + repair
 gor-mobile self-update       # update the CLI (curl-installer path)
-gor-mobile uninstall         # clean removal of gor-mobile; optionally the Android CLI too
+gor-mobile uninstall         # clean removal of gor-mobile (--target); optionally the Android CLI too
 ```
+
+`--target <claude,codex>` works on `init`, `doctor`, `repair`, and `uninstall`.
+Defaults when omitted: `init` auto-detects installed agent homes; `repair` /
+`doctor` operate on targets that carry a gor-mobile footprint; `uninstall`
+operates on all detected homes.
 
 Rules pack:
 
@@ -112,6 +126,40 @@ gor-mobile rules update
 gor-mobile rules diff
 gor-mobile rules validate
 ```
+
+## Targets (`claude` | `codex`)
+
+gor-mobile installs the same Android workflow into Claude Code (`~/.claude/`)
+and/or OpenAI Codex CLI (`~/.codex/`, honoring `$CODEX_HOME`). What differs per
+agent is only the on-disk format — the skills themselves are identical
+(cross-compatible `SKILL.md`):
+
+| Concern | Claude Code (`~/.claude/`) | Codex (`~/.codex/`) |
+|---------|-----------------------------|----------------------|
+| Hooks | `settings.json` → `hooks` | `hooks.json` (identical JSON schema) |
+| Skills | `skills/gor-mobile-*/SKILL.md` | `skills/gor-mobile-*/SKILL.md` |
+| Reviewer agents | `agents/*.md` (Markdown + YAML) | `agents/*.toml` (`developer_instructions`) |
+| Global instructions | `CLAUDE.md` managed section | `AGENTS.md` managed section |
+| Status line | `settings.json` `statusLine` (Classic / Cat scripts) | `config.toml` `[tui].status_line` (built-in items) |
+| MCP prune | `mcp.json` | — (no managed servers) |
+
+The Codex status line is a built-in component list rather than a command-backed
+script: gor-mobile writes a recommended default into `~/.codex/config.toml` —
+`tui.status_line = ["model-with-reasoning", "context-used", "five-hour-limit",
+"weekly-limit", "task-progress"]` plus `status_line_use_colors = true` — merged
+in surgically (everything else in `config.toml` is preserved) and tagged with a
+`# gor-mobile` marker so `repair` refreshes it and `uninstall` removes only our
+lines. A status_line you already configured yourself is never overwritten
+without confirmation. Offered interactively in the wizard, skipped under
+`--yes`.
+
+The shared hook scripts live once in `~/.gor-mobile/templates/` and are
+target-neutral; the SessionStart hook reads its skills folder from
+`GORM_SKILLS_DIR` (set in the Codex hook command; Claude keeps the bare command
+for backward compatibility). The Google Android CLI is installed once and its
+`android init` provisions the stock `android-cli` skill for every detected
+agent. Codex's `android` integration works out of the box once `~/.codex/`
+exists.
 
 ## No automatic git
 

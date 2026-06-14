@@ -1,7 +1,7 @@
 {
   "name": "gor-mobile",
-  "version": "0.2.2",
-  "description": "Android-aware overlay installer for Claude Code — superpowers-style workflow",
+  "version": "0.2.3",
+  "description": "Android-aware overlay installer for Claude Code and Codex — superpowers-style workflow",
   "type": "module",
   "bin": {
     "gor-mobile": "bin/gor-mobile.mjs"

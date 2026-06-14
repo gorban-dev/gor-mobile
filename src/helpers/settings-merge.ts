@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
-import { CLAUDE_SETTINGS, GOR_MOBILE_HOME, MANAGED_TAG } from "../constants.js";
+import { GOR_MOBILE_HOME, MANAGED_TAG } from "../constants.js";
 import type { HookEntry, ManagedSettings } from "../types.js";
+import type { TargetSpec } from "../targets.js";
 import { ensureParentDir, readJsonSafe, writeJson } from "./paths.js";
 
 type HookType = "SessionStart" | "UserPromptSubmit";
@@ -27,23 +28,26 @@ function isManagedEntry(entry: HookEntry, hookType: HookType): boolean {
   );
 }
 
-function ensureSettingsFile(): ManagedSettings {
-  ensureParentDir(CLAUDE_SETTINGS);
-  if (!existsSync(CLAUDE_SETTINGS)) {
-    writeJson(CLAUDE_SETTINGS, {});
+function ensureSettingsFile(hooksFile: string): ManagedSettings {
+  ensureParentDir(hooksFile);
+  if (!existsSync(hooksFile)) {
+    writeJson(hooksFile, {});
   }
-  return readJsonSafe<ManagedSettings>(CLAUDE_SETTINGS, {});
+  return readJsonSafe<ManagedSettings>(hooksFile, {});
 }
 
 // Replace every managed entry (tagged or legacy-untagged) for this event with a
 // single freshly-tagged one. Returns how many prior managed entries were folded
 // in, so callers can report `collapsed N → 1` when self-healing duplicates.
+// For Claude the file is settings.json (other keys preserved); for Codex it is
+// a dedicated hooks.json — same `{ "hooks": { ... } }` shape either way.
 function upsertHook(
+  hooksFile: string,
   hookType: HookType,
   matcher: string,
   command: string
 ): { collapsed: number } {
-  const settings = ensureSettingsFile();
+  const settings = ensureSettingsFile(hooksFile);
   settings.hooks = settings.hooks ?? {};
   const existing = settings.hooks[hookType] ?? [];
   const previous = existing.filter((entry) => !isManagedEntry(entry, hookType));
@@ -53,13 +57,13 @@ function upsertHook(
     hooks: [{ type: "command", command }]
   };
   settings.hooks[hookType] = [...previous, next];
-  writeJson(CLAUDE_SETTINGS, settings);
+  writeJson(hooksFile, settings);
   return { collapsed: existing.length - previous.length };
 }
 
-function removeHook(hookType: HookType): void {
-  if (!existsSync(CLAUDE_SETTINGS)) return;
-  const settings = readJsonSafe<ManagedSettings>(CLAUDE_SETTINGS, {});
+function removeHook(hooksFile: string, hookType: HookType): void {
+  if (!existsSync(hooksFile)) return;
+  const settings = readJsonSafe<ManagedSettings>(hooksFile, {});
   if (!settings.hooks || !settings.hooks[hookType]) return;
   const remaining = settings.hooks[hookType].filter(
     (entry) => !isManagedEntry(entry, hookType)
@@ -69,33 +73,59 @@ function removeHook(hookType: HookType): void {
   } else {
     settings.hooks[hookType] = remaining;
   }
-  writeJson(CLAUDE_SETTINGS, settings);
+  writeJson(hooksFile, settings);
 }
 
-export function installSessionStartHook(): { collapsed: number } {
-  const cmd = `bash ${GOR_MOBILE_HOME}/templates/session-start-hook.sh`;
-  return upsertHook("SessionStart", "startup|clear|compact|resume", cmd);
+// session-start-hook.sh reads its skills directory from GORM_SKILLS_DIR (falling
+// back to ~/.claude/skills). Claude keeps the bare command for byte-for-byte
+// back-compat with existing installs; Codex prefixes the env so the one shared
+// script serves both agents' skill folders.
+function sessionStartCommand(target: TargetSpec): string {
+  const base = `bash ${GOR_MOBILE_HOME}/templates/session-start-hook.sh`;
+  return target.id === "claude"
+    ? base
+    : `GORM_SKILLS_DIR=${target.skillsDir} ${base}`;
 }
 
-export function removeSessionStartHook(): void {
-  removeHook("SessionStart");
+export function installSessionStartHook(target: TargetSpec): { collapsed: number } {
+  return upsertHook(
+    target.hooksFile,
+    "SessionStart",
+    "startup|clear|compact|resume",
+    sessionStartCommand(target)
+  );
 }
 
-export function installUserPromptSubmitHook(): { collapsed: number } {
+export function removeSessionStartHook(target: TargetSpec): void {
+  removeHook(target.hooksFile, "SessionStart");
+}
+
+export function installUserPromptSubmitHook(target: TargetSpec): { collapsed: number } {
   const cmd = `bash ${GOR_MOBILE_HOME}/templates/user-prompt-submit-hook.sh`;
-  return upsertHook("UserPromptSubmit", "", cmd);
+  return upsertHook(target.hooksFile, "UserPromptSubmit", "", cmd);
 }
 
-export function removeUserPromptSubmitHook(): void {
-  removeHook("UserPromptSubmit");
+export function removeUserPromptSubmitHook(target: TargetSpec): void {
+  removeHook(target.hooksFile, "UserPromptSubmit");
 }
 
-export function countManagedHooks(hookType: HookType): number {
-  const settings = readJsonSafe<ManagedSettings>(CLAUDE_SETTINGS, {});
+export function countManagedHooks(hookType: HookType, target: TargetSpec): number {
+  const settings = readJsonSafe<ManagedSettings>(target.hooksFile, {});
   const entries = settings.hooks?.[hookType] ?? [];
   return entries.filter((e) => isManagedEntry(e, hookType)).length;
 }
 
-export function hasManagedHook(hookType: HookType): boolean {
-  return countManagedHooks(hookType) > 0;
+export function hasManagedHook(hookType: HookType, target: TargetSpec): boolean {
+  return countManagedHooks(hookType, target) > 0;
+}
+
+// Path-based probe used by target detection — true if either managed hook event
+// has at least one of our entries in the given hooks file.
+export function hasManagedHooksInFile(hooksFile: string): boolean {
+  const settings = readJsonSafe<ManagedSettings>(hooksFile, {});
+  for (const hookType of ["SessionStart", "UserPromptSubmit"] as const) {
+    const entries = settings.hooks?.[hookType] ?? [];
+    if (entries.some((e) => isManagedEntry(e, hookType))) return true;
+  }
+  return false;
 }

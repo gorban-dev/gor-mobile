@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.2.3 — 2026-06-14
+
+- add: **OpenAI Codex CLI support.** gor-mobile now installs the same
+  Android workflow into `~/.codex/` (honoring `$CODEX_HOME`) in addition to
+  Claude Code's `~/.claude/`. A new **target** abstraction (`claude` | `codex`)
+  threads through `init` / `repair` / `uninstall` / `doctor`. Per target the
+  installer writes: hooks into the agent's hook file (`settings.json` for
+  Claude, a dedicated `hooks.json` for Codex — identical JSON schema), the
+  shared `gor-mobile-*` skills into its `skills/` folder, the two reviewer
+  agents in the agent-native format (`agents/*.md` for Claude,
+  `agents-codex/*.toml` for Codex), and the managed instructions section into
+  `CLAUDE.md` / `AGENTS.md`. MCP-prune is a no-op for Codex (no managed
+  servers). The shared hook scripts are target-neutral; only
+  `session-start-hook.sh` reads the skills folder, now via a new
+  `GORM_SKILLS_DIR` env (full backward compatibility for existing Claude
+  installs). Existing users: run `gor-mobile repair` to refresh the hook
+  scripts and managed sections.
+- add: `--target <claude,codex>` flag on `init`, `doctor`, `repair`, and
+  `uninstall`. Without it, `init` auto-detects installed agent homes (interactive
+  runs show a multiselect pre-checking the detected ones; `--yes` / non-interactive
+  defaults to the detected set, or `claude` when none are found). `repair` /
+  `doctor` default to targets carrying a gor-mobile footprint, `uninstall` to all
+  detected homes. The wizard is now structured as global steps (deps, Android
+  CLI, ast-index, rules) followed by one integration section per target.
+- add: **Codex status line.** The wizard now offers a recommended Codex TUI
+  status line, written into `~/.codex/config.toml` as
+  `[tui].status_line = ["model-with-reasoning", "context-used",
+  "five-hour-limit", "weekly-limit", "task-progress"]` plus
+  `status_line_use_colors = true`. The two lines are merged surgically (the rest
+  of `config.toml` is preserved) and tagged `# gor-mobile`, so `repair`
+  refreshes them, `uninstall` removes only ours, and `doctor` reports them; a
+  status_line you configured yourself is never overwritten without confirmation.
+  Offered interactively, skipped under `--yes` (mirrors the Claude status-line
+  step).
+- note: `android init` is run bare (it provisions the stock `android-cli`
+  skill for **all** detected agents — `--agent` is only valid on
+  `android skills install`, not `init`), so Codex picks up the stock skill
+  automatically when its home exists.
+
+- change: the `gor-mobile-test-driven-development` gate now classifies
+  **on-device-only UI-interaction wiring** as non-behavioral (Q1 = NO → *TDD
+  not warranted*): swapping / tuning a pre-built Compose `Modifier` (e.g.
+  `debounceClickable` ⇄ `clickable`, ripple, click plumbing, padding,
+  arrangement), theming, and `@Composable` layout assembly with no logic of
+  its own. A difference you can see only by tapping the running app is not a
+  JVM input→output, so a unit test is the wrong tool — these route to
+  on-device verification instead of a deferred test-debt note. A boundary
+  clause keeps real logic inside a handler (computation, branching,
+  validation, a state reducer) behavioral (Q1 = YES). Existing users: run
+  `gor-mobile repair` to copy the updated overlay into `~/.claude/`.
+
 ## 0.2.2 — 2026-06-03
 
 - change: gor-mobile now proactively keeps the Android CLI current. `init` and

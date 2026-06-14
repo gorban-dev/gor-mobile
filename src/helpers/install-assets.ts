@@ -12,10 +12,10 @@ import {
 import { basename, join } from "node:path";
 import {
   CLAUDE_AGENTS_DIR,
-  CLAUDE_SKILLS_DIR,
   GOR_MOBILE_TEMPLATES_DIR,
   gorMobileRoot
 } from "../constants.js";
+import type { TargetSpec } from "../targets.js";
 import { ensureDir } from "./paths.js";
 
 export function copyHookTemplates(): void {
@@ -75,11 +75,11 @@ export interface InstallSkillsResult {
   missingPrefix: string[];
 }
 
-export function installSkills(): InstallSkillsResult {
-  ensureDir(CLAUDE_SKILLS_DIR);
-  for (const entry of readdirSync(CLAUDE_SKILLS_DIR)) {
+export function installSkills(target: TargetSpec): InstallSkillsResult {
+  ensureDir(target.skillsDir);
+  for (const entry of readdirSync(target.skillsDir)) {
     if (entry.startsWith("gor-mobile-")) {
-      rmSync(join(CLAUDE_SKILLS_DIR, entry), { recursive: true, force: true });
+      rmSync(join(target.skillsDir, entry), { recursive: true, force: true });
     }
   }
 
@@ -94,7 +94,7 @@ export function installSkills(): InstallSkillsResult {
   for (const name of readdirSync(skillsDir)) {
     const srcDir = join(skillsDir, name);
     if (!statSync(srcDir).isDirectory()) continue;
-    const dstDir = join(CLAUDE_SKILLS_DIR, `gor-mobile-${name}`);
+    const dstDir = join(target.skillsDir, `gor-mobile-${name}`);
     cpSync(srcDir, dstDir, { recursive: true });
     const skillMd = join(dstDir, "SKILL.md");
     if (existsSync(skillMd)) {
@@ -119,15 +119,20 @@ export function installSkills(): InstallSkillsResult {
   return { installed, missingPrefix };
 }
 
-export function installAgents(): string[] {
-  ensureDir(CLAUDE_AGENTS_DIR);
-  const src = join(gorMobileRoot(), "templates", "agents");
+export function installAgents(target: TargetSpec): string[] {
+  ensureDir(target.agentsDir);
+  // claude consumes Markdown agents (templates/agents/*.md); codex consumes
+  // TOML agents (templates/agents-codex/*.toml) carrying the same reviewer
+  // instructions in `developer_instructions`.
+  const srcSub = target.agentFormat === "toml" ? "agents-codex" : "agents";
+  const ext = `.${target.agentFormat}`;
+  const src = join(gorMobileRoot(), "templates", srcSub);
   const copied: string[] = [];
   if (!existsSync(src)) return copied;
   for (const name of readdirSync(src)) {
-    if (!name.endsWith(".md")) continue;
+    if (!name.endsWith(ext)) continue;
     const from = join(src, name);
-    const to = join(CLAUDE_AGENTS_DIR, name);
+    const to = join(target.agentsDir, name);
     copyFileSync(from, to);
     chmodSync(to, 0o644);
     copied.push(name);

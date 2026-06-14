@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { execa } from "execa";
 import { CLAUDE_SKILLS_DIR } from "../constants.js";
+import { ALL_TARGET_IDS, TARGETS, type TargetSpec } from "../targets.js";
 import { ANDROID_CLI_FLOOR, requiredTopLevelCommands } from "../android-contract.js";
 import { meetsFloor } from "./version.js";
 import { androidCliPath } from "./deps.js";
@@ -45,12 +46,12 @@ export interface AndroidInstallResult {
   error?: string;
 }
 
-export function androidCliSkillPath(): string {
-  return join(CLAUDE_SKILLS_DIR, "android-cli", "SKILL.md");
+export function androidCliSkillPath(skillsDir: string = CLAUDE_SKILLS_DIR): string {
+  return join(skillsDir, "android-cli", "SKILL.md");
 }
 
-export function androidCliSkillInstalled(): boolean {
-  return existsSync(androidCliSkillPath());
+export function androidCliSkillInstalled(skillsDir: string = CLAUDE_SKILLS_DIR): boolean {
+  return existsSync(androidCliSkillPath(skillsDir));
 }
 
 export function androidCliInstallSupported(): boolean {
@@ -236,7 +237,8 @@ export async function uninstallAndroidCli(): Promise<AndroidUninstallResult> {
   const paths = [
     join(homedir(), ".android", "bin", "android-cli"),
     join(homedir(), ".android", "cli"),
-    join(CLAUDE_SKILLS_DIR, "android-cli")
+    // `android init` may have dropped the stock skill into any target's folder.
+    ...ALL_TARGET_IDS.map((id) => join(TARGETS[id].skillsDir, "android-cli"))
   ];
   for (const p of paths) {
     if (!existsSync(p)) continue;
@@ -251,11 +253,18 @@ export async function uninstallAndroidCli(): Promise<AndroidUninstallResult> {
   return { removed, errors };
 }
 
-export async function runAndroidInit(): Promise<AndroidInitResult> {
+// `android init` takes no options — it initializes the environment (skills)
+// for ALL detected agents (~/.claude, ~/.codex, …). Per-agent targeting lives
+// on `android skills install --agent=<flag>`, not here; passing `--agent` to
+// `init` is rejected ("Unknown option"). We therefore run the bare command and
+// verify the stock skill landed in this target's skills folder.
+export async function runAndroidInit(
+  target: TargetSpec = TARGETS.claude
+): Promise<AndroidInitResult> {
   const cli = androidCliPath();
   if (!cli) return { ran: false, skillInstalled: false };
 
-  const skillPath = androidCliSkillPath();
+  const skillPath = androidCliSkillPath(target.skillsDir);
   try {
     const res = await execa(cli, ["init"], { reject: false, timeout: 30_000 });
     const ok = res.exitCode === 0;

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { CLAUDE_COMMANDS_DIR, gorMobileRoot } from "../constants.js";
 import { ensureAndroidCliCurrent, runAndroidInit } from "../helpers/android-cli.js";
-import { writeClaudeMdSection } from "../helpers/claude-md-section.js";
+import { writeManagedSection } from "../helpers/claude-md-section.js";
 import {
   cleanupLegacyAgents,
   cleanupLegacyCommands,
@@ -15,72 +15,109 @@ import {
   installUserPromptSubmitHook
 } from "../helpers/settings-merge.js";
 import { installStatusLine, statusLineState } from "../helpers/settings-statusline.js";
+import {
+  codexStatusLineState,
+  installCodexStatusLine
+} from "../helpers/codex-statusline.js";
+import {
+  detectGorMobileTargets,
+  detectInstalledTargets,
+  parseTargetFlag,
+  targetSpecs,
+  type TargetSpec
+} from "../targets.js";
 import { log } from "../ui/log.js";
 
+function repairTargets(target?: string): TargetSpec[] {
+  if (target) return targetSpecs(parseTargetFlag(target));
+  const gm = detectGorMobileTargets();
+  if (gm.length > 0) return targetSpecs(gm);
+  const installed = detectInstalledTargets();
+  return targetSpecs(installed.length > 0 ? installed : ["claude"]);
+}
+
 export async function cmdRepair(
-  opts: { skipAndroidUpdate?: boolean } = {}
+  opts: { skipAndroidUpdate?: boolean; target?: string } = {}
 ): Promise<void> {
-  log.step("Repairing ~/.claude/ managed files");
+  const targets = repairTargets(opts.target);
+  const snippet = join(gorMobileRoot(), "templates", "claude-md-snippet.md");
 
+  // Shared hook scripts live in ~/.gor-mobile/templates — copy once.
   copyHookTemplates();
-  const ss = installSessionStartHook();
-  log.ok(
-    ss.collapsed > 1
-      ? `SessionStart hook refreshed (collapsed ${ss.collapsed} → 1)`
-      : "SessionStart hook refreshed"
-  );
-  const ups = installUserPromptSubmitHook();
-  log.ok(
-    ups.collapsed > 1
-      ? `UserPromptSubmit hook refreshed (collapsed ${ups.collapsed} → 1)`
-      : "UserPromptSubmit hook refreshed"
-  );
 
-  const sl = statusLineState();
-  if (sl.managed && sl.variant) {
-    installStatusLine(sl.variant, { force: true });
-    log.ok(`Status line (${sl.variant === "cat" ? "Cat" : "Classic"}) refreshed`);
-  }
+  for (const target of targets) {
+    log.step(`Repairing ${target.label} (${target.home})`);
 
-  const legacyCmds = cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
-  for (const f of legacyCmds) log.ok(`Removed legacy command ${f}`);
-  const legacyAgents = cleanupLegacyAgents();
-  for (const f of legacyAgents) log.ok(`Removed legacy agent ${f}`);
+    const ss = installSessionStartHook(target);
+    log.ok(
+      ss.collapsed > 1
+        ? `SessionStart hook refreshed (collapsed ${ss.collapsed} → 1)`
+        : "SessionStart hook refreshed"
+    );
+    const ups = installUserPromptSubmitHook(target);
+    log.ok(
+      ups.collapsed > 1
+        ? `UserPromptSubmit hook refreshed (collapsed ${ups.collapsed} → 1)`
+        : "UserPromptSubmit hook refreshed"
+    );
 
-  const skills = installSkills();
-  if (skills.missingPrefix.length > 0) {
-    log.warn(`Frontmatter rewrite failed in ${skills.missingPrefix.length} skill(s):`);
-    for (const m of skills.missingPrefix) {
-      log.warn(`  ${m} (missing 'name: gor-mobile-' prefix)`);
+    if (target.statusLineKind === "claude-command") {
+      const sl = statusLineState();
+      if (sl.managed && sl.variant) {
+        installStatusLine(sl.variant, { force: true });
+        log.ok(`Status line (${sl.variant === "cat" ? "Cat" : "Classic"}) refreshed`);
+      }
+    } else if (target.statusLineKind === "codex-config") {
+      if (codexStatusLineState().managed) {
+        installCodexStatusLine({ force: true });
+        log.ok("Codex status line refreshed (tui.status_line)");
+      }
     }
-  }
-  log.ok(`Skills refreshed (${skills.installed.length} gor-mobile-* dirs)`);
 
-  const agents = installAgents();
-  log.ok(`Agents refreshed (${agents.length} in ~/.claude/agents)`);
+    if (target.id === "claude") {
+      const legacyCmds = cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
+      for (const f of legacyCmds) log.ok(`Removed legacy command ${f}`);
+      const legacyAgents = cleanupLegacyAgents();
+      for (const f of legacyAgents) log.ok(`Removed legacy agent ${f}`);
+    }
 
-  try {
-    unregisterManaged();
-    log.ok("Managed MCP entries pruned from ~/.claude/mcp.json");
-  } catch (err) {
-    log.warn(`MCP cleanup failed: ${(err as Error).message}`);
-  }
+    const skills = installSkills(target);
+    if (skills.missingPrefix.length > 0) {
+      log.warn(`Frontmatter rewrite failed in ${skills.missingPrefix.length} skill(s):`);
+      for (const m of skills.missingPrefix) {
+        log.warn(`  ${m} (missing 'name: gor-mobile-' prefix)`);
+      }
+    }
+    log.ok(`Skills refreshed (${skills.installed.length} gor-mobile-* dirs → ${target.skillsDir})`);
 
-  const androidRes = await runAndroidInit();
-  if (!androidRes.ran) {
-    log.info("android CLI not on PATH — skipping 'android init'");
-  } else if (androidRes.skillInstalled) {
-    log.ok("android-cli skill refreshed via 'android init'");
-  } else if (androidRes.error) {
-    log.warn(`'android init' failed: ${androidRes.error}`);
-  } else {
-    log.warn("'android init' ran but ~/.claude/skills/android-cli/SKILL.md missing");
+    const agents = installAgents(target);
+    log.ok(`Agents refreshed (${agents.length} in ${target.agentsDir})`);
+
+    if (target.supportsMcpPrune) {
+      try {
+        unregisterManaged();
+        log.ok("Managed MCP entries pruned from ~/.claude/mcp.json");
+      } catch (err) {
+        log.warn(`MCP cleanup failed: ${(err as Error).message}`);
+      }
+    }
+
+    const androidRes = await runAndroidInit(target);
+    if (!androidRes.ran) {
+      log.info("android CLI not on PATH — skipping 'android init'");
+    } else if (androidRes.skillInstalled) {
+      log.ok("android-cli skill refreshed via 'android init'");
+    } else if (androidRes.error) {
+      log.warn(`'android init' failed: ${androidRes.error}`);
+    } else {
+      log.info(`stock android-cli skill not present in ${target.skillsDir} (android init covers detected agents)`);
+    }
+
+    writeManagedSection(target.instructionsFile, snippet);
+    log.ok(`Managed instructions section refreshed (${target.instructionsFile})`);
   }
 
   await ensureAndroidCliCurrent({ skip: opts.skipAndroidUpdate });
-
-  writeClaudeMdSection(join(gorMobileRoot(), "templates", "claude-md-snippet.md"));
-  log.ok("CLAUDE.md managed section refreshed");
 
   log.ok("Done. Run 'gor-mobile doctor' to verify.");
 }

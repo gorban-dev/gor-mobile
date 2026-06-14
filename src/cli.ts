@@ -22,7 +22,7 @@ const program = new Command();
 
 program
   .name("gor-mobile")
-  .description("Android-aware overlay installer for Claude Code")
+  .description("Android-aware overlay installer for Claude Code and Codex")
   .version(`gor-mobile ${GOR_MOBILE_VERSION}`, "-v, --version", "print version");
 
 program
@@ -42,6 +42,7 @@ program
   .option("--advanced", "confirm each step and allow URL override")
   .option("--rules <url>", "custom rules-pack git URL")
   .option("--skip-android-update", "do not auto-update the Android CLI")
+  .option("--target <targets>", "comma-separated agents to install into (claude,codex)")
   .action(async (opts) => {
     await cmdInit(opts);
   });
@@ -50,14 +51,16 @@ program
   .command("doctor")
   .description("Check environment (deps, hooks, MCP)")
   .option("-v, --verbose", "dump hook payload + skill frontmatter")
+  .option("--target <targets>", "comma-separated agents to check (claude,codex)")
   .action(async (opts) => {
     await cmdDoctor(opts);
   });
 
 program
   .command("repair")
-  .description("Restore managed files in ~/.claude/")
+  .description("Restore managed files in ~/.claude/ and ~/.codex/")
   .option("--skip-android-update", "do not auto-update the Android CLI")
+  .option("--target <targets>", "comma-separated agents to repair (claude,codex)")
   .action(async (opts) => {
     await cmdRepair(opts);
   });
@@ -94,6 +97,7 @@ program
   .command("uninstall")
   .description("Remove everything gor-mobile installed")
   .option("-y, --yes", "skip confirmation")
+  .option("--target <targets>", "comma-separated agents to uninstall from (claude,codex)")
   .action(async (opts) => {
     await cmdUninstall(opts);
   });
