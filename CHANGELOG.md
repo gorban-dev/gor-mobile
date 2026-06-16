@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.4 — 2026-06-16
+
+- add: **Codex second opinion in code review.** When the OpenAI Codex
+  *plugin* (`codex@openai-codex`, distinct from the Codex CLI target) is
+  installed, the `requesting-code-review` overlay now runs a second,
+  independent review pass through it **in addition to** the gor-mobile
+  reviewer — normal changes via `codex review`, deep / security-sensitive
+  changes via `codex adversarial-review`, mirroring the Sonnet → Opus
+  escalation. It detects the plugin's `codex-companion.mjs` (the `review`
+  slash commands are `disable-model-invocation: true`, so the script is
+  called directly), picks the working-tree vs branch scope to match
+  gor-mobile's no-commit-between-tasks model, merges both reports under the
+  existing severity policy, and silently no-ops when the plugin is absent or
+  the `codex` CLI is not ready. The Codex pass never replaces the gor-mobile
+  reviewer. Existing users: run `gor-mobile repair` to refresh the skill
+  overlays.
+
 ## 0.2.3 — 2026-06-14
 
 - add: **OpenAI Codex CLI support.** gor-mobile now installs the same

@@ -9,7 +9,7 @@ A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Cl
 
 The same workflow installs into `~/.claude/` (Claude Code) and/or `~/.codex/` (Codex, honoring `$CODEX_HOME`). Pick agents with `--target claude,codex`; with no flag, `init` auto-detects which agent homes exist. Skills are shared (cross-compatible `SKILL.md`); hooks, reviewer agents, and the global-instructions section adapt to each agent's format. See [Targets](#targets-claude--codex).
 
-> Status: `v0.2.3` — pre-release scaffolding, under active development on the `develop` branch. See `CHANGELOG.md`.
+> Status: `v0.2.4` — pre-release scaffolding, under active development on the `develop` branch. See `CHANGELOG.md`.
 
 ## Requirements
 
@@ -194,7 +194,11 @@ afterwards. Opus stays in control of design decisions, verification, and
 anything the plan marks as "human review required". The Sonnet reviewer
 (`gor-mobile-code-reviewer`) handles routine reviews; the Opus reviewer
 (`gor-mobile-code-reviewer-deep`) takes large / security-sensitive diffs
-and explicit deep-review asks.
+and explicit deep-review asks. When the OpenAI Codex plugin
+(`codex@openai-codex`) is installed, `requesting-code-review` adds a second,
+independent pass through Codex (standard `review`, or `adversarial-review`
+on the same escalation trigger) and merges its findings — a cross-model
+second opinion, never a replacement for the gor-mobile reviewer.
 
 ## Rules packs
 
@@ -220,7 +224,7 @@ which skills carry an Android-rules / Task(model=...) appendix.
 | `test-driven-development` | superpowers | rules + GREEN → Sonnet |
 | `executing-plans` | superpowers | task-loop classification (Sonnet / Opus) |
 | `dispatching-parallel-agents` | superpowers | — |
-| `requesting-code-review` | superpowers | Sonnet reviewer default, Opus reviewer on escalation |
+| `requesting-code-review` | superpowers | Sonnet reviewer default, Opus reviewer on escalation; optional Codex second opinion when `codex@openai-codex` is installed |
 | `receiving-code-review` | superpowers | — |
 | `verification-before-completion` | superpowers | — |
 | `systematic-debugging` | superpowers | rules + Phase 2 evidence → Sonnet (read-only) |
