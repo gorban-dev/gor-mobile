@@ -5,7 +5,7 @@ import { Command } from "commander";
 import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-var GOR_MOBILE_VERSION = "0.2.4";
+var GOR_MOBILE_VERSION = "0.2.5";
 var HOME = homedir();
 var GOR_MOBILE_HOME = process.env.GOR_MOBILE_HOME ?? join(HOME, ".gor-mobile");
 var GOR_MOBILE_RULES_DIR = join(GOR_MOBILE_HOME, "rules");

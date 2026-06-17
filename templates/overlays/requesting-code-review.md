@@ -9,6 +9,18 @@ is an Android/Kotlin codebase.
 Load `core` + `architecture` sections from `$HOME/.gor-mobile/rules/` via
 `manifest.json` before preparing the review context.
 
+### What a complete review is
+
+A complete gor-mobile review is **two independent passes when the `codex`
+plugin is present**: the gor-mobile reviewer (below) **and** an independent
+Codex pass (further below) — both, every time, never one instead of the
+other. Detect Codex presence as the *first* action of the review (step 1
+under "Codex second opinion"); if `$CODEX_COMPANION` resolves, the Codex
+pass is mandatory, not optional. Do not report review findings to the user
+until both passes have returned (or Codex has been confirmed absent).
+Announcing "I'll also check / run Codex" and then proceeding without
+dispatching it is a review failure.
+
 ### Reviewer selection
 
 Default path — dispatch the Sonnet reviewer:
@@ -94,17 +106,21 @@ The reviewer agents (`gor-mobile-code-reviewer`,
 `gor-mobile-code-reviewer-deep`) are unchanged — their system prompts
 are generic about review and accept whatever diff the caller passes.
 
-### Codex second opinion (when the `codex` plugin is installed)
+### Codex second opinion — MANDATORY when the `codex` plugin is installed
 
-Run a second, independent review pass through the OpenAI Codex plugin
-(`codex@openai-codex`) **in addition to** the gor-mobile reviewer above,
-whenever that plugin is installed. Two model families catch different
-classes of defect; the Codex pass never replaces the gor-mobile reviewer.
+If `$CODEX_COMPANION` resolves (step 1 below), you **MUST** run this second,
+independent pass through the OpenAI Codex plugin (`codex@openai-codex`)
+**in addition to** the gor-mobile reviewer above, and **before** you report
+any review findings to the user. It is not an optional add-on and not a
+"nice to have": two model families catch different classes of defect, and
+the Codex pass never replaces the gor-mobile reviewer. The only way out of
+this pass is `$CODEX_COMPANION` being empty (plugin absent).
 
-1. **Locate the plugin's companion script.** Its `review` /
-   `adversarial-review` slash commands are `disable-model-invocation: true`,
-   so you cannot trigger them yourself — call the script directly (newest
-   installed version wins):
+1. **Detect the companion script first — before you dispatch the gor-mobile
+   reviewer, not "in parallel later."** Its `review` / `adversarial-review`
+   slash commands are `disable-model-invocation: true`, so you cannot
+   trigger them yourself — call the script directly (newest installed
+   version wins):
 
         CODEX_COMPANION="$(ls -t "$HOME"/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs 2>/dev/null | head -1)"
 
@@ -156,5 +172,16 @@ classes of defect; the Codex pass never replaces the gor-mobile reviewer.
    disagreement, prefer the finding backed by a concrete repro / line
    reference and surface the conflict to the user rather than silently
    dropping one.
+
+### Red Flags (Codex pass)
+
+**Never:**
+- Announce "I'll check for Codex" / "running Codex in parallel" and then
+  move on without actually dispatching it. Detect, then dispatch, in the
+  same breath.
+- Treat a present-but-unused Codex plugin as "good enough." If
+  `$CODEX_COMPANION` resolved, the pass runs — it is not a judgement call.
+- Report review findings to the user before the Codex pass has returned
+  (or been confirmed absent).
 
 <!-- END gor-mobile overlay -->

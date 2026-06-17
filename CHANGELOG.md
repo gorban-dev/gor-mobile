@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.5 — 2026-06-17
+
+- fix: **Make the Codex second-opinion pass actually fire.** The Codex
+  review step added in 0.2.4 was worded as an optional, parenthetically
+  conditional appendix buried at the end of the `requesting-code-review`
+  overlay, so under load an agent would dispatch the gor-mobile reviewer,
+  *announce* it would "also check Codex," and then drift off without running
+  it. The overlay now: states up front that a complete review is **two
+  passes** (gor-mobile reviewer **and**, when the `codex` plugin is present,
+  an independent Codex pass — both, every time); reframes the Codex section
+  header and opening as **MANDATORY when `$CODEX_COMPANION` resolves** (the
+  only opt-out is the plugin being absent); makes companion detection the
+  **first** action of the review rather than a deferred "in parallel later"
+  side-quest; and adds a Codex-pass Red Flags block forbidding
+  announce-then-skip and reporting findings before the Codex pass returns.
+  No mechanism changed — detection and dispatch already worked; this is a
+  framing/prominence fix so the step fires without a user nudge. Existing
+  users: run `gor-mobile repair` to refresh the skill overlays.
+
 ## 0.2.4 — 2026-06-16
 
 - add: **Codex second opinion in code review.** When the OpenAI Codex
