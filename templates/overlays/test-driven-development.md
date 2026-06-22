@@ -13,6 +13,15 @@ decides whether that cycle engages at all. Precedence is legitimate: per
 `[[gor-mobile-using-superpowers]]`, the project layer overrides default skill
 behavior, and this overlay is that layer.
 
+This gate is the **single source of truth** for "does this change need a test."
+Other skills route through it rather than mandating a test on their own —
+`[[gor-mobile-systematic-debugging]]` (Phase 4),
+`[[gor-mobile-writing-plans]]` (per task, while authoring),
+`[[gor-mobile-executing-plans]]` and
+`[[gor-mobile-subagent-driven-development]]` (before any baked-in test step)
+all MUST run this gate first. Wherever a skill body says "MUST write a failing
+test," that MUST is gated by the verdict below — it is never unconditional.
+
 Answer two **objective** questions about the change:
 
 **Q1 — Does it carry behavioral logic?**
@@ -55,6 +64,14 @@ where tests pay off most. "Too small to test" is not a verdict here; if a change
 feels too small, it is almost always because it is non-behavioral (Q1 = NO),
 which the gate already handles. Never use line-count or effort as a reason to
 skip — that is exactly the rationalization the body above correctly forbids.
+
+**Gate the minimal fix, not a reshaped one.** Run Q1/Q2 against the smallest
+change that resolves the issue. If you catch yourself extracting a helper or
+introducing a new model field / flag *so that there is something unit-testable*
+(e.g. inventing an `isSubscriptionAvailable` seam when the real fix is hiding a
+button), stop — that is the test mandate distorting the design. Gate the change
+as it actually stands; if the minimal fix is UI-flag / wiring, the verdict is
+**not warranted** and you verify on-device instead.
 
 When the gate returns **deferred** or **not warranted**:
 - You still owe verification before claiming done — invoke

@@ -27,6 +27,14 @@ For every task in the plan, in order:
    subagent "DONE" without a passing verification is not done.
 4. Mark TodoWrite `completed`, advance.
 
+**A baked-in "write the failing test" step is gated.** If a task prescribes
+writing a failing test, that step is subordinate to the **TDD applicability
+gate** in `[[gor-mobile-test-driven-development]]` — run the gate for the
+task's change before executing the step. Verdict **not warranted** (UI-flag /
+wiring / no behavioral logic) → skip the test step, record
+`TDD skipped: <reason>`, and keep the task's verification step. Do not write a
+test merely because the plan listed one, and never fabricate a new seam to test.
+
 ### What NOT to delegate
 - Build config (`gradle`, CI, release machinery).
 - Tasks the plan flags "design decision" or "human review required".

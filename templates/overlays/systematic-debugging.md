@@ -28,7 +28,25 @@ Load `core` + `debug-*` sections from `$HOME/.gor-mobile/rules/` via
   no Write.
 - **Phase 3 — hypothesis formation.** Main orchestrator (Opus). Causal
   reasoning over the evidence is not worth a round-trip.
-- **Phase 4 — failing test + fix.** See the TDD overlay.
+- **Phase 4 — failing test + fix.** Before writing ANY failing test, this
+  is **MANDATORY**: invoke `[[gor-mobile-test-driven-development]]` and run
+  its **TDD applicability gate** against the *minimal* fix. The body's
+  Phase 4 Step 1 ("Create Failing Test Case — MUST have before fixing") is
+  **subordinate to that gate**, not an independent license to write a test.
+    - Gate verdict **not warranted** (e.g. UI-flag / visibility wiring, no
+      behavioral logic — exactly the kind of bug that needs no unit test) →
+      do NOT write a test; record the one-line reason and verify via
+      `[[gor-mobile-verification-before-completion]]` (on-device per
+      `[[gor-mobile-using-android-cli]]`).
+    - Gate verdict **applies** → proceed RED → GREEN → REFACTOR per the TDD
+      overlay.
+
+  > **Red Flag — STOP.** Creating a `*Test*` file, or going "I'll go TDD —
+  > first a failing test," before the gate has run. "The debugging skill said
+  > MUST create a failing test" is the precise bypass this gate exists to
+  > catch — the MUST is gated, never unconditional. And never reshape the bug
+  > into a fresh seam (extract a helper, add a model flag) just to have
+  > something to unit-test: gate the minimal fix as-is.
 
 ### Android CLI — phase command mapping
 

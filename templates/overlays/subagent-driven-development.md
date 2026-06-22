@@ -57,6 +57,16 @@ a passing Gradle run is not DONE.
 Tests are Gradle:
 `./gradlew :<module>:test --tests "*<Name>Test*"`.
 
+### TDD step is gated (delta)
+
+Before putting a **Test** path into the implementer prompt's allowed-paths, run
+the **TDD applicability gate** (`[[gor-mobile-test-driven-development]]`) for
+that task's change. Verdict **not warranted** (UI-flag / wiring / DI /
+resources — no behavioral logic) → omit the test from the prompt, record
+`TDD skipped: <reason>`, and rely on the verification step instead. A plan that
+hardcodes a test step does not override the gate; never instruct a subagent to
+fabricate a test — or a new seam to test — for a non-behavioral change.
+
 Doc paths land in the gitignored project-local workspace:
 `.gor-mobile/specs/YYYY-MM-DD-<topic>-design.md`
 `.gor-mobile/plans/YYYY-MM-DD-<feature>.md`.

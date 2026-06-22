@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.6 — 2026-06-22
+
+- fix: **Make the TDD applicability gate actually govern every entry point.**
+  The gate that decides whether a change needs a test (UI-flag / wiring →
+  *not warranted*) lived only inside the `test-driven-development` overlay, so
+  it ran **only if** an agent voluntarily invoked that skill. Meanwhile
+  `systematic-debugging` Phase 4 ("Create Failing Test Case — MUST have before
+  fixing") and `writing-plans` ("Step 1: Write the failing test") mandate a
+  test **unconditionally**. Asymmetry → leak: under load an agent reads the
+  hard "MUST", writes a failing test inline, and never opens the door where the
+  gate would have said *skip it* — even reshaping a pure-UI bug into a new
+  shared seam just to have something unit-testable. This closes the leak at
+  every entry point: `systematic-debugging` Phase 4 now makes running the gate
+  **MANDATORY before any failing test** (with a Red Flag against the
+  "the skill said MUST" bypass and against fabricating a seam); a new
+  `writing-plans` overlay bakes the gate's *verdict* into each task instead of a
+  blanket test step (and drops baked-in `git commit` steps, per the
+  no-automatic-git policy); `executing-plans` and `subagent-driven-development`
+  now treat a plan's hardcoded test step as subordinate to the gate; and the
+  `test-driven-development` overlay is marked the single source of truth those
+  skills route through, with an explicit "gate the minimal fix, not a reshaped
+  one" clause. No mechanism changed — the gate already existed; this is a
+  prominence/routing fix so it fires without a user nudge. Existing users: run
+  `gor-mobile repair` to refresh the skill overlays.
+
 ## 0.2.5 — 2026-06-17
 
 - fix: **Make the Codex second-opinion pass actually fire.** The Codex
