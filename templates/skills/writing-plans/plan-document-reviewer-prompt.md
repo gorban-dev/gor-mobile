@@ -21,8 +21,9 @@ Task tool (general-purpose):
     |----------|------------------|
     | Completeness | TODOs, placeholders, incomplete tasks, missing steps |
     | Spec Alignment | Plan covers spec requirements, no major scope creep |
-    | Task Decomposition | Tasks have clear boundaries, steps are actionable |
-    | Buildability | Could an engineer follow this plan without getting stuck? |
+    | Task Decomposition | Tasks have clear boundaries, steps are actionable. Watch for **compile-coupled** splits: a `sealed`/`enum` variant separated from the exhaustive `when` branches that must handle it — those belong in one task, else a task won't compile on its own. |
+    | Buildability | Could an engineer follow this plan without getting stuck? Does every task still compile on its own? |
+    | Docs grounding | Every step coding against an SDK/library/vendor API cites the verified signature source (docs excerpt, `javap`, or source ref) — not a remembered signature. Flag API signatures pasted without a source. |
 
     ## Calibration
 

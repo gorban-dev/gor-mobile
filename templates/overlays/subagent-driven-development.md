@@ -40,6 +40,17 @@ The `<implementer-prompt>` must contain:
 - **Verification step** — the exact Gradle command the orchestrator will
   run after the subagent returns (e.g.
   `./gradlew :<module>:test --tests "*<Name>Test*"`).
+- **Doc-verified API references** — for every SDK / library / vendor API the
+  task calls, the exact signature *and its source* (docs excerpt, `javap`
+  output, or source ref) carried down from the plan's docs-first research
+  (see the contract in `[[gor-mobile-using-android-cli]]`). The subagent codes
+  against these, never against a remembered signature. Do not hand a subagent
+  a task that names an external API without its verified shape.
+- **Fidelity note** — instruct the subagent to reproduce the task's calls
+  exactly: match signatures and **do not simplify modifier chains or drop
+  parameters** (e.g. keep `.padding(horizontal = 16.dp)` when the task
+  specifies it). Restating code from a paraphrase is where standard widths,
+  paddings, and named arguments silently vanish.
 
 **Escalate to Opus** (`model = "opus"`) when any of:
 - The task carries a design decision (plan marks it as "design" or
@@ -81,22 +92,35 @@ pushes at their own discretion. If the user explicitly asks for a
 worktree or branch, run the requested git command — otherwise do
 nothing.
 
-### Skill-vs-Agent dispatch (clarification — upstream bug obra/superpowers#1077)
+### Review routing — the code-quality stage goes THROUGH requesting-code-review
 
-The upstream Integration block lists `requesting-code-review` alongside agent
-types in a single bullet list, which causes the model to dispatch it via
-`Agent(type="gor-mobile-requesting-code-review")` and fail with
-"Agent type not found". Disambiguation:
+The process has two review stages per task. They route differently, and the
+distinction is load-bearing for the Codex second opinion:
 
-- **Skills** (invoke via `Skill` tool — these are *skills*, not agents):
-  - `gor-mobile-requesting-code-review`
-  - `gor-mobile-writing-plans`
-- **Agents** (dispatch via `Agent` tool with `subagent_type`):
-  - `gor-mobile-code-reviewer` (Sonnet — default review path)
-  - `gor-mobile-code-reviewer-deep` (Opus — security / large-diff path)
+- **Spec-compliance review** (`./spec-reviewer-prompt.md`) — dispatch directly.
+  It checks the code against the task spec; no second model family needed. This
+  is also the gate that catches dropped modifiers / parameters (see Fidelity
+  note above) — have it compare modifier chains and argument lists against the
+  plan **verbatim**.
+- **Code-quality review** — do **NOT** dispatch `Agent(gor-mobile-code-reviewer)`
+  bare from this flow. A bare Agent dispatch reads `code-quality-reviewer-prompt.md`
+  and never touches the `requesting-code-review` overlay, so it **silently skips
+  the mandatory Codex pass**. Instead invoke
+  `Skill(gor-mobile-requesting-code-review)`, which **owns the two-pass mandate**
+  (gor-mobile reviewer + Codex when `$CODEX_COMPANION` resolves) and orchestrates
+  the `Agent(gor-mobile-code-reviewer)` / `-deep` call itself. The **final
+  full-implementation review** (after all tasks) routes the same way.
 
-If you see `{"status":"Agent type not found"}` for a review step, the
-dispatch went to the wrong tool. Retry with `Skill(gor-mobile-requesting-code-review)`
-and let that skill orchestrate the `Agent(gor-mobile-code-reviewer)` call itself.
+**Definition of done for a code-quality review:** it is not complete — and its
+findings are not reported — until *both* passes have returned: the gor-mobile
+reviewer and Codex (when the plugin is present). Reporting quality-review
+results from the bare Agent pass alone is a review failure.
+
+**Tool disambiguation** (upstream bug obra/superpowers#1077): `requesting-code-review`
+and `writing-plans` are **Skills** (invoke via the `Skill` tool);
+`gor-mobile-code-reviewer` / `gor-mobile-code-reviewer-deep` are **Agents**
+(dispatch via the `Agent` tool with `subagent_type`). If you see
+`{"status":"Agent type not found"}` for a review step, the dispatch went to the
+wrong tool — retry via `Skill(gor-mobile-requesting-code-review)`.
 
 <!-- END gor-mobile overlay -->

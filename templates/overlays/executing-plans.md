@@ -57,6 +57,17 @@ uncommitted modifications in the working tree until the user decides
 to commit. Verification (`./gradlew :<module>:test ...`) still runs
 after every task — that's correctness gating, not git state.
 
+### Review routing — through requesting-code-review (owns the Codex mandate)
+
+When you request code review at a checkpoint, route it through
+`Skill(gor-mobile-requesting-code-review)`, **not** a bare
+`Agent(gor-mobile-code-reviewer)`. That skill owns the two-pass mandate
+(gor-mobile reviewer + Codex when `$CODEX_COMPANION` resolves); a bare Agent
+dispatch reads only the reviewer prompt and silently skips the Codex second
+opinion. The review is not done — and findings are not reported — until both
+passes return (or Codex is confirmed absent because the plugin is not
+installed).
+
 ### Android CLI — phase command mapping
 
 For Android/Kotlin targets, the `android` CLI is the primary tool for

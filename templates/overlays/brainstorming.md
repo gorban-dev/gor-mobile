@@ -26,6 +26,27 @@ yet listed in the project `.gitignore`, append it silently and leave
 the modification uncommitted in the working tree. Do NOT run
 `git commit` for this — the user owns all commit decisions.
 
+### Docs-first gate (spec phase) — MANDATORY before proposing any SDK/vendor API
+
+Before you propose an approach that touches a framework / library / vendor API
+(media3, Compose, Navigation, Room, WorkManager, …), you MUST ground it in real
+documentation via the **Docs-first ground-truth contract** in
+`[[gor-mobile-using-android-cli]]` (official docs → resolved artifact → source
+for behavior). The spec must **name the doc/vendor source** for every external
+API surface it commits to — the concrete composable / class / method it will
+call, and where that shape was verified. Designing the feature from training
+memory is forbidden; the spec-document reviewer verifies the citations and
+flags any external API committed to without a source.
+
+Do this *before* comparing approaches: the "right" approach often hinges on
+what the pinned library version actually ships (e.g. a ready-made
+`media3-ui-compose` composable you would not know about from memory).
+
+> **Red Flag — STOP.** Writing "use `PlayerView` / `ContentFrame` / `NavHost`
+> …" into a spec because you remember the API. Cutoff → library APIs drift.
+> Read the docs/artifact for the pinned version first, then describe how to
+> build the feature.
+
 ### Override: no automatic commits, branches, or worktrees
 
 The upstream skill body instructs you to "commit the design document to
@@ -63,5 +84,14 @@ Use:
 - `ast-index search "<term>"` — for ad-hoc lookups during clarification.
 
 If `ast-index` is not installed or returns empty, fall back to `Grep`.
+
+### Figma inspection — narrow the read
+
+When a question genuinely needs Figma, request the specific screen/block
+**node-id**, not the root page. `get_metadata` on a root node can return
+hundreds of K of characters (context overflow), and a root screenshot returns
+dozens of mockups with little usable signal. If the ticket already describes
+the screen sufficiently in text, do not descend into Figma for pixel details —
+spend the tokens on the docs-first API research instead.
 
 <!-- END gor-mobile overlay -->

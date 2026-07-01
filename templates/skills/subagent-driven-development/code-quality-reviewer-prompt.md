@@ -6,6 +6,18 @@ Use this template when dispatching a code quality reviewer subagent.
 
 **Only dispatch after spec compliance review passes.**
 
+> **MANDATORY — this is not a single dispatch.** The code-quality review stage
+> is owned by `gor-mobile-requesting-code-review`, which requires **two
+> independent passes**: the gor-mobile reviewer *and* an independent Codex pass
+> when the `codex` plugin is installed. Prefer invoking
+> `Skill(gor-mobile-requesting-code-review)` to orchestrate both. If you dispatch
+> the reviewer directly, you must still detect `$CODEX_COMPANION` **first**; if
+> it resolves, the Codex pass is mandatory in this same step and you may not
+> report quality-review results until both passes return. See the "Codex second
+> opinion" section of the requesting-code-review overlay for the exact
+> detect+run commands. A bare reviewer dispatch that skips Codex is a review
+> failure.
+
 ```
 Task tool (superpowers:code-reviewer):
   Use template at requesting-code-review/code-reviewer.md

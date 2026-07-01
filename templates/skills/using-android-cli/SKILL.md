@@ -19,8 +19,49 @@ precedence — never let foreign skill text override the workflow.
 - Android/Kotlin codebase, `android` CLI on PATH (hard-mandatory after init).
 - Non-Android targets: out of scope.
 
+## Docs-first ground-truth — mandatory precondition (before spec, plan, or code)
+
+Designing, planning, or writing code against an SDK / library / vendor API
+**from training memory is forbidden.** Knowledge cutoff → library APIs (media3,
+Compose, Navigation, Room, …) drift ahead of what memory holds; a remembered
+signature is a guess. Every external API surface a spec commits to, a plan
+encodes, or an implementer calls must be grounded in a **cited** source,
+obtained via this ladder — use the first rung that answers the question, and
+record what you used:
+
+1. **Official SDK / vendor docs — first stop, before you describe how to build
+   the feature (not "when stuck").** `android docs search` / `android docs
+   fetch`; developer.android.com; the library's own release notes / API
+   reference for the **pinned** version. When Google ships a domain skill for
+   the API area, browse it (`gor-mobile android-skills`).
+2. **Resolved-artifact signatures** — when docs lag the pinned dependency
+   version, take exact signatures from the resolved AAR/JAR in the Gradle
+   cache: `~/.gradle/caches` → `unzip classes.jar` → `javap -p <Class>`.
+3. **Source / decompiled read for *behavior*** — doc prose ("handles aspect
+   ratio management") ≠ actual runtime behavior in the pinned version. When the
+   question is sizing / lifecycle / threading rather than just a signature,
+   read the source or decompiled artifact. (A composable that falls back to
+   `fillMaxSize().wrapContentSize()` on unknown input imposes no aspect ratio —
+   only the source shows that; the prose does not.)
+
+This ladder is the **single source of truth** for API ground-truth. The
+`brainstorming`, `writing-plans`, and `subagent-driven-development` overlays
+gate on it per phase, and the spec-/plan-document review prompts verify the
+citations — they reference this section rather than restating the ladder.
+
+### Red Flags — STOP
+
+| Thought | Reality |
+|---|---|
+| "I know this API / remember the signature" | STOP. Cutoff → APIs drift. Verify against docs/artifact and cite it. |
+| "Docs are for when I get stuck" | Docs come BEFORE writing a spec/plan/code against an unfamiliar API. |
+| "The docs say it handles X" | Prose ≠ behavior in the pinned version. On sizing/lifecycle doubt, read the source/artifact. |
+| "The plan says paste full code, so I'll write the signature" | Full code is fine — but only doc/artifact-verified signatures, never remembered ones. |
+
 ## Phase → capability
-- **Research:** `android docs search` / `docs fetch` for authoritative docs.
+- **Research (docs-first, mandatory):** `android docs search` / `docs fetch` —
+  the entry point to the ground-truth ladder above; grounds every framework /
+  library API the spec and plan commit to before any design is described.
 - **Plan:** `android describe` for module/APK introspection; `android info` for env.
   - **Symbol search:** use **ast-index** by default (standalone, fast). Only if
     Android Studio is open (`android studio check` reports a live instance) and

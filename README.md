@@ -9,7 +9,7 @@ A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Cl
 
 The same workflow installs into `~/.claude/` (Claude Code) and/or `~/.codex/` (Codex, honoring `$CODEX_HOME`). Pick agents with `--target claude,codex`; with no flag, `init` auto-detects which agent homes exist. Skills are shared (cross-compatible `SKILL.md`); hooks, reviewer agents, and the global-instructions section adapt to each agent's format. See [Targets](#targets-claude--codex).
 
-> Status: `v0.2.6` — pre-release scaffolding, under active development on `main`. See `CHANGELOG.md`.
+> Status: `v0.2.7` — pre-release scaffolding, under active development on `main`. See `CHANGELOG.md`.
 
 ## Requirements
 

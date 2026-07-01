@@ -21,6 +21,16 @@ until both passes have returned (or Codex has been confirmed absent).
 Announcing "I'll also check / run Codex" and then proceeding without
 dispatching it is a review failure.
 
+**This overlay is the single source of truth for the Codex pass** — its
+detection (`$CODEX_COMPANION`) and dispatch. It owns the two-pass mandate for
+**every** review entry point, not just a direct `requesting-code-review`
+invocation. The `subagent-driven-development` and `executing-plans` flows do
+**not** re-implement the Codex step: they route their code-quality review
+*through this skill* (`Skill(gor-mobile-requesting-code-review)`) so the
+mandate applies there too. A code-quality review dispatched as a bare
+`Agent(gor-mobile-code-reviewer)` — bypassing this skill — is incomplete by
+definition, because it never sees this section.
+
 ### Reviewer selection
 
 Default path — dispatch the Sonnet reviewer:

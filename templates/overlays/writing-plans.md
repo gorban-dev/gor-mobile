@@ -33,6 +33,33 @@ blanket test step:
 > new seam (a flag, an extracted helper) in a task purely to make something
 > unit-testable; plan the minimal fix and gate it as-is.
 
+### Docs-first gate (plan phase) — cite the API source in every step
+
+The upstream body tells you to put "full code in each step". That is fine —
+**but every step that writes code against an SDK / library / vendor API must
+carry the verified signature *and* its source**, taken from the spec's
+docs research or a fresh check per the **Docs-first ground-truth contract** in
+`[[gor-mobile-using-android-cli]]` (official docs → resolved artifact →
+source for behavior). A step that pastes an API signature with no cited source
+(docs reference, `javap` output, or source link) is a plan defect: it invites
+the implementer to code a remembered, possibly-drifted signature. The
+plan-document reviewer verifies this and flags unsourced API signatures.
+
+> **Red Flag — STOP.** Emitting "full code" for a task from memory of the API.
+> If you cannot cite where a signature came from for the pinned version, you
+> have not verified it — resolve it via the ladder before writing the step.
+
+### Decomposition: sealed / enum + exhaustive `when` is compile-coupled
+
+Adding a variant to a `sealed` type or `enum` that is read by an **exhaustive
+`when`** breaks compilation of every such `when` the moment the variant lands
+(Kotlin requires all branches). The type producer and all its mandatory `when`
+branches are therefore **compile-coupled** — put them in **one task**, or
+sequence tasks so each one still compiles on its own. Splitting "add the
+subtype" and "handle it in the `when`" across separate tasks forces the
+executor out of its allowed-paths to keep the build green, breaking the
+"every task compiles" invariant.
+
 ### Override: no baked-in git steps
 
 The body's task template ends each task with a "Commit" step and lists

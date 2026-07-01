@@ -1,5 +1,73 @@
 # Changelog
 
+## 0.2.7 — 2026-07-01
+
+Acts on field recommendations from an ARU-8929 session (media3 Compose video
+block). Two structural fixes plus three smaller ones — all additive overlay /
+prompt prose, no mechanism change.
+
+- feat: **Docs-first is now a throughline, not a habit.** The recurring failure
+  was designing/planning/coding against an SDK API from training memory —
+  a knowledge-cutoff library (media3 1.10.1) drifts ahead of memory, so the
+  first design proposed an XML `PlayerView` and missed a ready-made
+  `media3-ui-compose` composable already on the classpath. There was no gate
+  forcing real documentation before describing *how* to build a feature. This
+  release threads a single **Docs-first ground-truth contract** through the
+  whole pipeline:
+  - `using-android-cli` gains the contract as the **single source of truth** —
+    a ground-truth ladder (official SDK/vendor docs → resolved-artifact
+    signatures via `~/.gradle/caches` + `javap -p` when docs lag the pinned
+    version → source/decompiled read for *behavior*, since prose like "handles
+    aspect ratio" ≠ runtime behavior) plus a Red-Flag table. `android docs` is
+    promoted from a Research option to a mandatory precondition.
+  - The `brainstorming` (spec) and `writing-plans` (plan) overlays gate on that
+    contract per phase: the spec must **cite the source** for every external API
+    it commits to; every plan step coding against an SDK API must carry the
+    verified signature *and* its source. Designing/planning from memory is
+    forbidden.
+  - The `subagent-driven-development` overlay propagates the doc-verified
+    signatures into the implementer prompt, so the subagent codes against cited
+    shapes rather than re-deriving them from memory.
+  - Enforcement is anchored deterministically at the review gates: the
+    **spec-** and **plan-document reviewer** prompts now check "Docs grounding"
+    and flag any external API used without a cited source — so the principle
+    can't quietly evaporate as prose between phases.
+- fix: **Complete the Codex second-opinion wiring across every review entry
+  point.** 0.2.5 made the Codex pass fire reliably — but only for reviews driven
+  *through* `requesting-code-review`, where the Codex mandate overlay lives. The
+  per-task review in `subagent-driven-development` dispatches
+  `Agent(gor-mobile-code-reviewer)` straight from `code-quality-reviewer-prompt.md`,
+  never touching that overlay, so the Codex pass was silently skipped whenever
+  review was driven from the subagent-driven / executing-plans flow (exactly
+  what the 06-25 session hit, post-0.2.5). Now: the `requesting-code-review`
+  overlay is marked the single source of truth for Codex and states the
+  two-pass Definition of Done applies to **every** entry point; the
+  `subagent-driven-development` and `executing-plans` overlays route their
+  code-quality review **through** `Skill(gor-mobile-requesting-code-review)`
+  instead of a bare Agent dispatch; and `code-quality-reviewer-prompt.md` carries
+  a point-of-use MANDATORY header telling the model to detect `$CODEX_COMPANION`
+  first and run the pass in the same step. (A deterministic Stop-hook backstop
+  is deliberately deferred — it needs its own design.)
+- fix: **Plan decomposition respects compile-coupling.** Adding a variant to a
+  `sealed`/`enum` read by an exhaustive `when` breaks compilation of every such
+  `when` immediately, so the type producer and its mandatory branches are
+  compile-coupled and must live in one task (or be sequenced so each task still
+  compiles). The `writing-plans` overlay states the rule; the plan reviewer
+  watches for the split. Closes the case where an executor was forced outside
+  its allowed-paths to keep the build green.
+- fix: **Implementer fidelity.** The `subagent-driven-development` overlay now
+  instructs the implementer prompt to reproduce calls exactly — matching
+  signatures and **not** simplifying modifier chains or dropping parameters
+  (e.g. keeping `.padding(horizontal = 16.dp)`), and the spec reviewer compares
+  modifier chains / argument lists against the plan verbatim.
+- fix: **Figma reads stay narrow.** The `brainstorming` overlay notes to request
+  a specific screen/block **node-id** rather than a root node — `get_metadata`
+  on a root can overflow context and a root screenshot returns dozens of mockups
+  with little signal.
+
+Existing users: run `gor-mobile repair` to refresh the skill overlays and
+prompt templates.
+
 ## 0.2.6 — 2026-06-22
 
 - fix: **Make the TDD applicability gate actually govern every entry point.**
