@@ -48,6 +48,32 @@ Load `core` + `debug-*` sections from `$HOME/.gor-mobile/rules/` via
   > into a fresh seam (extract a helper, add a model flag) just to have
   > something to unit-test: gate the minimal fix as-is.
 
+### Docs-first before hypothesis — know how it SHOULD behave (Phase 1→2, before Phase 3)
+
+Before forming a hypothesis or proposing a fix for anything that touches a
+framework / library / vendor component (a Compose API, a media3 player, a
+lifecycle callback, a Room DAO, a WorkManager constraint, …), establish what
+*correct* behavior is from authoritative sources — **not** from training
+memory. Locate the problematic part first, then read how it is **supposed** to
+work via the **Docs-first ground-truth contract** in
+`[[gor-mobile-using-android-cli]]` (official docs through `android docs` →
+resolved-artifact signatures via `javap` → source/decompiled read for
+*behavior*). For Android specifically, `android docs` and component inspection
+let you study any component and confirm whether the current code uses it
+correctly — use it as the reference against which you judge the buggy code.
+
+This sharpens the body's Phase 2 ("read the reference implementation
+COMPLETELY"): for a framework component, the reference IS the official docs /
+artifact source. Only after you know the documented-correct behavior do you form
+the Phase 3 hypothesis — "the docs say X must be Y; the code does Z" — instead of
+"I think X is wrong." Pass the doc/source findings to the Sonnet
+evidence-gathering subagent as part of its report.
+
+> **Red Flag — STOP.** Proposing a fix for a framework/library symptom while
+> your model of "how it should work" comes from memory. Cutoff → component
+> behavior drifts across versions. Read the docs/artifact for the pinned version
+> first, then hypothesize.
+
 ### Android CLI — phase command mapping
 
 For Android/Kotlin targets, the `android` CLI is the primary tool for

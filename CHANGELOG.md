@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.2.8 — 2026-07-02
+
+- fix: **Greenfield "new app" sessions no longer let a co-installed plugin
+  hijack the workflow.** When a user starts a brand-new project in an empty
+  directory and describes the app without naming a platform (e.g. "начинаю
+  делать приложение для изучения слов… составь план"), `detect-mobile-context`
+  returned *not-mobile* (no gradle/xcode markers yet, no `android`/`kotlin`
+  keyword in the prompt), so both gor-mobile hooks stayed silent. With the
+  upstream `superpowers` plugin also installed, its ungated SessionStart
+  injection was then the only skill-steering present and the model invoked
+  `superpowers:brainstorming` — bypassing the entire gor-mobile overlay layer
+  (docs-first gate, android-cli mapping, no-auto-commit, `.gor-mobile/specs`).
+  The detector now has a **third verdict** for exactly this case: build intent
+  in a greenfield dir with **no** platform word of any kind (neither mobile nor
+  clearly non-mobile) → *ambiguous* (exit 2). The `UserPromptSubmit` hook then
+  injects a **platform-check directive** instead of staying silent: it tells the
+  model to ASK the user which platform, then route Android/iOS/mobile →
+  gor-mobile-\* skills (and drop a `.gor-mobile.json` marker so later turns are
+  deterministic), anything else → the user's general workflow (e.g. superpowers).
+  Detection is also broadened with safe mobile keywords the old regex missed —
+  Cyrillic `андроид`/`котлин`/`свифт`, plus `apk`, `flutter`, `xcode`, `мобильн`,
+  `play store` / `app store`. Non-mobile and established projects stay silent as
+  before (guarded by an `is_greenfield` check). New `detect-mobile-context`
+  tests cover the flashcards scenario and the guards.
+- feat: **Debug workflow is docs-first too.** Extends the 0.2.7 docs-first
+  throughline into `systematic-debugging`: before forming a hypothesis or
+  proposing a fix for anything touching a framework/library/vendor component,
+  the overlay now requires reading how it is *supposed* to behave from
+  authoritative sources (official docs via `android docs` → resolved artifact →
+  source for behavior, per the ground-truth contract in `using-android-cli`) —
+  not from training memory. The Phase 3 hypothesis becomes "the docs say X must
+  be Y; the code does Z" instead of a remembered guess, with a Red Flag against
+  fixing a library symptom from memory.
+
+Existing users: run `gor-mobile repair` to refresh the hooks and skill overlays.
+
 ## 0.2.7 — 2026-07-01
 
 Acts on field recommendations from an ARU-8929 session (media3 Compose video
