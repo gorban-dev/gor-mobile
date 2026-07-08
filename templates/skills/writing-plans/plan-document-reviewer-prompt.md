@@ -24,6 +24,7 @@ Task tool (general-purpose):
     | Task Decomposition | Tasks have clear boundaries, steps are actionable. Watch for **compile-coupled** splits: a `sealed`/`enum` variant separated from the exhaustive `when` branches that must handle it — those belong in one task, else a task won't compile on its own. |
     | Buildability | Could an engineer follow this plan without getting stuck? Does every task still compile on its own? |
     | Docs grounding | Every step coding against an SDK/library/vendor API cites the verified signature source (docs excerpt, `javap`, or source ref) — not a remembered signature. Flag API signatures pasted without a source. |
+    | Examples grounding | Every task creating/modifying a file in a layer declared in the rules pack's `examples/index.json` carries one artifact line per touched layer (`Conforms to: <pack path verbatim from index.json>`, `Conforms to (project precedent): <repo paths>`, or `Shape per user: <...>`), the cited files exist, and the task's code does not contradict the cited shape. Flag layer-touching tasks with no artifact line. |
 
     ## Calibration
 

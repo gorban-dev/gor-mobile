@@ -4,7 +4,7 @@ import type { HookEntry, ManagedSettings } from "../types.js";
 import type { TargetSpec } from "../targets.js";
 import { ensureParentDir, readJsonSafe, writeJson } from "./paths.js";
 
-type HookType = "SessionStart" | "UserPromptSubmit";
+type HookType = "SessionStart" | "UserPromptSubmit" | "PreToolUse";
 
 // Path-independent fingerprint of each managed hook's command. The absolute
 // path in the stored command differs per machine (it embeds $HOME / a custom
@@ -12,7 +12,8 @@ type HookType = "SessionStart" | "UserPromptSubmit";
 // it so legacy, untagged entries are still recognized as ours.
 const HOOK_MARKER: Record<HookType, string> = {
   SessionStart: "templates/session-start-hook.sh",
-  UserPromptSubmit: "templates/user-prompt-submit-hook.sh"
+  UserPromptSubmit: "templates/user-prompt-submit-hook.sh",
+  PreToolUse: "templates/ast-index-guard-hook.sh"
 };
 
 // An entry is ours if it carries the managed tag OR its command points at our
@@ -109,6 +110,21 @@ export function removeUserPromptSubmitHook(target: TargetSpec): void {
   removeHook(target.hooksFile, "UserPromptSubmit");
 }
 
+// Codex ships PreToolUse too (stable since codex-cli 0.142, same exit-2 +
+// stderr deny contract — developers.openai.com/codex/hooks), but has no Grep
+// tool (grep only ever arrives via Bash) and intercepts only simple shell
+// commands, so its matcher is Bash-only and the prose contour stays as the
+// backstop for the partial coverage.
+export function installAstIndexGuardHook(target: TargetSpec): { collapsed: number } {
+  const cmd = `bash ${GOR_MOBILE_HOME}/templates/ast-index-guard-hook.sh`;
+  const matcher = target.id === "claude" ? "Grep|Bash" : "Bash";
+  return upsertHook(target.hooksFile, "PreToolUse", matcher, cmd);
+}
+
+export function removeAstIndexGuardHook(target: TargetSpec): void {
+  removeHook(target.hooksFile, "PreToolUse");
+}
+
 export function countManagedHooks(hookType: HookType, target: TargetSpec): number {
   const settings = readJsonSafe<ManagedSettings>(target.hooksFile, {});
   const entries = settings.hooks?.[hookType] ?? [];
@@ -123,7 +139,7 @@ export function hasManagedHook(hookType: HookType, target: TargetSpec): boolean 
 // has at least one of our entries in the given hooks file.
 export function hasManagedHooksInFile(hooksFile: string): boolean {
   const settings = readJsonSafe<ManagedSettings>(hooksFile, {});
-  for (const hookType of ["SessionStart", "UserPromptSubmit"] as const) {
+  for (const hookType of ["SessionStart", "UserPromptSubmit", "PreToolUse"] as const) {
     const entries = settings.hooks?.[hookType] ?? [];
     if (entries.some((e) => isManagedEntry(e, hookType))) return true;
   }

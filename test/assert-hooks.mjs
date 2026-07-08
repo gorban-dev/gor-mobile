@@ -15,7 +15,8 @@ const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
 
 const MARKERS = {
   SessionStart: "templates/session-start-hook.sh",
-  UserPromptSubmit: "templates/user-prompt-submit-hook.sh"
+  UserPromptSubmit: "templates/user-prompt-submit-hook.sh",
+  PreToolUse: "templates/ast-index-guard-hook.sh"
 };
 
 let failures = 0;

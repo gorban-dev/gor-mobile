@@ -5,7 +5,7 @@ import { Command } from "commander";
 import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-var GOR_MOBILE_VERSION = "0.2.8";
+var GOR_MOBILE_VERSION = "0.2.9";
 var HOME = homedir();
 var GOR_MOBILE_HOME = process.env.GOR_MOBILE_HOME ?? join(HOME, ".gor-mobile");
 var GOR_MOBILE_RULES_DIR = join(GOR_MOBILE_HOME, "rules");
@@ -81,7 +81,8 @@ function writeJson(path, data) {
 // src/helpers/settings-merge.ts
 var HOOK_MARKER = {
   SessionStart: "templates/session-start-hook.sh",
-  UserPromptSubmit: "templates/user-prompt-submit-hook.sh"
+  UserPromptSubmit: "templates/user-prompt-submit-hook.sh",
+  PreToolUse: "templates/ast-index-guard-hook.sh"
 };
 function isManagedEntry(entry, hookType) {
   if ((entry._managed_by ?? "") === MANAGED_TAG) return true;
@@ -147,6 +148,14 @@ function installUserPromptSubmitHook(target) {
 function removeUserPromptSubmitHook(target) {
   removeHook(target.hooksFile, "UserPromptSubmit");
 }
+function installAstIndexGuardHook(target) {
+  const cmd = `bash ${GOR_MOBILE_HOME}/templates/ast-index-guard-hook.sh`;
+  const matcher = target.id === "claude" ? "Grep|Bash" : "Bash";
+  return upsertHook(target.hooksFile, "PreToolUse", matcher, cmd);
+}
+function removeAstIndexGuardHook(target) {
+  removeHook(target.hooksFile, "PreToolUse");
+}
 function countManagedHooks(hookType, target) {
   const settings = readJsonSafe(target.hooksFile, {});
   const entries = settings.hooks?.[hookType] ?? [];
@@ -154,7 +163,7 @@ function countManagedHooks(hookType, target) {
 }
 function hasManagedHooksInFile(hooksFile) {
   const settings = readJsonSafe(hooksFile, {});
-  for (const hookType of ["SessionStart", "UserPromptSubmit"]) {
+  for (const hookType of ["SessionStart", "UserPromptSubmit", "PreToolUse"]) {
     const entries = settings.hooks?.[hookType] ?? [];
     if (entries.some((e) => isManagedEntry(e, hookType))) return true;
   }
@@ -170,6 +179,7 @@ var TARGETS = {
     skillsDir: CLAUDE_SKILLS_DIR,
     agentsDir: CLAUDE_AGENTS_DIR,
     instructionsFile: CLAUDE_CLAUDE_MD,
+    instructionsSnippet: "claude-md-snippet.md",
     hooksFile: CLAUDE_SETTINGS,
     hooksKind: "claude-settings",
     agentFormat: "md",
@@ -185,6 +195,9 @@ var TARGETS = {
     skillsDir: CODEX_SKILLS_DIR,
     agentsDir: CODEX_AGENTS_DIR,
     instructionsFile: CODEX_AGENTS_MD,
+    // Codex has no Skill tool and its reviewer sessions must not recurse into
+    // codex-companion — the section body differs from the Claude one.
+    instructionsSnippet: "agents-md-snippet-codex.md",
     hooksFile: CODEX_HOOKS_JSON,
     hooksKind: "codex-hooks-json",
     agentFormat: "toml",
@@ -719,6 +732,7 @@ function copyHookTemplates() {
   const names = [
     "session-start-hook.sh",
     "user-prompt-submit-hook.sh",
+    "ast-index-guard-hook.sh",
     "detect-mobile-context.sh",
     "statusline-command.sh",
     "statusline-cat.sh"
@@ -1617,6 +1631,7 @@ async function codexStatusLineFor(ctx, idx, total) {
   installCodexStatusLine();
   progressItem(idx, total, "status line", "ok", CODEX_CONFIG_TOML);
 }
+var MANAGED_HOOK_TYPES = ["SessionStart", "UserPromptSubmit", "PreToolUse"];
 async function targetSection(ctx, target, stepNum) {
   runStep(ctx, stepNum, `${target.label} integration`);
   const counts = { skills: 0, agents: 0, hooks: 0 };
@@ -1624,6 +1639,7 @@ async function targetSection(ctx, target, stepNum) {
   const steps = target.supportsStatusLine ? 6 : 5;
   if (ctx.opts.dryRun) {
     dryLog(`merge SessionStart + UserPromptSubmit \u2192 ${target.hooksFile}`);
+    dryLog(`merge PreToolUse (ast-index guard) \u2192 ${target.hooksFile}`);
     dryLog(`install ${templateSkillCount()} skills \u2192 ${target.skillsDir}`);
     dryLog(`install agents (${target.agentFormat}) \u2192 ${target.agentsDir}`);
     dryLog(`write managed section \u2192 ${target.instructionsFile}`);
@@ -1634,15 +1650,16 @@ async function targetSection(ctx, target, stepNum) {
     } else if (target.statusLineKind === "codex-config") {
       dryLog(`status line: tui.status_line = [${CODEX_STATUS_LINE_ITEMS.join(", ")}]`);
     }
-    counts.hooks = 2;
+    counts.hooks = MANAGED_HOOK_TYPES.length;
     counts.skills = templateSkillCount();
     counts.agents = templateAgentCount(target);
     return;
   }
   installSessionStartHook(target);
   installUserPromptSubmitHook(target);
-  counts.hooks = 2;
-  progressItem(1, steps, "hooks (SessionStart + UserPromptSubmit)", "ok", target.hooksFile);
+  installAstIndexGuardHook(target);
+  counts.hooks = MANAGED_HOOK_TYPES.reduce((n, h) => n + countManagedHooks(h, target), 0);
+  progressItem(1, steps, "hooks (SessionStart + UserPromptSubmit + guard)", "ok", target.hooksFile);
   if (target.id === "claude") cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
   const skillsRes = installSkills(target);
   counts.skills = skillsRes.installed.length;
@@ -1660,7 +1677,7 @@ async function targetSection(ctx, target, stepNum) {
   const agents = installAgents(target);
   counts.agents = agents.length;
   progressItem(3, steps, `${counts.agents} review agents (${target.agentFormat})`, "ok", target.agentsDir);
-  writeManagedSection(target.instructionsFile, join7(gorMobileRoot(), "templates", "claude-md-snippet.md"));
+  writeManagedSection(target.instructionsFile, join7(gorMobileRoot(), "templates", target.instructionsSnippet));
   progressItem(4, steps, "managed instructions section", "ok", target.instructionsFile);
   const androidRes = await runAndroidInit(target);
   if (androidRes.ran && androidRes.skillInstalled) {
@@ -1758,7 +1775,8 @@ async function cmdInit(opts = {}) {
 }
 
 // src/commands/doctor.ts
-import { existsSync as existsSync12, readFileSync as readFileSync6, readdirSync as readdirSync4 } from "fs";
+import { existsSync as existsSync12, mkdirSync as mkdirSync2, mkdtempSync, readFileSync as readFileSync6, readdirSync as readdirSync4, rmSync as rmSync4, writeFileSync as writeFileSync5 } from "fs";
+import { tmpdir } from "os";
 import { join as join8 } from "path";
 import { execa as execa5 } from "execa";
 function reportDep(name, path, required) {
@@ -1783,7 +1801,7 @@ function checkHooks(target) {
     log.warn(`No ${target.hooksFile}`);
     return;
   }
-  for (const hookType of ["SessionStart", "UserPromptSubmit"]) {
+  for (const hookType of ["SessionStart", "UserPromptSubmit", "PreToolUse"]) {
     const n = countManagedHooks(hookType, target);
     if (n === 0) {
       log.warn(`${hookType} hook NOT registered \u2014 run 'gor-mobile repair'`);
@@ -1841,7 +1859,8 @@ function checkRulesPack() {
 async function verboseHookEmulation(target) {
   const hooks = [
     ["session-start-hook.sh", "SessionStart"],
-    ["user-prompt-submit-hook.sh", "UserPromptSubmit"]
+    ["user-prompt-submit-hook.sh", "UserPromptSubmit"],
+    ["ast-index-guard-hook.sh", "PreToolUse"]
   ];
   for (const [file, label] of hooks) {
     const path = `${GOR_MOBILE_HOME}/templates/${file}`;
@@ -1849,13 +1868,18 @@ async function verboseHookEmulation(target) {
       log.warn(`[${label}] template missing: ${path}`);
       continue;
     }
+    const input = label === "PreToolUse" ? JSON.stringify({
+      tool_name: "Grep",
+      cwd: process.cwd(),
+      tool_input: { pattern: "gor-mobile doctor probe" }
+    }) : JSON.stringify({
+      cwd: process.cwd(),
+      session_id: "gor-mobile-doctor",
+      prompt: "gor-mobile doctor"
+    });
     const result = await execa5("bash", [path], {
       reject: false,
-      input: JSON.stringify({
-        cwd: process.cwd(),
-        session_id: "gor-mobile-doctor",
-        prompt: "gor-mobile doctor"
-      }),
+      input,
       env: {
         ...process.env,
         GORM_FORCE_MOBILE: "1",
@@ -1865,6 +1889,32 @@ async function verboseHookEmulation(target) {
     if (result.exitCode !== 0) {
       log.warn(`[${label}] hook exited ${result.exitCode}:`);
       console.error(result.stdout || result.stderr);
+      continue;
+    }
+    if (label === "PreToolUse") {
+      log.ok(`[${label}] guard allows non-symbol probe (exit 0)`);
+      const probeDir = mkdtempSync(join8(tmpdir(), "gorm-guard-probe-"));
+      try {
+        mkdirSync2(join8(probeDir, ".claude", "rules"), { recursive: true });
+        writeFileSync5(join8(probeDir, ".claude", "rules", "ast-index.md"), "");
+        const deny = await execa5("bash", [path], {
+          reject: false,
+          input: JSON.stringify({
+            tool_name: "Grep",
+            cwd: probeDir,
+            tool_input: { pattern: "getFormatValue" }
+          })
+        });
+        if (deny.exitCode === 2) {
+          log.ok(`[${label}] guard denies structural probe (exit 2)`);
+        } else {
+          log.warn(
+            `[${label}] guard is INERT \u2014 structural probe exited ${deny.exitCode}, expected 2 (jq or ast-index missing, or hook broken)`
+          );
+        }
+      } finally {
+        rmSync4(probeDir, { recursive: true, force: true });
+      }
       continue;
     }
     try {
@@ -1994,6 +2044,12 @@ async function cmdDoctor(opts = {}) {
       "  \u2192 install: brew tap defendend/ast-index && brew install ast-index"
     );
   }
+  reportDep("jq", which("jq"), false);
+  if (!which("jq")) {
+    log.info(
+      "  \u2192 jq powers the status line AND the ast-index guard hook (guard fails open without it) \u2014 brew install jq"
+    );
+  }
   checkFile(
     join8(GOR_MOBILE_HOME, "templates", "detect-mobile-context.sh"),
     "mobile-context detector"
@@ -2050,7 +2106,6 @@ function repairTargets(target) {
 }
 async function cmdRepair(opts = {}) {
   const targets = repairTargets(opts.target);
-  const snippet = join9(gorMobileRoot(), "templates", "claude-md-snippet.md");
   copyHookTemplates();
   for (const target of targets) {
     log.step(`Repairing ${target.label} (${target.home})`);
@@ -2061,6 +2116,10 @@ async function cmdRepair(opts = {}) {
     const ups = installUserPromptSubmitHook(target);
     log.ok(
       ups.collapsed > 1 ? `UserPromptSubmit hook refreshed (collapsed ${ups.collapsed} \u2192 1)` : "UserPromptSubmit hook refreshed"
+    );
+    const guard = installAstIndexGuardHook(target);
+    log.ok(
+      guard.collapsed > 1 ? `PreToolUse guard hook refreshed (collapsed ${guard.collapsed} \u2192 1)` : "PreToolUse guard hook refreshed"
     );
     if (target.statusLineKind === "claude-command") {
       const sl = statusLineState();
@@ -2108,7 +2167,7 @@ async function cmdRepair(opts = {}) {
     } else {
       log.info(`stock android-cli skill not present in ${target.skillsDir} (android init covers detected agents)`);
     }
-    writeManagedSection(target.instructionsFile, snippet);
+    writeManagedSection(target.instructionsFile, join9(gorMobileRoot(), "templates", target.instructionsSnippet));
     log.ok(`Managed instructions section refreshed (${target.instructionsFile})`);
   }
   await ensureAndroidCliCurrent({ skip: opts.skipAndroidUpdate });
@@ -2116,7 +2175,7 @@ async function cmdRepair(opts = {}) {
 }
 
 // src/commands/uninstall.ts
-import { existsSync as existsSync14, readdirSync as readdirSync5, readFileSync as readFileSync7, rmSync as rmSync4 } from "fs";
+import { existsSync as existsSync14, readdirSync as readdirSync5, readFileSync as readFileSync7, rmSync as rmSync5 } from "fs";
 import { join as join10 } from "path";
 import { confirm as confirm3, isCancel as isCancel7 } from "@clack/prompts";
 function uninstallTargets(target) {
@@ -2128,6 +2187,7 @@ function removeTarget(target) {
   log.step(`Removing gor-mobile from ${target.label} (${target.home})`);
   removeSessionStartHook(target);
   removeUserPromptSubmitHook(target);
+  removeAstIndexGuardHook(target);
   log.ok("Hooks removed");
   if (target.statusLineKind === "claude-command") {
     removeStatusLine();
@@ -2142,7 +2202,7 @@ function removeTarget(target) {
   if (existsSync14(target.skillsDir)) {
     for (const entry of readdirSync5(target.skillsDir)) {
       if (entry.startsWith("gor-mobile-")) {
-        rmSync4(join10(target.skillsDir, entry), { recursive: true, force: true });
+        rmSync5(join10(target.skillsDir, entry), { recursive: true, force: true });
       }
     }
   }
@@ -2151,7 +2211,7 @@ function removeTarget(target) {
     const ext = `.${target.agentFormat}`;
     for (const entry of readdirSync5(target.agentsDir)) {
       if (entry.startsWith("gor-mobile-") && entry.endsWith(ext)) {
-        rmSync4(join10(target.agentsDir, entry), { force: true });
+        rmSync5(join10(target.agentsDir, entry), { force: true });
       }
     }
     if (target.id === "claude") {
@@ -2159,7 +2219,7 @@ function removeTarget(target) {
       if (existsSync14(legacyCr)) {
         const head = readFileSync7(legacyCr, "utf8").split("\n").slice(0, 20).join("\n");
         if (/^name: code-reviewer/m.test(head)) {
-          rmSync4(legacyCr);
+          rmSync5(legacyCr);
         }
       }
     }
@@ -2189,13 +2249,13 @@ async function cmdUninstall(opts = {}) {
   }
   log.step(`Removing ${GOR_MOBILE_HOME} (templates, rules)`);
   if (existsSync14(GOR_MOBILE_HOME)) {
-    rmSync4(GOR_MOBILE_HOME, { recursive: true, force: true });
+    rmSync5(GOR_MOBILE_HOME, { recursive: true, force: true });
   }
   log.step(`Removing ${GOR_MOBILE_CONFIG}`);
-  if (existsSync14(GOR_MOBILE_CONFIG)) rmSync4(GOR_MOBILE_CONFIG);
+  if (existsSync14(GOR_MOBILE_CONFIG)) rmSync5(GOR_MOBILE_CONFIG);
   if (existsSync14(GOR_MOBILE_CONFIG_DIR)) {
     try {
-      rmSync4(GOR_MOBILE_CONFIG_DIR, { recursive: false });
+      rmSync5(GOR_MOBILE_CONFIG_DIR, { recursive: false });
     } catch {
     }
   }
@@ -2217,7 +2277,7 @@ async function cmdUninstall(opts = {}) {
 }
 
 // src/commands/rules.ts
-import { existsSync as existsSync15, rmSync as rmSync5 } from "fs";
+import { existsSync as existsSync15, rmSync as rmSync6 } from "fs";
 async function rulesList() {
   if (!existsSync15(GOR_MOBILE_RULES_DIR)) {
     log.warn("No rules pack installed. Run: gor-mobile rules use <url>");
@@ -2245,7 +2305,7 @@ async function rulesUse(target) {
   const backup = `${GOR_MOBILE_RULES_DIR}.bak`;
   if (existsSync15(GOR_MOBILE_RULES_DIR)) {
     log.info(`Backing up existing pack to ${backup}`);
-    if (existsSync15(backup)) rmSync5(backup, { recursive: true, force: true });
+    if (existsSync15(backup)) rmSync6(backup, { recursive: true, force: true });
     const { renameSync } = await import("fs");
     renameSync(GOR_MOBILE_RULES_DIR, backup);
   }
@@ -2260,7 +2320,7 @@ async function rulesUse(target) {
   } catch (err) {
     log.err(`Install failed \u2014 restoring backup: ${err.message}`);
     if (existsSync15(GOR_MOBILE_RULES_DIR)) {
-      rmSync5(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
+      rmSync6(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
     }
     if (existsSync15(backup)) {
       const { renameSync } = await import("fs");
@@ -2271,7 +2331,7 @@ async function rulesUse(target) {
   }
   saveConfig(target);
   log.ok(`Rules pack installed at ${GOR_MOBILE_RULES_DIR}`);
-  if (existsSync15(backup)) rmSync5(backup, { recursive: true, force: true });
+  if (existsSync15(backup)) rmSync6(backup, { recursive: true, force: true });
   const res = validateManifest();
   if (!res.ok) {
     for (const e of res.errors) log.err(e);
@@ -2501,7 +2561,7 @@ async function cmdUpdate() {
 }
 
 // src/commands/enable.ts
-import { existsSync as existsSync20, writeFileSync as writeFileSync5 } from "fs";
+import { existsSync as existsSync20, writeFileSync as writeFileSync6 } from "fs";
 import { join as join14 } from "path";
 function cmdEnable() {
   const marker = join14(process.cwd(), ".gor-mobile.json");
@@ -2509,7 +2569,7 @@ function cmdEnable() {
     log.ok(`Already enabled \u2014 ${marker} exists`);
     return;
   }
-  writeFileSync5(marker, "{}\n");
+  writeFileSync6(marker, "{}\n");
   log.ok(`gor-mobile enabled for this repo \u2192 ${marker}`);
   log.info("Commit this file so the whole team's sessions activate gor-mobile here.");
 }

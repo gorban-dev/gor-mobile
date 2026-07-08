@@ -39,6 +39,8 @@ import {
   saveConfig
 } from "../helpers/rules-pack.js";
 import {
+  countManagedHooks,
+  installAstIndexGuardHook,
   installSessionStartHook,
   installUserPromptSubmitHook
 } from "../helpers/settings-merge.js";
@@ -367,6 +369,8 @@ async function codexStatusLineFor(ctx: RunCtx, idx: number, total: number): Prom
   progressItem(idx, total, "status line", "ok", CODEX_CONFIG_TOML);
 }
 
+const MANAGED_HOOK_TYPES = ["SessionStart", "UserPromptSubmit", "PreToolUse"] as const;
+
 async function targetSection(ctx: RunCtx, target: TargetSpec, stepNum: number): Promise<void> {
   runStep(ctx, stepNum, `${target.label} integration`);
   const counts: TargetCounts = { skills: 0, agents: 0, hooks: 0 };
@@ -375,6 +379,7 @@ async function targetSection(ctx: RunCtx, target: TargetSpec, stepNum: number): 
 
   if (ctx.opts.dryRun) {
     dryLog(`merge SessionStart + UserPromptSubmit → ${target.hooksFile}`);
+    dryLog(`merge PreToolUse (ast-index guard) → ${target.hooksFile}`);
     dryLog(`install ${templateSkillCount()} skills → ${target.skillsDir}`);
     dryLog(`install agents (${target.agentFormat}) → ${target.agentsDir}`);
     dryLog(`write managed section → ${target.instructionsFile}`);
@@ -385,7 +390,7 @@ async function targetSection(ctx: RunCtx, target: TargetSpec, stepNum: number): 
     } else if (target.statusLineKind === "codex-config") {
       dryLog(`status line: tui.status_line = [${CODEX_STATUS_LINE_ITEMS.join(", ")}]`);
     }
-    counts.hooks = 2;
+    counts.hooks = MANAGED_HOOK_TYPES.length;
     counts.skills = templateSkillCount();
     counts.agents = templateAgentCount(target);
     return;
@@ -393,8 +398,9 @@ async function targetSection(ctx: RunCtx, target: TargetSpec, stepNum: number): 
 
   installSessionStartHook(target);
   installUserPromptSubmitHook(target);
-  counts.hooks = 2;
-  progressItem(1, steps, "hooks (SessionStart + UserPromptSubmit)", "ok", target.hooksFile);
+  installAstIndexGuardHook(target);
+  counts.hooks = MANAGED_HOOK_TYPES.reduce((n, h) => n + countManagedHooks(h, target), 0);
+  progressItem(1, steps, "hooks (SessionStart + UserPromptSubmit + guard)", "ok", target.hooksFile);
 
   if (target.id === "claude") cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
   const skillsRes = installSkills(target);
@@ -415,7 +421,7 @@ async function targetSection(ctx: RunCtx, target: TargetSpec, stepNum: number): 
   counts.agents = agents.length;
   progressItem(3, steps, `${counts.agents} review agents (${target.agentFormat})`, "ok", target.agentsDir);
 
-  writeManagedSection(target.instructionsFile, join(gorMobileRoot(), "templates", "claude-md-snippet.md"));
+  writeManagedSection(target.instructionsFile, join(gorMobileRoot(), "templates", target.instructionsSnippet));
   progressItem(4, steps, "managed instructions section", "ok", target.instructionsFile);
 
   const androidRes = await runAndroidInit(target);

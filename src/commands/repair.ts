@@ -11,6 +11,7 @@ import {
 } from "../helpers/install-assets.js";
 import { unregisterManaged } from "../helpers/mcp-register.js";
 import {
+  installAstIndexGuardHook,
   installSessionStartHook,
   installUserPromptSubmitHook
 } from "../helpers/settings-merge.js";
@@ -40,7 +41,6 @@ export async function cmdRepair(
   opts: { skipAndroidUpdate?: boolean; target?: string } = {}
 ): Promise<void> {
   const targets = repairTargets(opts.target);
-  const snippet = join(gorMobileRoot(), "templates", "claude-md-snippet.md");
 
   // Shared hook scripts live in ~/.gor-mobile/templates — copy once.
   copyHookTemplates();
@@ -59,6 +59,12 @@ export async function cmdRepair(
       ups.collapsed > 1
         ? `UserPromptSubmit hook refreshed (collapsed ${ups.collapsed} → 1)`
         : "UserPromptSubmit hook refreshed"
+    );
+    const guard = installAstIndexGuardHook(target);
+    log.ok(
+      guard.collapsed > 1
+        ? `PreToolUse guard hook refreshed (collapsed ${guard.collapsed} → 1)`
+        : "PreToolUse guard hook refreshed"
     );
 
     if (target.statusLineKind === "claude-command") {
@@ -113,7 +119,7 @@ export async function cmdRepair(
       log.info(`stock android-cli skill not present in ${target.skillsDir} (android init covers detected agents)`);
     }
 
-    writeManagedSection(target.instructionsFile, snippet);
+    writeManagedSection(target.instructionsFile, join(gorMobileRoot(), "templates", target.instructionsSnippet));
     log.ok(`Managed instructions section refreshed (${target.instructionsFile})`);
   }
 

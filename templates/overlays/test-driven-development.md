@@ -102,8 +102,18 @@ from `$HOME/.gor-mobile/rules/` (always `core` + `architecture`; plus
 
   The prompt's allowed-paths list MUST exclude the test file itself, so
   Sonnet cannot weaken the assertion to make the test trivially pass.
-  Reference files: the failing test + 1–2 layer examples from the rules
-  pack.
+  Reference files: the failing test + the files named by the task's
+  artifact lines (one per touched layer, same contract as
+  `[[gor-mobile-subagent-driven-development]]`): a `Conforms to:` pack
+  path (verbatim from `index.json`) resolves against the pack root
+  `$HOME/.gor-mobile/rules/`;
+  `Conforms to (project precedent): ...` names repo files directly; a
+  `Shape per user: <...>` layer contributes no file — quote the line.
+  For ad-hoc TDD outside a plan (no artifact lines), resolve the touched
+  layers via `examples/index.json → .layers` and attach 1–3 matching
+  examples, or fall down the absence ladder (project precedent via
+  ast-index → ask the user). Dispatching a layer-touching GREEN
+  prompt without its reference shape is a **dispatch defect**.
 
 - **REFACTOR** — main orchestrator (Opus). Refactoring requires holistic
   judgement across files the GREEN subagent wasn't scoped to see.

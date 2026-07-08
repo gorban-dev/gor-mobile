@@ -13,8 +13,12 @@ Before dispatching the implementer subagent, load rules from
   load `core` and `architecture`. Additionally load sections relevant to
   the task (testing-*, debug-*, theme-system, base-viewmodel, modification).
 - `examples/index.json` → `.layers` — canonical example `.kt` files per
-  layer (presentation, usecase, repository, data, di in the default pack).
-  Pass 1-3 to the implementer prompt as reference files.
+  layer (presentation, usecase, repository, data, di in the default pack;
+  layer membership always comes from the *current* pack's index, never a
+  remembered default list). For every layer-touching task these form a
+  REQUIRED block of the implementer prompt, resolved from the task's
+  `Conforms to:` artifact line(s) — one per touched layer; see Reference
+  files below.
 
 Rules-pack is user-replaceable via `gor-mobile rules use <url>` — read from
 manifest, never hardcode filenames.
@@ -33,10 +37,20 @@ no external inference, no local model. Dispatch:
 The `<implementer-prompt>` must contain:
 - **Allowed paths** — exact file paths (Create + Modify + Test) the task
   targets. The subagent is instructed to refuse writes outside this list.
-- **Reference files** — 1–3 examples from
-  `$HOME/.gor-mobile/rules/examples/` matching the layer the task touches
-  (presentation / usecase / repository / data / di), plus the architecture
-  section from `manifest.json → .sections.architecture`.
+- **Reference files (REQUIRED for layer-touching tasks)** — every file named
+  across the task's artifact lines (one per touched layer): a
+  `Conforms to:` pack path (verbatim from `index.json`) resolves relative
+  to the pack root
+  `$HOME/.gor-mobile/rules/` (so `examples/data/ExampleDataSource.kt` →
+  `$HOME/.gor-mobile/rules/examples/data/ExampleDataSource.kt`); a
+  `Conforms to (project precedent): ...` line names repo files directly —
+  plus the architecture section from `manifest.json → .sections.architecture`.
+  Dispatching a layer-touching implementer prompt without them is a
+  **dispatch defect**. A layer whose own line reads `Shape per user: <...>`
+  contributes no reference file — quote that line in the prompt for that
+  layer instead. A layer-touching task with no artifact line at all is a plan
+  defect: stop and fix the plan (run its examples-first gate), do not
+  improvise references.
 - **Verification step** — the exact Gradle command the orchestrator will
   run after the subagent returns (e.g.
   `./gradlew :<module>:test --tests "*<Name>Test*"`).
@@ -51,6 +65,13 @@ The `<implementer-prompt>` must contain:
   parameters** (e.g. keep `.padding(horizontal = 16.dp)` when the task
   specifies it). Restating code from a paraphrase is where standard widths,
   paddings, and named arguments silently vanish.
+
+> **Red Flag — STOP.** Dispatching an implementer or spec-reviewer prompt for
+> a layer-touching task without its `Conforms to:` reference files attached.
+> This mandate has already been skipped silently in the field once — the
+> code-quality reviewer agents now independently check diff shape against
+> canonical examples, so a defect from a skipped dispatch still surfaces
+> downstream. Attach the files.
 
 **Escalate to Opus** (`model = "opus"`) when any of:
 - The task carries a design decision (plan marks it as "design" or
@@ -101,7 +122,10 @@ distinction is load-bearing for the Codex second opinion:
   It checks the code against the task spec; no second model family needed. This
   is also the gate that catches dropped modifiers / parameters (see Fidelity
   note above) — have it compare modifier chains and argument lists against the
-  plan **verbatim**.
+  plan **verbatim**. Attach the **same reference files** the implementer
+  received (the task's `Conforms to:` files): the spec reviewer checks the
+  code against the task spec **and** the cited canonical shape — the plan is
+  not the sole yardstick.
 - **Code-quality review** — do **NOT** dispatch `Agent(gor-mobile-code-reviewer)`
   bare from this flow. A bare Agent dispatch reads `code-quality-reviewer-prompt.md`
   and never touches the `requesting-code-review` overlay, so it **silently skips

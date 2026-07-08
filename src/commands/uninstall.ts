@@ -13,6 +13,7 @@ import { cleanupLegacyCommands } from "../helpers/install-assets.js";
 import { CLAUDE_COMMANDS_DIR } from "../constants.js";
 import { unregisterManaged } from "../helpers/mcp-register.js";
 import {
+  removeAstIndexGuardHook,
   removeSessionStartHook,
   removeUserPromptSubmitHook
 } from "../helpers/settings-merge.js";
@@ -42,6 +43,7 @@ function removeTarget(target: TargetSpec): void {
 
   removeSessionStartHook(target);
   removeUserPromptSubmitHook(target);
+  removeAstIndexGuardHook(target);
   log.ok("Hooks removed");
 
   if (target.statusLineKind === "claude-command") {

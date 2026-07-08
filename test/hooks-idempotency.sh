@@ -42,6 +42,11 @@ cat > "$HOME/.claude/settings.json" <<'JSON'
       { "matcher": "", "hooks": [{ "type": "command", "command": "bash /old/install/.gor-mobile/templates/user-prompt-submit-hook.sh" }] },
       { "matcher": "", "hooks": [{ "type": "command", "command": "bash ~/.gor-mobile/templates/user-prompt-submit-hook.sh" }] },
       { "matcher": "", "hooks": [{ "type": "command", "command": "echo unrelated-userpromptsubmit-hook" }] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Grep|Bash", "hooks": [{ "type": "command", "command": "bash /old/install/.gor-mobile/templates/ast-index-guard-hook.sh" }] },
+      { "matcher": "Grep|Bash", "hooks": [{ "type": "command", "command": "bash ~/.gor-mobile/templates/ast-index-guard-hook.sh" }] },
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "echo unrelated-pretooluse-hook" }] }
     ]
   }
 }

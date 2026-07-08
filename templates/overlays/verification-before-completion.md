@@ -44,6 +44,16 @@ low-quality changes that the user later had to revert or rewrite:
 If any of these apply, the work is NOT complete — it has slop attached
 to it. Strip the slop, then run verification again.
 
+### Structural counts cite ast-index
+
+Any quantitative claim about code structure — "N usages", "N callers",
+"no implementations", "this symbol is unused" — is valid evidence only
+when produced by `ast-index` (`usages` / `symbol` / `implementations`).
+A grep-derived count for a symbol is a verification defect: grep
+undercounts (field case: 14 vs 24) and misses sibling symbols entirely.
+grep counts are acceptable only for literals (string resources, log
+lines, XML attributes) and must be labeled as literal counts.
+
 ### Android CLI — phase command mapping
 
 For Android/Kotlin targets, the `android` CLI is the primary tool for

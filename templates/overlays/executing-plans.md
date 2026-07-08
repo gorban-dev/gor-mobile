@@ -47,6 +47,27 @@ and layer examples from `examples/index.json → .layers`. Never hardcode
 filenames — the user may have swapped the pack via
 `gor-mobile rules use <url>`.
 
+For every layer-touching task, the
+`<task-prompt-with-allowed-paths-and-refs>` above MUST carry the reference
+files named by the task's artifact lines (one per touched layer): a
+`Conforms to:` pack path (verbatim from `index.json`) resolves relative to
+the pack root
+`$HOME/.gor-mobile/rules/`; a `Conforms to (project precedent): ...` line
+names repo files directly. A layer whose line reads `Shape per user: <...>`
+contributes no reference file — quote that line in the prompt instead.
+Dispatching a layer-touching prompt without its reference files is a
+**dispatch defect**. Executing a layer-touching task yourself (Opus path)
+obeys the same
+contract: read the referenced files before writing code. A layer-touching
+task with no artifact line is a plan defect — stop and fix the plan (run
+its examples-first gate), do not improvise references.
+
+> **Red Flag — STOP.** Dispatching or self-executing a layer-touching task
+> without reading its `Conforms to:` reference files. The code-quality
+> reviewer agents independently check diff shape against canonical
+> examples, so a skipped reference still surfaces downstream — attach and
+> read the files up front instead.
+
 ### Override: no checkpoint commits
 
 The upstream skill body suggests committing at phase boundaries

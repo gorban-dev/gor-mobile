@@ -1,5 +1,115 @@
 # Changelog
 
+## 0.2.9 — 2026-07-08
+
+- feat: **Examples-first is now a throughline, not a habit.** Field failure
+  (mirror of the 0.2.7 docs-first saga, but for *internal* conventions): a
+  plan session read `core.md`/`architecture.md` but only the *index* of the
+  canonical examples — never `ExampleDataSource.kt` itself — and designed a
+  datasource around a backend retry-protocol instruction instead of the
+  pack's one-line datasource shape. The review loop could not catch it:
+  reviewers verified against the plan, and the existing
+  `subagent-driven-development` mandate to pass layer examples to
+  implementers was skipped silently (mandate with no verifiable artifact and
+  no receiving-side check). This release threads an **examples-first
+  ground-truth contract** — the internal twin of docs-first (docs-first owns
+  external API signatures; examples-first owns internal placement and shape)
+  — through the whole pipeline:
+  - `brainstorming` and `writing-plans` overlays gain MANDATORY
+    examples-first gates: read the example `.kt` files themselves (not the
+    index) for every touched layer; every layer-touching plan task carries a
+    verifiable artifact line per touched layer, its path taken verbatim
+    from the pack's `index.json` (`Conforms to:
+    examples/<layer>/<File>.kt` in the default pack).
+  - **Precedence rule** everywhere: external requirements (backend contract,
+    ticket, vendor doc) define *behavior*; pack conventions define
+    *placement and shape*. Retry logic ships — in the UseCase; the
+    datasource stays canonical. Genuine incompatibility → STOP and ask the
+    user, never a silent layer redesign.
+  - **Absence ladder** (packs are user-replaceable; examples are optional):
+    no matching pack example → ground in project precedent
+    (`Conforms to (project precedent): <repo paths>` via ast-index) → no
+    precedent either → ask the user (`Shape per user: <summary>`). Never
+    fabricate a canonical shape from memory of the default pack.
+  - `subagent-driven-development`: reference files become a REQUIRED block
+    of layer-touching implementer prompts (resolved from the artifact lines
+    against the pack root); the spec-compliance reviewer gets the same files
+    and checks canonical shape, not just plan fidelity.
+  - `requesting-code-review`: layer examples matching the diff (1–3 per
+    layer) are loaded into the gor-mobile reviewer's `<review-prompt>`; the
+    Codex pass documents its real channel — example paths fold into the
+    `adversarial-review` focus phrase, and plain `review` relies on union
+    coverage with the gor-mobile pass (its CLI accepts no custom prompt).
+    Absence-ladder references (project-precedent files, `Shape per user:`
+    lines) travel into the review context too.
+  - Reviewer agents (`gor-mobile-code-reviewer{,-deep}` + Codex TOML
+    mirrors) gain a **canonical-examples tripwire**: the reviewer runs its
+    own `examples/index.json` check; matching examples missing from the
+    review context → review-context defect (Important), flagged first among
+    the Important findings, then self-repaired by reading the examples
+    directly — and a
+    false `Canonical examples: none for this diff` claim is part of the
+    defect, not a waiver. Absence-ladder references
+    (project precedent / `Shape per user:`) get the same receiving-side
+    check. A skipped orchestrator mandate is now visible and
+    self-correcting.
+  - `executing-plans`: the sibling dispatch flow carries the same
+    reference-files contract as `subagent-driven-development` — and the
+    `test-driven-development` GREEN dispatch resolves its reference files
+    from the same artifact lines: all three execution routes are armed.
+  - Spec- and plan-document reviewer prompts gain an **Examples grounding**
+    checklist row (mirroring 0.2.7's Docs grounding), so a missing artifact
+    line is caught at the producing stage, not first at dispatch.
+- feat: **ast-index guard — the grep-bypass leak is closed mechanically.**
+  Field failure: usages of extension functions were counted with `grep`
+  "по инерции" despite six preference-framed ast-index mandates — grep
+  found 14 usages where `ast-index usages` finds 24, and `.toPriceFormat()`
+  was missed entirely; an undercount carries no marker of wrongness, so no
+  prose reviewer can catch it. Unlike previous leaks this one is
+  mechanically interceptable, so the fix is a hook, not a seventh mandate:
+  a new managed **PreToolUse** hook (`ast-index-guard-hook.sh`; matcher
+  `Grep|Bash` on Claude, `Bash` on Codex — Codex ships stable PreToolUse
+  with the same exit-2 deny contract but has no Grep tool and intercepts
+  only simple shell commands, so the prose contour stays as its backstop)
+  **denies** bare-identifier greps in
+  ast-index-initialized repos (`.claude/rules/ast-index.md` marker) and
+  prints the substitute `ast-index usages/symbol/implementations` command.
+  Strictly fail-open where denying would be wrong: literals and resource
+  searches (`R\.string\.foo`, globs into `res/`), quoted phrases,
+  pattern-less modes (`rg --files`), repos whose ast-index binary is
+  missing, and compound commands whose leading segment isn't itself a
+  bare-identifier grep — while a structural grep piped to `head`/`wc -l`
+  still denies; any parse issue passes. Prose contour hardened to MANDATORY
+  (ast-index overlay, CLAUDE.md snippet) and
+  `verification-before-completion` gains the counting anchor: "N usages"
+  claims are valid only from ast-index. Covered by
+  `test/ast-index-guard.test.sh` (deny/allow/fail-open fixtures) in
+  `npm test`.
+- fix: **Codex reviewer sessions no longer deadlock on — or recurse into —
+  the managed `AGENTS.md` section.** Two field failures from one root: the
+  section body installed into `~/.codex/AGENTS.md` was a verbatim copy of
+  the Claude one, addressed to every Codex session without distinction.
+  (1) `adversarial-review` read "Use the `Skill` tool for all workflow
+  steps", found no Skill tool in the Codex harness, and refused to review
+  at all (`[high] Review blocked by unavailable required workflow tool`,
+  zero diff lines read) — exactly on the deep/security passes that escalate
+  to adversarial. (2) Plain `review` obeyed the two-pass mandate it found in
+  the installed `requesting-code-review` skill and attempted to launch
+  codex-companion *from inside* the Codex reviewer session — a recursion
+  vector stopped only by an accidental sandbox exit 1, not by design. The
+  Codex target now gets its own section body
+  (`templates/agents-md-snippet-codex.md`, selected via
+  `TargetSpec.instructionsSnippet`): the Skill-tool imperative becomes
+  "follow the skills; no skill tool → read the `SKILL.md` directly", and a
+  subordinate-session carve-out tells dispatched reviewer/executor sessions
+  to do the dispatched job directly and NEVER invoke codex-companion from
+  inside a Codex session. Section markers are unchanged — `repair`/
+  `uninstall` still locate old installations.
+
+Existing users: run `gor-mobile repair` to refresh the skill overlays,
+reviewer agents, the Codex `AGENTS.md` managed section, and install the new
+PreToolUse guard hook.
+
 ## 0.2.8 — 2026-07-02
 
 - fix: **Greenfield "new app" sessions no longer let a co-installed plugin

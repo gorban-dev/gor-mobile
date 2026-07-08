@@ -13,6 +13,23 @@ Python-only, Go, Scala, C/C++, Proto, or WSDL in the upstream body
 above. The only relevant `references/` files in this skill are
 `android-commands.md` and `module-commands.md`.
 
+### Structural queries are MANDATORY ast-index territory
+
+Symbols, usages, callers, implementations, class hierarchies — these are
+answered by `ast-index`, never by `grep`. This is not a preference: grep
+undercounts symbol references (field case: 14 vs 24 usages of an extension
+function, plus a sibling extension missed entirely), and an undercount is
+invisible — the wrong number looks as plausible as the right one. A
+PreToolUse guard hook denies bare-identifier greps in initialized repos and
+prints the substitute command; do not phrase around the guard — rephrase
+the question to ast-index. grep remains correct for literals: string
+resources (`R.string.foo`), log messages, XML/manifest content, comments.
+
+> **Red Flag — STOP.** Typing `grep <BareIdentifier>` (or the Grep tool
+> with an identifier pattern) in an ast-index repo. That is a structural
+> query wearing a text-search costume — run `ast-index usages/symbol`
+> instead.
+
 ### Before searching: ensure the project is initialized
 
 If the current working directory looks like an Android repo

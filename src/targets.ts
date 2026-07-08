@@ -31,6 +31,8 @@ export interface TargetSpec {
   agentsDir: string;
   /** global-instructions markdown file (CLAUDE.md / AGENTS.md). */
   instructionsFile: string;
+  /** templates/ filename of the managed-section body for this target. */
+  instructionsSnippet: string;
   /** file that carries the managed hook entries (settings.json / hooks.json). */
   hooksFile: string;
   hooksKind: HooksKind;
@@ -52,6 +54,7 @@ export const TARGETS: Record<TargetId, TargetSpec> = {
     skillsDir: CLAUDE_SKILLS_DIR,
     agentsDir: CLAUDE_AGENTS_DIR,
     instructionsFile: CLAUDE_CLAUDE_MD,
+    instructionsSnippet: "claude-md-snippet.md",
     hooksFile: CLAUDE_SETTINGS,
     hooksKind: "claude-settings",
     agentFormat: "md",
@@ -67,6 +70,9 @@ export const TARGETS: Record<TargetId, TargetSpec> = {
     skillsDir: CODEX_SKILLS_DIR,
     agentsDir: CODEX_AGENTS_DIR,
     instructionsFile: CODEX_AGENTS_MD,
+    // Codex has no Skill tool and its reviewer sessions must not recurse into
+    // codex-companion — the section body differs from the Claude one.
+    instructionsSnippet: "agents-md-snippet-codex.md",
     hooksFile: CODEX_HOOKS_JSON,
     hooksKind: "codex-hooks-json",
     agentFormat: "toml",

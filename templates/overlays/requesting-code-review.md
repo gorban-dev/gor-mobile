@@ -9,6 +9,31 @@ is an Android/Kotlin codebase.
 Load `core` + `architecture` sections from `$HOME/.gor-mobile/rules/` via
 `manifest.json` before preparing the review context.
 
+Then resolve the layers touched by the diff against
+`$HOME/.gor-mobile/rules/examples/index.json` → `.layers` (the *current*
+pack's declared layers — never a remembered default list) and include those
+layers' example `.kt` files (1–3 per layer, prefer the closest analogue) in
+the `<review-prompt>` built for the gor-mobile reviewer (see Reviewer
+selection below). A shape deviation from a canonical layer example is at
+least an **Important** finding. If only some touched layers have matching
+examples, include the ones that do and name the ones that don't. Layers the
+plan grounded via the absence ladder travel here too: include the repo
+files from `Conforms to (project precedent): ...` lines (a deviation from
+that reference shape is likewise at least **Important**) and quote any
+`Shape per user: ...` line. If the pack ships no examples, or none match
+the diff, state that in the `<review-prompt>` in one line (e.g.
+`Canonical examples: none for this diff`) — alongside the absence-ladder
+references when the plan carries them — so the reviewer's examples
+tripwire stays silent instead of hunting for missing context.
+
+The Codex pass has no equivalent prompt channel — its CLI accepts custom
+text only as the `adversarial-review` focus phrase (plain `review` takes
+none). When the adversarial variant runs, fold the touched layers' example
+paths into the focus phrase (e.g. `shape conformance to
+examples/data/ExampleDataSource.kt`); on the plain `review` path Codex
+reviews the diff unaided and conventions-conformance coverage comes from
+the gor-mobile pass — union coverage, same as with diff scope.
+
 ### What a complete review is
 
 A complete gor-mobile review is **two independent passes when the `codex`

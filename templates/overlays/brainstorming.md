@@ -7,10 +7,9 @@ is an Android/Kotlin codebase.
 
 ### Architecture rules pointer
 Before producing the spec, load `core` + `architecture` sections from
-`$HOME/.gor-mobile/rules/` via `manifest.json`. Reference the canonical
-layer examples (`examples/index.json` → `.layers`) when the spec needs to
-mention concrete structural constraints (ViewModel base class, Repository
-boundaries, DI scope, etc.).
+`$HOME/.gor-mobile/rules/` via `manifest.json`. The canonical layer examples
+are governed by the **Examples-first gate** below — a MANDATORY read of the
+example `.kt` files themselves, not a conditional glance at their index.
 
 Brainstorming stays on main Claude — the analysis/judgment work is the
 whole point of this skill. No local-LLM offload here.
@@ -46,6 +45,52 @@ what the pinned library version actually ships (e.g. a ready-made
 > …" into a spec because you remember the API. Cutoff → library APIs drift.
 > Read the docs/artifact for the pinned version first, then describe how to
 > build the feature.
+
+### Examples-first gate (spec phase) — MANDATORY before comparing approaches
+
+The docs-first gate above grounds every *external* API in real documentation.
+This gate is its internal twin: **docs-first owns external API signatures;
+examples-first owns internal placement and shape.** Before you compare
+approaches, resolve which layers the feature touches via
+`$HOME/.gor-mobile/rules/examples/index.json` → `.layers` and **Read the
+example `.kt` files themselves** — the index only lists names; only the files
+show the canonical shape (e.g. that a datasource is a one-line
+`httpClient.get(...).body()`, which vetoes designing a retry protocol into
+it). The spec must record, per touched layer, which example file(s) the
+design conforms to, using the literal artifact line
+`Conforms to: <path verbatim from index.json → .layers.<layer>.files>` —
+`Conforms to: examples/<layer>/<ExampleFile>.kt` in the default pack.
+
+**Precedence rule.** An external requirement (backend contract, ticket,
+vendor doc) defines *behavior* — what the system does. The rules-pack
+conventions define *placement and shape* — where and in what form it is
+written. A retry protocol from the backend gets implemented — but in the
+layer where the conventions put error handling (e.g. the UseCase) — while
+the datasource keeps its canonical shape. If a requirement genuinely cannot
+be satisfied within the layer's canonical shape — STOP and ask the user;
+never silently redesign the layer.
+
+**Absence ladder.** Examples are an optional pack feature (packs are
+user-replaceable via `gor-mobile rules use <url>`); layer membership comes
+from the current pack's `index.json`, never from a remembered default list.
+When the index is missing/empty or no declared layer matches:
+
+1. **Project precedent** — find 1–3 existing analogous files in the target
+   repo (`ast-index search` / `ast-index conventions`, see
+   `[[gor-mobile-ast-index]]`) and use them as the reference shape; note
+   them in the spec as `Conforms to (project precedent): <repo paths>`.
+2. **No precedent either** (greenfield, first file of its kind) — ask the
+   user what shape to follow before settling the design; record the answer
+   as `Shape per user: <one-line summary>`.
+
+Never fabricate: citing an example file that does not exist in the current
+pack, or describing a "canonical shape" from memory of the default pack, is
+the same defect class as coding a remembered API signature.
+
+> **Red Flag — STOP.** Designing a datasource / ViewModel / repository around
+> a protocol, ticket, or backend instruction without having read that layer's
+> `Example*.kt` (or its absence-ladder substitute). The layer example vetoes
+> remembered or externally-anchored shapes.
 
 ### Override: no automatic commits, branches, or worktrees
 

@@ -49,6 +49,54 @@ plan-document reviewer verifies this and flags unsourced API signatures.
 > If you cannot cite where a signature came from for the pinned version, you
 > have not verified it — resolve it via the ladder before writing the step.
 
+### Examples-first gate (plan phase) — every layer task carries its shape reference
+
+The docs-first gate above owns **external API signatures**; this gate owns
+**internal placement and shape**. Every task that creates or modifies a file in
+a layer declared in `$HOME/.gor-mobile/rules/examples/index.json` → `.layers`
+must be authored **after reading** that layer's example `.kt` files (the
+files, not the index) and must carry an artifact line per touched layer —
+a task spanning two declared layers carries two lines, or is split per the
+Decomposition rules below:
+
+    Conforms to: examples/<layer>/<ExampleFile>.kt
+
+The path is the file entry verbatim from the pack's
+`index.json → .layers.<layer>.files` — `examples/<layer>/<ExampleFile>.kt` is the
+default pack's shape, not a required prefix.
+
+**Precedence rule.** External requirements (backend contract, ticket, vendor
+doc) define *behavior*; the rules-pack conventions define *placement and
+shape*. Put the required behavior where the conventions put it (e.g.
+retry/error handling in the UseCase) and keep each layer file in its
+canonical shape. Genuinely incompatible → STOP and ask the user; never
+silently redesign the layer.
+
+**Absence ladder** (examples are an optional, user-replaceable pack feature;
+layer membership is defined by the current pack's `index.json`, never by a
+remembered default list):
+
+1. No index / no matching layer → ground the task in **project precedent**:
+   1–3 existing analogous files from the target repo (`ast-index search` /
+   `ast-index conventions`, see `[[gor-mobile-ast-index]]`), recorded
+   as `Conforms to (project precedent): <repo paths>`. These files travel
+   the pipeline exactly like pack examples (implementer reference files,
+   reviewer context).
+2. No precedent either → **ask the user** for the shape before authoring the
+   task; record `Shape per user: <one-line summary>`.
+
+Never fabricate a citation: an artifact line naming an example file that
+does not exist in the current pack is the same defect class as an unsourced
+API signature. The plan-document reviewer verifies that every layer-touching
+task carries, for each touched layer, one of the three artifact lines and
+that the task's code does not contradict the cited reference. A
+layer-touching task with none is a plan defect.
+
+> **Red Flag — STOP.** A task that designs retry / caching / mapping logic
+> into a datasource when the cited layer example is a one-liner. That plan is
+> anchored on an external instruction, not the conventions — move the
+> behavior where the conventions put it, or escalate.
+
 ### Decomposition: sealed / enum + exhaustive `when` is compile-coupled
 
 Adding a variant to a `sealed` type or `enum` that is read by an **exhaustive

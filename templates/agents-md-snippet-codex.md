@@ -1,7 +1,17 @@
 ## Android Mobile Dev (managed by gor-mobile)
 
 - Workflow injected into every session via SessionStart hook.
-- Use the `Skill` tool for all workflow steps — see `gor-mobile-*` skill registry.
+- Follow the `gor-mobile-*` skills in `$CODEX_HOME/skills/` (default
+  `~/.codex/skills/`). If your harness exposes no skill-invocation tool,
+  read the matching `SKILL.md` directly before the step — reading it
+  satisfies the requirement in full.
+- Subordinate sessions: if you were dispatched by another agent as a
+  reviewer or task executor (e.g. via codex-companion `review` /
+  `adversarial-review`), skip the workflow skills and do the dispatched
+  job directly — a review request means "review this diff now", not
+  "run the full workflow first". NEVER invoke codex-companion from
+  inside a Codex session: the second-opinion pass is owned by the
+  dispatching agent, and a nested invocation recurses.
 - Architecture rules: `$HOME/.gor-mobile/rules/` (user-replaceable via
   `gor-mobile rules use <url>`).
 - Run `gor-mobile doctor` to verify, `gor-mobile repair` to restore drift.

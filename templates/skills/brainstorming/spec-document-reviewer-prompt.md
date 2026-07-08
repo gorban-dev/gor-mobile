@@ -24,6 +24,7 @@ Task tool (general-purpose):
     | Scope | Focused enough for a single plan — not covering multiple independent subsystems |
     | YAGNI | Unrequested features, over-engineering |
     | Docs grounding | Every external SDK / library / vendor API the design commits to is backed by a **cited source** (official docs, release notes, or resolved artifact) — not asserted from memory. Flag any framework/library API named in the design with no source. |
+    | Examples grounding | Every rules-pack layer the design touches names the canonical example file(s) it conforms to — or records the absence-ladder substitute (`Conforms to (project precedent): ...` / `Shape per user: ...`). Flag a touched layer with no cited reference, and a layer design whose shape contradicts its cited reference (e.g. a datasource designed around a retry protocol when the example is a one-liner). |
 
     ## Calibration
 

@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
 import {
@@ -53,7 +54,7 @@ function checkHooks(target: TargetSpec): void {
     log.warn(`No ${target.hooksFile}`);
     return;
   }
-  for (const hookType of ["SessionStart", "UserPromptSubmit"] as const) {
+  for (const hookType of ["SessionStart", "UserPromptSubmit", "PreToolUse"] as const) {
     const n = countManagedHooks(hookType, target);
     if (n === 0) {
       log.warn(`${hookType} hook NOT registered — run 'gor-mobile repair'`);
@@ -116,7 +117,8 @@ function checkRulesPack(): void {
 async function verboseHookEmulation(target: TargetSpec): Promise<void> {
   const hooks: Array<[string, string]> = [
     ["session-start-hook.sh", "SessionStart"],
-    ["user-prompt-submit-hook.sh", "UserPromptSubmit"]
+    ["user-prompt-submit-hook.sh", "UserPromptSubmit"],
+    ["ast-index-guard-hook.sh", "PreToolUse"]
   ];
   for (const [file, label] of hooks) {
     const path = `${GOR_MOBILE_HOME}/templates/${file}`;
@@ -124,13 +126,23 @@ async function verboseHookEmulation(target: TargetSpec): Promise<void> {
       log.warn(`[${label}] template missing: ${path}`);
       continue;
     }
+    // The guard is a deny-gate, not a context injector: silent exit 0 on a
+    // benign probe is its success shape, so skip the additionalContext parse.
+    const input =
+      label === "PreToolUse"
+        ? JSON.stringify({
+            tool_name: "Grep",
+            cwd: process.cwd(),
+            tool_input: { pattern: "gor-mobile doctor probe" }
+          })
+        : JSON.stringify({
+            cwd: process.cwd(),
+            session_id: "gor-mobile-doctor",
+            prompt: "gor-mobile doctor"
+          });
     const result = await execa("bash", [path], {
       reject: false,
-      input: JSON.stringify({
-        cwd: process.cwd(),
-        session_id: "gor-mobile-doctor",
-        prompt: "gor-mobile doctor"
-      }),
+      input,
       env: {
         ...process.env,
         GORM_FORCE_MOBILE: "1",
@@ -140,6 +152,37 @@ async function verboseHookEmulation(target: TargetSpec): Promise<void> {
     if (result.exitCode !== 0) {
       log.warn(`[${label}] hook exited ${result.exitCode}:`);
       console.error(result.stdout || result.stderr);
+      continue;
+    }
+    if (label === "PreToolUse") {
+      log.ok(`[${label}] guard allows non-symbol probe (exit 0)`);
+      // Deny path: an indexed repo + bare-identifier pattern must exit 2.
+      // Exit 0 here means the guard is INERT — it would silently allow every
+      // structural grep it exists to catch. Missing jq or a missing ast-index
+      // binary both fail open by design; the warning names them so a correct
+      // fail-open is not misread as a broken hook.
+      const probeDir = mkdtempSync(join(tmpdir(), "gorm-guard-probe-"));
+      try {
+        mkdirSync(join(probeDir, ".claude", "rules"), { recursive: true });
+        writeFileSync(join(probeDir, ".claude", "rules", "ast-index.md"), "");
+        const deny = await execa("bash", [path], {
+          reject: false,
+          input: JSON.stringify({
+            tool_name: "Grep",
+            cwd: probeDir,
+            tool_input: { pattern: "getFormatValue" }
+          })
+        });
+        if (deny.exitCode === 2) {
+          log.ok(`[${label}] guard denies structural probe (exit 2)`);
+        } else {
+          log.warn(
+            `[${label}] guard is INERT — structural probe exited ${deny.exitCode}, expected 2 (jq or ast-index missing, or hook broken)`
+          );
+        }
+      } finally {
+        rmSync(probeDir, { recursive: true, force: true });
+      }
       continue;
     }
     try {
@@ -278,6 +321,12 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   if (!astIndexPath()) {
     log.info(
       "  → install: brew tap defendend/ast-index && brew install ast-index"
+    );
+  }
+  reportDep("jq", which("jq"), false);
+  if (!which("jq")) {
+    log.info(
+      "  → jq powers the status line AND the ast-index guard hook (guard fails open without it) — brew install jq"
     );
   }
   checkFile(
