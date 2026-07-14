@@ -29,5 +29,8 @@ jobs:
           ./bin/gor-mobile version
           ./bin/gor-mobile --help
 
+      - name: Smoke — setup --dry-run
+        run: ./bin/gor-mobile setup --dry-run --yes --no-tui
+
       - name: Smoke — init --dry-run
-        run: ./bin/gor-mobile init --dry-run --yes --skip-sanity
+        run: ./bin/gor-mobile init --dry-run --yes --no-tui

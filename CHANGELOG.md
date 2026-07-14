@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 — 2026-07-14
+
+- fix: `gor-mobile init --dry-run` no longer requires `gor-mobile setup` first.
+  Dry-run describes the planned actions and only warns when the machine is not
+  set up (previously it hard-exited). Fixes the CI smoke that broke on the
+  removed `--skip-sanity` flag; the smoke now covers `setup --dry-run` +
+  `init --dry-run`.
+
 ## 0.3.0 — 2026-07-14
 
 Breaking: the Claude workflow installs **per-project**, not into `~/.claude`.

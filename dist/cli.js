@@ -5,7 +5,7 @@ import { Command } from "commander";
 import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-var GOR_MOBILE_VERSION = "0.3.0";
+var GOR_MOBILE_VERSION = "0.3.1";
 var HOME = homedir();
 var GOR_MOBILE_HOME = process.env.GOR_MOBILE_HOME ?? join(HOME, ".gor-mobile");
 var GOR_MOBILE_RULES_DIR = join(GOR_MOBILE_HOME, "rules");
@@ -1899,7 +1899,7 @@ async function writeExcludes(root, mode) {
 async function cmdInit(opts = {}) {
   if (opts.noTui || opts.tui === false) forceNoTui();
   const ready = machineReady();
-  if (!ready.ok) {
+  if (!ready.ok && !opts.dryRun) {
     log.err(`Machine not set up: ${ready.reason}.`);
     log.info("Run 'gor-mobile setup' once per machine, then re-run 'gor-mobile init' here.");
     process.exit(1);
@@ -1915,6 +1915,9 @@ async function cmdInit(opts = {}) {
   const platform = await resolvePlatform(root, opts, marker);
   log.info(`Platform: ${platform}`);
   if (opts.dryRun) {
+    if (!ready.ok) {
+      log.warn(`Machine not set up (${ready.reason}) \u2014 run 'gor-mobile setup' before a real init.`);
+    }
     console.log("");
     for (const line of [
       `install skills \u2192 ${spec.skillsDir}`,

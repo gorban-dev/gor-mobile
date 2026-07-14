@@ -129,8 +129,10 @@ async function writeExcludes(root: string, mode: "git" | "gitignore" | "none"): 
 export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   if (opts.noTui || opts.tui === false) forceNoTui();
 
+  // A real init needs the machine set up; a dry-run only describes the plan, so
+  // it works anywhere and just warns when setup is missing.
   const ready = machineReady();
-  if (!ready.ok) {
+  if (!ready.ok && !opts.dryRun) {
     log.err(`Machine not set up: ${ready.reason}.`);
     log.info("Run 'gor-mobile setup' once per machine, then re-run 'gor-mobile init' here.");
     process.exit(1);
@@ -150,6 +152,9 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   log.info(`Platform: ${platform}`);
 
   if (opts.dryRun) {
+    if (!ready.ok) {
+      log.warn(`Machine not set up (${ready.reason}) — run 'gor-mobile setup' before a real init.`);
+    }
     console.log("");
     for (const line of [
       `install skills → ${spec.skillsDir}`,

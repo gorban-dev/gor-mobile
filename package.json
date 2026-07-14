@@ -1,6 +1,6 @@
 {
   "name": "gor-mobile",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Android-aware overlay installer for Claude Code and Codex — superpowers-style workflow",
   "type": "module",
   "bin": {
