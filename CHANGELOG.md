@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.3.0 — 2026-07-14
+
+Breaking: the Claude workflow installs **per-project**, not into `~/.claude`.
+The old global install loaded 14 skills + 2 agents + 3 hooks into *every*
+Claude session (mobile or not); measurements drove the split. Two levels now:
+
+- **`gor-mobile setup`** — once per machine. Everything machine-wide: android
+  CLI (hard-mandatory), ast-index soft-check, rules pack + hook scripts →
+  `~/.gor-mobile/`, optional Claude status line, and the Codex user-level
+  install (unchanged — Codex has no project scope).
+- **`gor-mobile init`** — once per repo, from its root. Writes
+  `.claude/skills/`, `.claude/agents/`, `.claude/settings.local.json` (hooks +
+  `superpowers@claude-plugins-official: false`), and a `.gor-mobile.json`
+  marker; adds `.claude/`, `.gor-mobile/`, `.gor-mobile.json` to
+  `.git/info/exclude` so the
+  install never shows up in `git status`. Idempotent (re-run = refresh).
+  Works in an empty folder (offers `git init`, asks the platform).
+  `--platform android|ios`, `--plugins figma,swagger-android,…`.
+
+Other changes:
+
+- **`gor-mobile migrate`** — removes a v0.1.x–v0.2.x global install (skills,
+  agents, managed hooks, `CLAUDE.md`/`AGENTS.md` sections, managed MCP) from
+  both `~/.claude` and `~/.codex`. Keeps `~/.gor-mobile` (rules pack) and asks
+  before removing a status line. Idempotent.
+- **Legacy guard**: every command detects a leftover v0.2.x global install and
+  prints a migration banner; `init`/`doctor`/`repair`/`update` refuse to run on
+  top of it until `gor-mobile migrate` clears it.
+- **`doctor`/`repair`/`uninstall` are two-mode**: machine (`~/.gor-mobile`,
+  Codex) + project (the repo in the current directory). `uninstall --project`
+  clears one repo; `uninstall --machine` clears user homes + `~/.gor-mobile`.
+- No CLAUDE.md managed section in project mode — the former workflow pointers
+  are injected by the SessionStart hook. The `detect-mobile-context.sh`
+  heuristic detector is gone: an explicit `init` marker replaces context
+  guessing. `repair` no longer prunes MCP.
+- The `enable` command is removed (`init` writes the marker now).
+- **Context compaction discipline.** Process skills write a ground-truth
+  checkpoint to `.gor-mobile/state/<plan>.progress.md` at every safe boundary
+  (plan written, each verified task, review outcome); the SessionStart hook
+  reads `source` and, on `compact`/`resume`, injects a re-hydration block
+  pointing at the checkpoint. Any compaction — yours or Claude Code's blind
+  auto-compact — becomes lossless: no completed verified work is lost.
+  Requires `gor-mobile repair` (refreshes the hook + skill overlays).
+- **Codex review runs once, at the end.** Per-task / per-checkpoint code-quality
+  reviews in `subagent-driven-development` and `executing-plans` now dispatch the
+  gor-mobile reviewer directly (no Codex); the Codex second opinion fires exactly
+  once, at the final full-implementation review on the finished diff. Removes the
+  per-task Codex passes that drove large token/time overrun. `executing-plans`
+  gains an explicit final-review gate so Codex still runs once there. Requires
+  `gor-mobile repair`.
+
+**Migrating from 0.2.x**: `brew upgrade gor-mobile` → `gor-mobile migrate` →
+`gor-mobile setup` → `gor-mobile init` in each mobile repo. Existing installs
+must run `gor-mobile setup` to refresh `~/.gor-mobile/templates`.
+
 ## 0.2.9 — 2026-07-08
 
 - feat: **Examples-first is now a throughline, not a habit.** Field failure

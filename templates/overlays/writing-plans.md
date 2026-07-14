@@ -117,4 +117,24 @@ no-automatic-git policy, code accumulates as uncommitted working-tree
 modifications and the user decides when to commit. Replace each "Commit" step
 with the task's verification step (Gradle test / compile / on-device check).
 
+### Context compaction — the planning seam (write the checkpoint, then compact)
+
+The brainstorm→implement boundary is the cleanest point to shrink context: the
+spec and plan are complete ground truth by design, and the brainstorm transcript
+becomes dead weight. Before the Execution Handoff:
+
+1. Write the initial checkpoint to
+   `.gor-mobile/state/<plan-basename>.progress.md` (basename of the plan file,
+   `.md` → `.progress.md`). Seed it with:
+   - `Spec:` and `Plan:` — the two file paths.
+   - A task table with every task `pending`.
+   - `Next action:` — Task 1.
+   Execution fills in decisions/deviations/touched-files later.
+2. If the brainstorm/planning phase was substantial (multiple rounds, large
+   exploration), tell the user in one line: "Checkpoint written — safe to run
+   `/compact` before execution; the SessionStart hook rehydrates from it."
+   gor-mobile cannot run `/compact` itself; the user (or Claude Code
+   auto-compact) triggers it, and it is safe either way because the checkpoint
+   is on disk. Skip the recommendation for a trivial short plan (nothing to shed).
+
 <!-- END gor-mobile overlay -->

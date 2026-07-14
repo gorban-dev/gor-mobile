@@ -126,19 +126,24 @@ distinction is load-bearing for the Codex second opinion:
   received (the task's `Conforms to:` files): the spec reviewer checks the
   code against the task spec **and** the cited canonical shape — the plan is
   not the sole yardstick.
-- **Code-quality review** — do **NOT** dispatch `Agent(gor-mobile-code-reviewer)`
-  bare from this flow. A bare Agent dispatch reads `code-quality-reviewer-prompt.md`
-  and never touches the `requesting-code-review` overlay, so it **silently skips
-  the mandatory Codex pass**. Instead invoke
-  `Skill(gor-mobile-requesting-code-review)`, which **owns the two-pass mandate**
-  (gor-mobile reviewer + Codex when `$CODEX_COMPANION` resolves) and orchestrates
-  the `Agent(gor-mobile-code-reviewer)` / `-deep` call itself. The **final
-  full-implementation review** (after all tasks) routes the same way.
+- **Code-quality review (per task)** — dispatch the gor-mobile reviewer
+  **directly**: `Agent(gor-mobile-code-reviewer)` (or `-deep` on the escalation
+  triggers — large diff, security/auth/payments/crypto/IPC, explicit deep-review
+  ask). Per-task checkpoints run the gor-mobile reviewer **only — no Codex**.
+  Codex reviewing half-built, mid-plan state at every task is low signal and the
+  main source of token/time overrun; it is deferred to one pass at the end.
 
-**Definition of done for a code-quality review:** it is not complete — and its
-findings are not reported — until *both* passes have returned: the gor-mobile
-reviewer and Codex (when the plugin is present). Reporting quality-review
-results from the bare Agent pass alone is a review failure.
+**Final full-implementation review (after ALL tasks) — the one Codex gate.**
+When every plan task is implemented and verified, run a single final review over
+the complete diff through `Skill(gor-mobile-requesting-code-review)`. That skill
+owns the two-pass mandate — gor-mobile reviewer + Codex (when `$CODEX_COMPANION`
+resolves) — so Codex runs **exactly once per plan, here, on the finished
+implementation**, never per task. This final gate is mandatory: skipping it is
+the only way Codex would never run, which is a review failure.
+
+**Definition of done:** a per-task code-quality review is done when the
+gor-mobile reviewer approves. The plan is done when the final review (gor-mobile
+reviewer + Codex) has returned and its findings are addressed.
 
 **Tool disambiguation** (upstream bug obra/superpowers#1077): `requesting-code-review`
 and `writing-plans` are **Skills** (invoke via the `Skill` tool);
@@ -146,5 +151,31 @@ and `writing-plans` are **Skills** (invoke via the `Skill` tool);
 (dispatch via the `Agent` tool with `subagent_type`). If you see
 `{"status":"Agent type not found"}` for a review step, the dispatch went to the
 wrong tool — retry via `Skill(gor-mobile-requesting-code-review)`.
+
+### Context compaction — checkpoint every verified task boundary
+
+The orchestrator's context grows across tasks (subagent results, verification
+output, review reports) even though each implementer runs in its own fresh
+context. Keep the orchestrator rehydratable:
+
+- **On start**, if `.gor-mobile/state/<plan-basename>.progress.md` exists, read
+  it FIRST and resume from its `Next action`.
+- **After a task's verification passes** (orchestrator-run, not the subagent's
+  self-report), rewrite the checkpoint before dispatching the next task,
+  preserving its `Spec:`/`Plan:` links: task status (done + one line of what
+  changed + any deviation + touched file paths),
+  cross-cutting decisions with their reason, open questions, the last green
+  verification command, and `Next action` = the next pending task.
+- **Compaction gate:** the post-verification, post-review boundary between tasks
+  is safe to compact — no subagent is running, nothing is half-applied, the
+  checkpoint is fresh. When context has grown heavy, tell the user in one line
+  that `/compact` is safe now. NEVER suggest it while a subagent is in flight or
+  a review is mid-triage.
+
+This is the same disk-backed safety as `executing-plans`: because the checkpoint
+is refreshed at every safe boundary, even an uncontrolled Claude Code
+auto-compact is recoverable — worst case one in-flight task is redone; no
+completed, verified work is lost. The checkpoint and plan — not the post-compact
+summary — are authoritative for task state.
 
 <!-- END gor-mobile overlay -->

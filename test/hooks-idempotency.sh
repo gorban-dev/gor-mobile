@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Regression test for the hook dedup bug: upsertHook must be idempotent and must
-# collapse legacy, *untagged* managed entries (left by the old bash CLI, manual
+# collapse legacy, *untagged* managed entries (left by an earlier install, manual
 # edits, format migrations, or a broken merge) instead of stacking duplicates.
-# Drives the real shipped binary (`gor-mobile repair`) against a pre-seeded
-# settings.json so the whole code path is exercised, not a reimplementation.
+# Since v0.3.0 the Claude workflow is per-project, so this drives the real
+# shipped binary (`gor-mobile repair` from inside a repo) against a pre-seeded
+# <repo>/.claude/settings.local.json — the whole code path, not a reimplementation.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,11 +26,15 @@ for d in "${_dirs[@]}"; do
 done
 export PATH="$SAFE_PATH"
 
-mkdir -p "$HOME/.claude"
+REPO="$TMP/app"
+mkdir -p "$REPO/.claude"
+# A per-project marker so `repair` finds this repo (walks up from cwd).
+printf '{ "platform": "android", "version": "0.0.0" }\n' > "$REPO/.gor-mobile.json"
+
 # Three untagged legacy entries per event (varied absolute paths, as real
 # machines accumulate over reinstalls) plus one unrelated third-party hook that
 # MUST survive untouched.
-cat > "$HOME/.claude/settings.json" <<'JSON'
+cat > "$REPO/.claude/settings.local.json" <<'JSON'
 {
   "hooks": {
     "SessionStart": [
@@ -52,11 +57,12 @@ cat > "$HOME/.claude/settings.json" <<'JSON'
 }
 JSON
 
+cd "$REPO"
 echo "→ repair #1"
 node "$ROOT/bin/gor-mobile.mjs" repair >/dev/null 2>&1 || { echo "repair #1 exited non-zero"; exit 1; }
 echo "→ repair #2 (idempotency)"
 node "$ROOT/bin/gor-mobile.mjs" repair >/dev/null 2>&1 || { echo "repair #2 exited non-zero"; exit 1; }
 
-echo "→ asserting final settings.json"
-node "$ROOT/test/assert-hooks.mjs" "$HOME/.claude/settings.json"
+echo "→ asserting final settings.local.json"
+node "$ROOT/test/assert-hooks.mjs" "$REPO/.claude/settings.local.json"
 echo "PASS: hook upsert is idempotent and collapses legacy entries"

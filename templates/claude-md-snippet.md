@@ -24,3 +24,14 @@
 - If `.claude/rules/ast-index.md` is missing in an Android repo, run
   the upstream slash command `/ast-index:initialize-android` once
   before searching.
+
+## Context compaction (managed by gor-mobile)
+
+- Long sessions get compacted — by you at a safe boundary, or by Claude Code
+  automatically when the window fills. Keep state rehydratable: the gor-mobile
+  process skills write a checkpoint to `.gor-mobile/state/<plan>.progress.md`
+  at every safe boundary (plan written, each verified task, review outcome).
+- After a compaction, if a `.gor-mobile/state/*.progress.md` file exists, read
+  it and the plan/spec it references BEFORE continuing; take task state from the
+  checkpoint and the plan, not from the summary. The SessionStart hook re-injects
+  this pointer on `compact`.

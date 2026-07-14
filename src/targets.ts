@@ -1,4 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import {
   CLAUDE_AGENTS_DIR,
   CLAUDE_CLAUDE_MD,
@@ -15,6 +16,10 @@ import { hasManagedHooksInFile } from "./helpers/settings-merge.js";
 
 export type TargetId = "claude" | "codex";
 
+// user  = agent home (~/.claude, ~/.codex) — Codex only, plus Claude legacy.
+// project = <repo>/.claude with settings.local.json — the Claude install mode.
+export type TargetScope = "user" | "project";
+
 export type HooksKind = "claude-settings" | "codex-hooks-json";
 export type AgentFormat = "md" | "toml";
 export type AndroidAgentFlag = "claude-code" | "codex";
@@ -25,6 +30,7 @@ export type StatusLineKind = "claude-command" | "codex-config";
 export interface TargetSpec {
   id: TargetId;
   label: string;
+  scope: TargetScope;
   /** agent home directory (~/.claude or ~/.codex / $CODEX_HOME). */
   home: string;
   skillsDir: string;
@@ -50,6 +56,7 @@ export const TARGETS: Record<TargetId, TargetSpec> = {
   claude: {
     id: "claude",
     label: "Claude Code",
+    scope: "user",
     home: CLAUDE_DIR,
     skillsDir: CLAUDE_SKILLS_DIR,
     agentsDir: CLAUDE_AGENTS_DIR,
@@ -66,6 +73,7 @@ export const TARGETS: Record<TargetId, TargetSpec> = {
   codex: {
     id: "codex",
     label: "Codex",
+    scope: "user",
     home: CODEX_DIR,
     skillsDir: CODEX_SKILLS_DIR,
     agentsDir: CODEX_AGENTS_DIR,
@@ -84,6 +92,31 @@ export const TARGETS: Record<TargetId, TargetSpec> = {
 };
 
 export const ALL_TARGET_IDS: TargetId[] = ["claude", "codex"];
+
+// Claude installs per-project: skills/agents under <root>/.claude, hooks in
+// settings.local.json (never committed by Claude Code). No instructions file —
+// the SessionStart hook injects the former CLAUDE.md section instead — and no
+// user-level extras (status line stays in `gor-mobile setup`).
+export function projectClaudeSpec(root: string): TargetSpec {
+  const home = join(root, ".claude");
+  return {
+    id: "claude",
+    label: "Claude Code (project)",
+    scope: "project",
+    home,
+    skillsDir: join(home, "skills"),
+    agentsDir: join(home, "agents"),
+    instructionsFile: "",
+    instructionsSnippet: "claude-md-snippet.md",
+    hooksFile: join(home, "settings.local.json"),
+    hooksKind: "claude-settings",
+    agentFormat: "md",
+    androidAgentFlag: "claude-code",
+    supportsStatusLine: false,
+    statusLineKind: null,
+    supportsMcpPrune: false
+  };
+}
 
 export function targetSpecs(ids: TargetId[]): TargetSpec[] {
   return ids.map((id) => TARGETS[id]);

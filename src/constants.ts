@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const GOR_MOBILE_VERSION = "0.2.9";
+export const GOR_MOBILE_VERSION = "0.3.0";
 export const GOR_MOBILE_NAME = "gor-mobile";
 
 export const HOME = homedir();
@@ -38,6 +38,9 @@ export const CODEX_AGENTS_DIR = join(CODEX_DIR, "agents");
 export const CODEX_AGENTS_MD = join(CODEX_DIR, "AGENTS.md");
 export const CODEX_HOOKS_JSON = join(CODEX_DIR, "hooks.json");
 export const CODEX_CONFIG_TOML = join(CODEX_DIR, "config.toml");
+
+// Project-level install marker, written by `gor-mobile init` at the repo root.
+export const PROJECT_MARKER_NAME = ".gor-mobile.json";
 
 export const MANAGED_TAG = "gor-mobile";
 export const SECTION_BEGIN = "<!-- BEGIN gor-mobile managed section -->";

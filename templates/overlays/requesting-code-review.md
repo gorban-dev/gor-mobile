@@ -38,23 +38,26 @@ the gor-mobile pass — union coverage, same as with diff scope.
 
 A complete gor-mobile review is **two independent passes when the `codex`
 plugin is present**: the gor-mobile reviewer (below) **and** an independent
-Codex pass (further below) — both, every time, never one instead of the
-other. Detect Codex presence as the *first* action of the review (step 1
-under "Codex second opinion"); if `$CODEX_COMPANION` resolves, the Codex
-pass is mandatory, not optional. Do not report review findings to the user
-until both passes have returned (or Codex has been confirmed absent).
-Announcing "I'll also check / run Codex" and then proceeding without
-dispatching it is a review failure.
+Codex pass (further below). Detect Codex presence as the *first* action of the
+review (step 1 under "Codex second opinion"); if `$CODEX_COMPANION` resolves,
+the Codex pass is mandatory. Do not report the review's findings until both
+passes have returned (or Codex has been confirmed absent). Announcing "I'll run
+Codex" and then not dispatching it is a review failure.
 
-**This overlay is the single source of truth for the Codex pass** — its
-detection (`$CODEX_COMPANION`) and dispatch. It owns the two-pass mandate for
-**every** review entry point, not just a direct `requesting-code-review`
-invocation. The `subagent-driven-development` and `executing-plans` flows do
-**not** re-implement the Codex step: they route their code-quality review
-*through this skill* (`Skill(gor-mobile-requesting-code-review)`) so the
-mandate applies there too. A code-quality review dispatched as a bare
-`Agent(gor-mobile-code-reviewer)` — bypassing this skill — is incomplete by
-definition, because it never sees this section.
+**Codex runs once, on a complete implementation — not per task.** This skill is
+the review of *finished* work: a standalone "review this" request, or the
+**final full-implementation review** after every task in a plan is done. That is
+the one place the Codex pass fires. Mid-plan **per-task / per-checkpoint**
+code-quality reviews in the `subagent-driven-development` and `executing-plans`
+flows do **not** invoke this skill — they dispatch
+`Agent(gor-mobile-code-reviewer)` directly (gor-mobile reviewer only) and defer
+Codex to this final gate. This is deliberate: Codex re-reviewing half-built
+mid-plan state at every checkpoint is the token/time overrun this removes. The
+guarantee is the inverse of the old one — Codex must run **at the end**, exactly
+once, and the flows' mandatory final-review step routes here to ensure it does.
+
+**This overlay remains the single source of truth for the Codex pass** — its
+detection (`$CODEX_COMPANION`) and dispatch live here and nowhere else.
 
 ### Reviewer selection
 
@@ -143,6 +146,9 @@ are generic about review and accept whatever diff the caller passes.
 
 ### Codex second opinion — MANDATORY when the `codex` plugin is installed
 
+This pass belongs to a **complete / final review** (see "What a complete review
+is" above) — once per plan, at the end, never per task.
+
 If `$CODEX_COMPANION` resolves (step 1 below), you **MUST** run this second,
 independent pass through the OpenAI Codex plugin (`codex@openai-codex`)
 **in addition to** the gor-mobile reviewer above, and **before** you report
@@ -218,5 +224,13 @@ this pass is `$CODEX_COMPANION` being empty (plugin absent).
   `$CODEX_COMPANION` resolved, the pass runs — it is not a judgement call.
 - Report review findings to the user before the Codex pass has returned
   (or been confirmed absent).
+
+### Context compaction — review outcome is a safe boundary
+
+A completed review whose outcome is durable — findings applied and re-verified,
+or recorded — is a safe point to compact: nothing is in flight. If a checkpoint
+exists (`.gor-mobile/state/*.progress.md`), append the review outcome to it
+before compacting. Do NOT compact while findings are still being triaged or
+fixes are half-applied.
 
 <!-- END gor-mobile overlay -->

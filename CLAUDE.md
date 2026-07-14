@@ -31,26 +31,34 @@ CLI implementation:
 
 `src/targets.ts` is the single abstraction for *which agent* a run installs
 into. `TargetSpec` resolves every per-agent path/format; helpers and commands
-take a `TargetSpec` instead of hardcoding `CLAUDE_*`. Defaults: `init`
-auto-detects installed homes (multiselect when interactive), `repair`/`doctor`
-default to gor-mobile-footprint targets, `uninstall` to all detected homes; the
-`--target claude,codex` flag overrides everywhere.
+take a `TargetSpec` instead of hardcoding `CLAUDE_*`. Since v0.3.0 a spec also
+carries a `scope` (`"user" | "project"`). The two static `TARGETS` entries are
+user-scoped; `projectClaudeSpec(root)` builds a project-scoped Claude spec
+rooted at `<repo>/.claude` (hooks → `settings.local.json`, no
+`instructionsFile`, no status line). `init`/`repair`/`doctor`/`uninstall`
+resolve scope by command mode (machine vs project) — there is no `--target`
+flag on them anymore; only `setup` takes `--target codex` (Codex is the sole
+user-level agent target left).
 
-Per-target layout under each agent's home:
+Layout per scope:
 
-| Concern | Claude (`~/.claude/`) | Codex (`~/.codex/`, `$CODEX_HOME`) |
-|---------|------------------------|-------------------------------------|
-| Hooks | `settings.json` `hooks` | `hooks.json` (same JSON schema) |
+| Concern | Claude — **project** (`<repo>/.claude/`) | Codex — user (`~/.codex/`, `$CODEX_HOME`) |
+|---------|------------------------------------------|--------------------------------------------|
+| Hooks | `settings.local.json` `hooks` (not committed) | `hooks.json` (same JSON schema) |
 | Skills | `skills/gor-mobile-*/SKILL.md` | `skills/gor-mobile-*/SKILL.md` (cross-compatible) |
 | Agents | `agents/*.md` (`templates/agents/`) | `agents/*.toml` (`templates/agents-codex/`) |
-| Instructions | `CLAUDE.md` managed section | `AGENTS.md` managed section (same markers) |
-| Status line | `settings.json` `statusLine` (command) | `config.toml` `[tui].status_line` (built-in items) |
-| MCP prune | `mcp.json` | — (no managed servers) |
+| Instructions | injected by SessionStart hook (no file) | `AGENTS.md` managed section (same markers) |
+| Plugins | `settings.local.json` `enabledPlugins` (superpowers off) | — |
+| Status line | — (user-level, `setup` only) | `config.toml` `[tui].status_line` (built-in items) |
+| Marker | `<repo>/.gor-mobile.json` (platform, version) | — |
 
-The shared hook scripts (`~/.gor-mobile/templates/`) are target-neutral; only
-`session-start-hook.sh` reads the skills folder, via `GORM_SKILLS_DIR` (Codex
-hook command sets it; Claude keeps the bare command for back-compat). `android
-init` is run bare — it provisions the stock skill for all detected agents.
+The shared hook scripts (`~/.gor-mobile/templates/`) are target-neutral;
+`session-start-hook.sh` reads its skills folder from `GORM_SKILLS_DIR` when the
+Codex hook command sets it (always-on), and otherwise (bare command = Claude
+project mode) walks up from cwd to the `.gor-mobile.json` marker and injects
+from `<repo>/.claude/skills`. `android init` is run bare; `init` moves the stock
+skill into `<repo>/.claude/skills` (Claude) and `setup` leaves Codex's home
+copy.
 
 ## Release (critical)
 
@@ -133,16 +141,21 @@ No automated tests for now. Verify changes by running:
 
     npm run build
     npx tsc --noEmit
-    ./bin/gor-mobile init --dry-run --yes --skip-sanity
+    ./bin/gor-mobile setup --dry-run --yes
+    ./bin/gor-mobile init --dry-run --yes
 
-and, when appropriate, a full wizard roundtrip in a sandbox:
+and, when appropriate, a full roundtrip in a sandbox (setup is machine-level,
+init is per-repo — run init from inside a repo dir):
 
     bash -c '
       TMP="$(mktemp -d)"
       export HOME="$TMP" GOR_MOBILE_HOME="$TMP/.gor-mobile" XDG_CONFIG_HOME="$TMP/.config"
-      ./bin/gor-mobile init --yes --skip-sanity
-      ./bin/gor-mobile doctor
-      ./bin/gor-mobile uninstall --yes
+      ./bin/gor-mobile setup --yes --no-tui
+      REPO="$TMP/app"; mkdir -p "$REPO" && cd "$REPO"
+      "$OLDPWD/bin/gor-mobile" init --yes --no-tui --platform android
+      "$OLDPWD/bin/gor-mobile" doctor
+      "$OLDPWD/bin/gor-mobile" uninstall --project --yes
+      "$OLDPWD/bin/gor-mobile" uninstall --machine --yes
     '
 
 ## Stylistic

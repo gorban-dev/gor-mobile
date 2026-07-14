@@ -1,6 +1,8 @@
 import { Command } from "commander";
 import { GOR_MOBILE_VERSION } from "./constants.js";
+import { cmdSetup } from "./commands/setup.js";
 import { cmdInit } from "./commands/init.js";
+import { cmdMigrate } from "./commands/migrate.js";
 import { cmdDoctor } from "./commands/doctor.js";
 import { cmdRepair } from "./commands/repair.js";
 import { cmdUninstall } from "./commands/uninstall.js";
@@ -16,14 +18,27 @@ import { cmdSelfUpdate } from "./commands/self-update.js";
 import { cmdAndroid } from "./commands/android.js";
 import { cmdAndroidSkills } from "./commands/android-skills.js";
 import { cmdUpdate } from "./commands/update.js";
-import { cmdEnable } from "./commands/enable.js";
+import { legacyGate } from "./helpers/legacy.js";
 
 const program = new Command();
 
+// Refuse to run on top of a v0.2.x global install for the state-changing
+// commands (init/doctor/repair/update); warn on everything else. setup/migrate
+// carry their own legacy handling; version/uninstall must work to fix it.
+const LEGACY_BLOCK = new Set(["init", "doctor", "repair", "update"]);
+const LEGACY_EXEMPT = new Set(["version", "migrate", "uninstall", "setup"]);
+
 program
   .name("gor-mobile")
-  .description("Android-aware overlay installer for Claude Code and Codex")
+  .description("Android-aware Claude Code / Codex workflow — machine setup + per-project install")
   .version(`gor-mobile ${GOR_MOBILE_VERSION}`, "-v, --version", "print version");
+
+program.hook("preAction", (_thisCommand, actionCommand) => {
+  const name = actionCommand.name();
+  if (LEGACY_EXEMPT.has(name)) return;
+  const block = LEGACY_BLOCK.has(name);
+  if (legacyGate({ block }) && block) process.exit(1);
+});
 
 program
   .command("version")
@@ -33,43 +48,53 @@ program
   });
 
 program
-  .command("init")
-  .description("Run the install wizard (Android CLI, hooks, skills, MCP)")
+  .command("setup")
+  .description("Machine setup (once): android CLI, ast-index, rules pack, hook scripts, Codex")
   .option("--dry-run", "print planned actions; no filesystem changes")
   .option("-y, --yes", "assume yes to all prompts (non-interactive)")
-  .option("--skip-sanity", "skip final summary step")
   .option("--no-tui", "force plain-text prompts")
   .option("--advanced", "confirm each step and allow URL override")
   .option("--rules <url>", "custom rules-pack git URL")
   .option("--skip-android-update", "do not auto-update the Android CLI")
-  .option("--target <targets>", "comma-separated agents to install into (claude,codex)")
+  .option("--target <targets>", "user-level agents to set up (codex)")
+  .action(async (opts) => {
+    await cmdSetup(opts);
+  });
+
+program
+  .command("init")
+  .description("Install the gor-mobile workflow into the current repo (per-project)")
+  .option("--dry-run", "print planned actions; no filesystem changes")
+  .option("-y, --yes", "assume yes to all prompts (non-interactive)")
+  .option("--no-tui", "force plain-text prompts")
+  .option("--platform <platform>", "android or ios (skip detection/prompt)")
+  .option("--plugins <list>", "comma-separated extra plugins to enable (figma,swagger-android,…)")
   .action(async (opts) => {
     await cmdInit(opts);
   });
 
 program
+  .command("migrate")
+  .description("Remove a legacy v0.2.x global install (keeps the rules pack)")
+  .option("-y, --yes", "skip confirmation")
+  .action(async (opts) => {
+    await cmdMigrate(opts);
+  });
+
+program
   .command("doctor")
-  .description("Check environment (deps, hooks, MCP)")
+  .description("Check machine setup, the current project, and Codex")
   .option("-v, --verbose", "dump hook payload + skill frontmatter")
-  .option("--target <targets>", "comma-separated agents to check (claude,codex)")
   .action(async (opts) => {
     await cmdDoctor(opts);
   });
 
 program
   .command("repair")
-  .description("Restore managed files in ~/.claude/ and ~/.codex/")
+  .description("Refresh managed files: machine hook scripts, this project, and Codex")
   .option("--skip-android-update", "do not auto-update the Android CLI")
-  .option("--target <targets>", "comma-separated agents to repair (claude,codex)")
   .action(async (opts) => {
     await cmdRepair(opts);
-  });
-
-program
-  .command("enable")
-  .description("Mark the current repo as a gor-mobile (mobile) project")
-  .action(() => {
-    cmdEnable();
   });
 
 program
@@ -95,9 +120,10 @@ program
 
 program
   .command("uninstall")
-  .description("Remove everything gor-mobile installed")
+  .description("Remove gor-mobile — from this repo (--project) or the whole machine (--machine)")
   .option("-y, --yes", "skip confirmation")
-  .option("--target <targets>", "comma-separated agents to uninstall from (claude,codex)")
+  .option("--project", "remove only this repo's .claude footprint + .gor-mobile.json")
+  .option("--machine", "remove user agent homes + ~/.gor-mobile (templates, rules)")
   .action(async (opts) => {
     await cmdUninstall(opts);
   });

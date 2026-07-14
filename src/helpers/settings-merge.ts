@@ -77,10 +77,10 @@ function removeHook(hooksFile: string, hookType: HookType): void {
   writeJson(hooksFile, settings);
 }
 
-// session-start-hook.sh reads its skills directory from GORM_SKILLS_DIR (falling
-// back to ~/.claude/skills). Claude keeps the bare command for byte-for-byte
-// back-compat with existing installs; Codex prefixes the env so the one shared
-// script serves both agents' skill folders.
+// session-start-hook.sh branches on GORM_SKILLS_DIR: unset → Claude per-project
+// mode (the hook finds the repo root by walking up to .gor-mobile.json and reads
+// <root>/.claude/skills); set → Codex user-level, always inject from that folder.
+// So the bare command is exactly the project-mode signal.
 function sessionStartCommand(target: TargetSpec): string {
   const base = `bash ${GOR_MOBILE_HOME}/templates/session-start-hook.sh`;
   return target.id === "claude"

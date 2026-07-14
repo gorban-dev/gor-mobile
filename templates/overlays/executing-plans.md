@@ -78,16 +78,21 @@ uncommitted modifications in the working tree until the user decides
 to commit. Verification (`./gradlew :<module>:test ...`) still runs
 after every task — that's correctness gating, not git state.
 
-### Review routing — through requesting-code-review (owns the Codex mandate)
+### Review routing — gor-mobile reviewer per checkpoint, Codex once at the end
 
-When you request code review at a checkpoint, route it through
-`Skill(gor-mobile-requesting-code-review)`, **not** a bare
-`Agent(gor-mobile-code-reviewer)`. That skill owns the two-pass mandate
-(gor-mobile reviewer + Codex when `$CODEX_COMPANION` resolves); a bare Agent
-dispatch reads only the reviewer prompt and silently skips the Codex second
-opinion. The review is not done — and findings are not reported — until both
-passes return (or Codex is confirmed absent because the plugin is not
-installed).
+Per-checkpoint code review runs the gor-mobile reviewer **directly** and
+**without Codex**: `Agent(gor-mobile-code-reviewer)` (or `-deep` on the
+escalation triggers — large diff, security/auth/payments/crypto/IPC, or an
+explicit deep-review ask). Codex reviewing mid-plan, half-built state at every
+checkpoint is low signal and the main source of token/time overrun.
+
+**One Codex gate, at the end.** After the last plan task is implemented and
+verified — during Complete Development, before you present completion options —
+run a single final review over the whole change through
+`Skill(gor-mobile-requesting-code-review)`. That skill owns the two-pass mandate
+(gor-mobile reviewer + Codex when `$CODEX_COMPANION` resolves), so Codex runs
+**exactly once per plan, here, on the finished implementation**. This final gate
+is mandatory: skipping it is the only way Codex never runs.
 
 ### Android CLI — phase command mapping
 
@@ -109,5 +114,31 @@ Before editing code for a task, locate the entry points via
 
 Run this BEFORE `Grep`. The structured output narrows the file set you
 need to read.
+
+### Context compaction — checkpoint every verified task boundary
+
+Long plans grow the orchestrator's context (accumulated diffs, test output,
+subagent results). Keep the session rehydratable:
+
+- **On start**, if `.gor-mobile/state/<plan-basename>.progress.md` exists, read
+  it FIRST and resume from its `Next action` — the plan may have been partly
+  executed before a compaction.
+- **After each task's verification passes** (task-loop step 3 above), rewrite the
+  checkpoint before advancing, preserving its `Spec:`/`Plan:` links: task status
+  (done + one line of what changed + any
+  deviation from the plan + touched file paths), cross-cutting decisions with
+  their reason, open questions, the last green verification command, and
+  `Next action` = the next pending task.
+- **Compaction gate:** this post-verification boundary is a safe point to
+  compact — nothing is in flight and the checkpoint is fresh. When the session
+  has grown heavy (the planning-seam compaction is far behind, several tasks
+  closed, or a task pulled large content into context), tell the user in one line
+  that `/compact` is safe now. NEVER suggest it mid-task.
+
+Because the checkpoint is refreshed at every safe boundary, an uncontrolled
+Claude Code auto-compact is also recoverable: worst case you re-do the one task
+that was in flight (its verification had not passed, so no completed work is
+lost). Never treat the post-compact summary as authoritative for task state —
+the checkpoint and the plan are.
 
 <!-- END gor-mobile overlay -->

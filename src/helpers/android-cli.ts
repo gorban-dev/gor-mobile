@@ -1,12 +1,13 @@
-import { accessSync, constants, existsSync, rmSync } from "node:fs";
+import { accessSync, constants, cpSync, existsSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { execa } from "execa";
-import { CLAUDE_SKILLS_DIR } from "../constants.js";
+import { CLAUDE_SKILLS_DIR, CODEX_SKILLS_DIR } from "../constants.js";
 import { ALL_TARGET_IDS, TARGETS, type TargetSpec } from "../targets.js";
 import { ANDROID_CLI_FLOOR, requiredTopLevelCommands } from "../android-contract.js";
 import { meetsFloor } from "./version.js";
 import { androidCliPath } from "./deps.js";
+import { ensureDir } from "./paths.js";
 import { isOnline } from "./net.js";
 import { log } from "../ui/log.js";
 
@@ -282,6 +283,56 @@ export async function runAndroidInit(
       error: (err as Error).message
     };
   }
+}
+
+export interface ProjectAndroidSkillResult {
+  ran: boolean;
+  installed: boolean;
+  error?: string;
+}
+
+/**
+ * Project-scoped android-cli skill: `android init` drops the stock skill into
+ * agent HOMES (~/.claude, ~/.codex). For the per-project Claude layout we copy
+ * that skill into <repo>/.claude/skills and remove the Claude-home copy, so the
+ * global footprint stays empty. The Codex-home copy is left intact (Codex is
+ * still user-level).
+ */
+export async function provisionProjectAndroidSkill(
+  projectSkillsDir: string
+): Promise<ProjectAndroidSkillResult> {
+  const cli = androidCliPath();
+  const dst = join(projectSkillsDir, "android-cli");
+  if (!cli) {
+    return { ran: false, installed: existsSync(join(dst, "SKILL.md")) };
+  }
+
+  let error: string | undefined;
+  try {
+    const res = await execa(cli, ["init"], { reject: false, timeout: 30_000 });
+    if (res.exitCode !== 0) {
+      error = (res.stderr || res.stdout || "").toString().slice(0, 200);
+    }
+  } catch (err) {
+    error = (err as Error).message;
+  }
+
+  const claudeSrc = join(CLAUDE_SKILLS_DIR, "android-cli");
+  const codexSrc = join(CODEX_SKILLS_DIR, "android-cli");
+  const src = existsSync(join(claudeSrc, "SKILL.md"))
+    ? claudeSrc
+    : existsSync(join(codexSrc, "SKILL.md"))
+      ? codexSrc
+      : null;
+  if (src && src !== dst) {
+    ensureDir(projectSkillsDir);
+    rmSync(dst, { recursive: true, force: true });
+    cpSync(src, dst, { recursive: true });
+  }
+  // Claude is project-scoped now — its home must not carry the managed skill.
+  if (existsSync(claudeSrc)) rmSync(claudeSrc, { recursive: true, force: true });
+
+  return { ran: true, installed: existsSync(join(dst, "SKILL.md")), error };
 }
 
 /** Read `android --version` → "1.0.0" (first token). null if CLI missing/broken. */

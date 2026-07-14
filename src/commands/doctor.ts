@@ -6,6 +6,8 @@ import {
   GOR_MOBILE_CONFIG,
   GOR_MOBILE_HOME,
   GOR_MOBILE_RULES_DIR,
+  GOR_MOBILE_TEMPLATES_DIR,
+  GOR_MOBILE_VERSION,
   SECTION_BEGIN
 } from "../constants.js";
 import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-cli.js";
@@ -15,19 +17,18 @@ import { statusLineState } from "../helpers/settings-statusline.js";
 import { codexStatusLineState } from "../helpers/codex-statusline.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
+import { findProjectRoot, readProjectMarker } from "../helpers/project.js";
 import { readManifest } from "../helpers/rules-pack.js";
 import {
-  detectGorMobileTargets,
-  detectInstalledTargets,
-  parseTargetFlag,
-  targetSpecs,
+  TARGETS,
+  agentHomeExists,
+  projectClaudeSpec,
   type TargetSpec
 } from "../targets.js";
 import { log } from "../ui/log.js";
 
 interface DoctorOptions {
   verbose?: boolean;
-  target?: string;
 }
 
 function reportDep(name: string, path: string | null, required: boolean): void {
@@ -101,7 +102,7 @@ function checkCodexStatusLine(): void {
 
 function checkRulesPack(): void {
   if (!existsSync(GOR_MOBILE_RULES_DIR)) {
-    log.warn(`Rules pack not installed (${GOR_MOBILE_RULES_DIR})`);
+    log.warn(`Rules pack not installed (${GOR_MOBILE_RULES_DIR}) — run 'gor-mobile setup'`);
     return;
   }
   const m = readManifest();
@@ -112,6 +113,23 @@ function checkRulesPack(): void {
   log.ok(
     `Rules pack v${m.version ?? "?"} (stack=${m.stack ?? "?"}) at ${GOR_MOBILE_RULES_DIR}`
   );
+}
+
+function checkHookTemplates(): void {
+  const scripts = [
+    "session-start-hook.sh",
+    "user-prompt-submit-hook.sh",
+    "ast-index-guard-hook.sh",
+    "claude-md-snippet.md"
+  ];
+  let ok = true;
+  for (const f of scripts) {
+    if (!existsSync(join(GOR_MOBILE_TEMPLATES_DIR, f))) {
+      ok = false;
+      log.warn(`hook template missing: ${f} — run 'gor-mobile setup'`);
+    }
+  }
+  if (ok) log.ok(`Hook scripts present (${GOR_MOBILE_TEMPLATES_DIR})`);
 }
 
 async function verboseHookEmulation(target: TargetSpec): Promise<void> {
@@ -145,7 +163,6 @@ async function verboseHookEmulation(target: TargetSpec): Promise<void> {
       input,
       env: {
         ...process.env,
-        GORM_FORCE_MOBILE: "1",
         GORM_SKILLS_DIR: target.skillsDir
       }
     });
@@ -238,13 +255,13 @@ function verboseSkillsFrontmatter(target: TargetSpec): void {
 async function checkAndroidContract(): Promise<void> {
   const smoke = await smokeTestContract();
   if (smoke.version === null) {
-    log.warn("android CLI version unreadable — run 'gor-mobile repair'");
+    log.warn("android CLI version unreadable — run 'gor-mobile setup'");
     return;
   }
   if (smoke.missing.length > 0) {
     log.err(`android CLI missing contract commands: ${smoke.missing.join(", ")} — update gor-mobile`);
   } else if (smoke.belowFloor) {
-    log.warn(`android CLI v${smoke.version} is below floor — run 'gor-mobile repair' to upgrade`);
+    log.warn(`android CLI v${smoke.version} is below floor — run 'gor-mobile setup' to upgrade`);
   } else {
     log.ok(`android CLI contract OK (v${smoke.version}, ${ANDROID_CONTRACT.length} commands)`);
   }
@@ -268,17 +285,10 @@ function verboseContractLint(target: TargetSpec): void {
   else log.warn(`bridge skill references commands NOT in contract: ${stray.join(", ")}`);
 }
 
-function doctorTargets(target?: string): TargetSpec[] {
-  if (target) return targetSpecs(parseTargetFlag(target));
-  const gm = detectGorMobileTargets();
-  if (gm.length > 0) return targetSpecs(gm);
-  const installed = detectInstalledTargets();
-  return targetSpecs(installed.length > 0 ? installed : ["claude"]);
-}
-
+// Skills/agents/hooks integrity for one target. Skips the managed-instructions
+// and status-line checks when the target does not carry them (project Claude).
 function checkTarget(target: TargetSpec): void {
-  log.step(`${target.label} integration`);
-  checkFile(target.hooksFile, target.hooksKind === "codex-hooks-json" ? "hooks.json" : "settings.json");
+  checkFile(target.hooksFile, target.hooksKind === "codex-hooks-json" ? "hooks.json" : "settings file");
   checkHooks(target);
   checkFile(target.agentsDir, "agents/");
   if (androidCliSkillInstalled(target.skillsDir)) {
@@ -298,14 +308,23 @@ function checkTarget(target: TargetSpec): void {
   } else {
     log.warn("gor-mobile-ast-index skill missing — run 'gor-mobile repair'");
   }
-  checkInstructionsSection(target);
+  if (target.instructionsFile) checkInstructionsSection(target);
   if (target.statusLineKind === "claude-command") checkStatusLine();
   else if (target.statusLineKind === "codex-config") checkCodexStatusLine();
 }
 
-export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
-  const targets = doctorTargets(opts.target);
+function checkProject(root: string): TargetSpec {
+  const marker = readProjectMarker(root);
+  log.ok(`.gor-mobile.json → platform=${marker.platform ?? "?"}, v${marker.version ?? "?"} (${root})`);
+  if (marker.version && marker.version !== GOR_MOBILE_VERSION) {
+    log.warn(`installed v${marker.version} ≠ CLI v${GOR_MOBILE_VERSION} — run 'gor-mobile init' to refresh`);
+  }
+  const spec = projectClaudeSpec(root);
+  checkTarget(spec);
+  return spec;
+}
 
+export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   log.step("Environment");
   reportDep("brew", which("brew"), false);
   reportDep("git", which("git"), true);
@@ -313,7 +332,7 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   reportDep("node", which("node"), true);
   reportDep("android", androidCliPath(), true);
   if (!androidCliPath()) {
-    log.info("  → run 'gor-mobile init' to install android CLI (hard-mandatory after v0.1.0)");
+    log.info("  → run 'gor-mobile setup' to install the android CLI (hard-mandatory)");
   } else {
     await checkAndroidContract();
   }
@@ -329,23 +348,31 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
       "  → jq powers the status line AND the ast-index guard hook (guard fails open without it) — brew install jq"
     );
   }
-  checkFile(
-    join(GOR_MOBILE_HOME, "templates", "detect-mobile-context.sh"),
-    "mobile-context detector"
-  );
 
-  for (const target of targets) {
-    checkTarget(target);
-  }
-
-  log.step("Rules pack");
+  log.step("Machine (~/.gor-mobile)");
+  checkHookTemplates();
   checkRulesPack();
-
-  log.step("Config");
   checkFile(GOR_MOBILE_CONFIG, "config.json");
 
+  const emulationTargets: TargetSpec[] = [];
+
+  const root = findProjectRoot();
+  log.step("Project (this repo)");
+  if (root) {
+    emulationTargets.push(checkProject(root));
+  } else {
+    log.info("No .gor-mobile.json in the current directory tree.");
+    log.info("  → cd into a mobile repo and run 'gor-mobile init' to install the workflow.");
+  }
+
+  if (agentHomeExists("codex")) {
+    log.step("Codex integration (user-level)");
+    checkTarget(TARGETS.codex);
+    emulationTargets.push(TARGETS.codex);
+  }
+
   if (opts.verbose) {
-    for (const target of targets) {
+    for (const target of emulationTargets) {
       log.step(`Hooks emulation (verbose) — ${target.label}`);
       await verboseHookEmulation(target);
       log.step(`Skills frontmatter (verbose) — ${target.label}`);
@@ -355,7 +382,7 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   }
 
   console.error("");
-  log.info("If anything is missing, run: gor-mobile repair");
+  log.info("If anything is missing, run: gor-mobile repair (project + codex) or gor-mobile setup (machine).");
   if (!opts.verbose) {
     log.info("Run 'gor-mobile doctor --verbose' for hook-payload dump.");
   }

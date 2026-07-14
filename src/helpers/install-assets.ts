@@ -20,22 +20,29 @@ import { ensureDir } from "./paths.js";
 
 export function copyHookTemplates(): void {
   ensureDir(GOR_MOBILE_TEMPLATES_DIR);
-  const names = [
+  const scripts = [
     "session-start-hook.sh",
     "user-prompt-submit-hook.sh",
     "ast-index-guard-hook.sh",
-    "detect-mobile-context.sh",
     "statusline-command.sh",
     "statusline-cat.sh"
   ];
-  for (const name of names) {
+  for (const name of scripts) {
     const src = join(gorMobileRoot(), "templates", name);
     const dst = join(GOR_MOBILE_TEMPLATES_DIR, name);
     copyFileSync(src, dst);
     chmodSync(dst, 0o755);
   }
-  const stale = join(GOR_MOBILE_TEMPLATES_DIR, "session-start-snippet.md");
-  if (existsSync(stale)) rmSync(stale);
+  // The SessionStart hook reads this as the former CLAUDE.md managed section and
+  // injects it — no file is written into the repo.
+  const snippet = "claude-md-snippet.md";
+  copyFileSync(join(gorMobileRoot(), "templates", snippet), join(GOR_MOBILE_TEMPLATES_DIR, snippet));
+
+  // v0.2.x artifacts that the new hooks no longer use.
+  for (const stale of ["session-start-snippet.md", "detect-mobile-context.sh"]) {
+    const p = join(GOR_MOBILE_TEMPLATES_DIR, stale);
+    if (existsSync(p)) rmSync(p);
+  }
 }
 
 function transformSkillBody(content: string): string {
