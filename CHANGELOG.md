@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+Review pipeline: fewer dispatches, no pinned Opus.
+
+- Per-task review is now ONE combined dispatch — spec compliance + code
+  quality as two sections of a single `gor-mobile-code-reviewer` pass, the
+  task's `Conforms to:` reference files attached once. The separate
+  spec-reviewer subagent is gone. On a 5-task plan: 12 review runs → 7.
+- The final full-implementation review dispatches the **deep** reviewer with
+  a cross-task focus (consistency between tasks, architecture drift,
+  duplication) instead of re-reviewing the whole diff a second time at
+  per-task altitude. Codex still runs exactly once per plan, at this gate.
+- `gor-mobile-code-reviewer-deep` runs on the session's main model
+  (`model: inherit`) instead of pinned `opus` — complex stages follow
+  whatever model the user set as their default. Prose "(Opus)" orchestrator
+  references across overlays replaced with "(session model)".
+- New surface tier: tasks whose TDD gate returned "not warranted" get a
+  `haiku` review (Codex: effort `low`) with a reduced checklist
+  (allowed-paths, compiles, diff shape).
+- Codex parity documented in the overlays: haiku → `low`, sonnet →
+  `medium`, session model → `high`; the standard reviewer TOML now pins
+  `model_reasoning_effort = "medium"` explicitly.
+
+Templates changed — run `gor-mobile repair` (and re-run `gor-mobile init`
+in each initialized repo) to pick up the new skills/agents.
+
 ## 0.3.1 — 2026-07-14
 
 - fix: `gor-mobile init --dry-run` no longer requires `gor-mobile setup` first.

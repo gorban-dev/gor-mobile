@@ -5,7 +5,7 @@
 [![homebrew](https://img.shields.io/badge/homebrew-gorban--dev%2Fgor--mobile-orange)](https://github.com/gorban-dev/homebrew-gor-mobile)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)]()
 
-A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Claude Code **and OpenAI Codex CLI**: a superpowers-style workflow (`brainstorm → plan → implement → review → verify`), a swappable rules pack, and two reviewer agents (Sonnet + Opus). Everything runs on the host agent itself — no external inference, no local model runtime.
+A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Claude Code **and OpenAI Codex CLI**: a superpowers-style workflow (`brainstorm → plan → implement → review → verify`), a swappable rules pack, and two reviewer agents (Sonnet + a deep one on the session's main model). Everything runs on the host agent itself — no external inference, no local model runtime.
 
 Two-level install (since v0.3.0): `gor-mobile setup` provisions the machine once (`~/.gor-mobile/` rules + hook scripts, the Android CLI, and the user-level Codex workflow under `~/.codex/`, honoring `$CODEX_HOME`); `gor-mobile init` installs the Claude workflow **per repo** under `<repo>/.claude/`. Skills are shared (cross-compatible `SKILL.md`); hooks, reviewer agents, and the global-instructions handling adapt to each agent's format. See [Targets](#targets-claude--codex).
 
@@ -197,8 +197,8 @@ automatically.
 ## How delegation works
 
 Skill overlays (e.g. `gor-mobile-subagent-driven-development/SKILL.md`)
-direct the main orchestrator (Opus) to dispatch routine coding work to
-Sonnet via Claude Code's own `Task` tool:
+direct the main orchestrator (the session's main model) to dispatch routine
+coding work to Sonnet via Claude Code's own `Task` tool:
 
 ```
 Task(
@@ -210,11 +210,14 @@ Task(
 
 The prompt carries an explicit allowed-paths list, 1–3 reference files from
 the rules pack, and the exact verification step the orchestrator will run
-afterwards. Opus stays in control of design decisions, verification, and
-anything the plan marks as "human review required". The Sonnet reviewer
-(`gor-mobile-code-reviewer`) handles routine reviews; the Opus reviewer
-(`gor-mobile-code-reviewer-deep`) takes large / security-sensitive diffs
-and explicit deep-review asks. When the OpenAI Codex plugin
+afterwards. The orchestrator stays in control of design decisions,
+verification, and anything the plan marks as "human review required". Each
+task gets one combined review (spec compliance + code quality in a single
+pass): the Sonnet reviewer (`gor-mobile-code-reviewer`) handles routine
+reviews, with a `haiku` downgrade for non-behavioral tasks; the deep reviewer
+(`gor-mobile-code-reviewer-deep`, `model: inherit` — the session's main
+model) takes large / security-sensitive diffs, explicit deep-review asks,
+and the cross-task-focused final review of a plan. When the OpenAI Codex plugin
 (`codex@openai-codex`) is installed, `requesting-code-review` adds a second,
 independent pass through Codex (standard `review`, or `adversarial-review`
 on the same escalation trigger) and merges its findings — a cross-model
@@ -242,9 +245,9 @@ which skills carry an Android-rules / Task(model=...) appendix.
 | `writing-plans` | superpowers | — |
 | `subagent-driven-development` | superpowers | rules + implementer → Sonnet |
 | `test-driven-development` | superpowers | rules + GREEN → Sonnet |
-| `executing-plans` | superpowers | task-loop classification (Sonnet / Opus) |
+| `executing-plans` | superpowers | task-loop classification (Sonnet / session model) |
 | `dispatching-parallel-agents` | superpowers | — |
-| `requesting-code-review` | superpowers | Sonnet reviewer default, Opus reviewer on escalation; optional Codex second opinion when `codex@openai-codex` is installed |
+| `requesting-code-review` | superpowers | Sonnet reviewer default, deep reviewer (session model) on escalation and for the final plan review; optional Codex second opinion when `codex@openai-codex` is installed |
 | `receiving-code-review` | superpowers | — |
 | `verification-before-completion` | superpowers | — |
 | `systematic-debugging` | superpowers | rules + Phase 2 evidence → Sonnet (read-only) |
@@ -261,8 +264,9 @@ phase→command mapping in one place.
 
 Agents:
 - `gor-mobile-code-reviewer` — Sonnet, dispatched via `requesting-code-review`.
-- `gor-mobile-code-reviewer-deep` — Opus, escalation path for large /
-  security-sensitive diffs.
+- `gor-mobile-code-reviewer-deep` — session model (`model: inherit`),
+  escalation path for large / security-sensitive diffs and the final
+  full-implementation review of a plan.
 
 ## Uninstall
 

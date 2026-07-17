@@ -66,14 +66,15 @@ The `<implementer-prompt>` must contain:
   specifies it). Restating code from a paraphrase is where standard widths,
   paddings, and named arguments silently vanish.
 
-> **Red Flag — STOP.** Dispatching an implementer or spec-reviewer prompt for
+> **Red Flag — STOP.** Dispatching an implementer or combined-review prompt for
 > a layer-touching task without its `Conforms to:` reference files attached.
 > This mandate has already been skipped silently in the field once — the
 > code-quality reviewer agents now independently check diff shape against
 > canonical examples, so a defect from a skipped dispatch still surfaces
 > downstream. Attach the files.
 
-**Escalate to Opus** (`model = "opus"`) when any of:
+**Escalate to the session model** (omit `model` — the subagent inherits the
+user's default main model) when any of:
 - The task carries a design decision (plan marks it as "design" or
   "human review required").
 - The subagent returns blocked/failed twice on the same scope.
@@ -81,6 +82,10 @@ The `<implementer-prompt>` must contain:
 
 Surface-level checks (lint-like summaries, "does this file compile-look
 right") can drop to `model = "haiku"` when explicitly called out.
+
+On Codex there is no per-dispatch model choice — the tiers map to
+`model_reasoning_effort`: haiku → `low`, sonnet → `medium`,
+session model → `high`.
 
 Always run the verification step yourself (orchestrator) after the
 subagent returns — do not trust its self-report. A Sonnet "DONE" without
@@ -113,36 +118,51 @@ pushes at their own discretion. If the user explicitly asks for a
 worktree or branch, run the requested git command — otherwise do
 nothing.
 
-### Review routing — the code-quality stage goes THROUGH requesting-code-review
+### Review routing — ONE combined review per task, Codex once at the end
 
-The process has two review stages per task. They route differently, and the
-distinction is load-bearing for the Codex second opinion:
+Each task gets exactly **one** review dispatch; the final full-implementation
+review routes through `requesting-code-review`. The distinction is
+load-bearing for the Codex second opinion:
 
-- **Spec-compliance review** (`./spec-reviewer-prompt.md`) — dispatch directly.
-  It checks the code against the task spec; no second model family needed. This
-  is also the gate that catches dropped modifiers / parameters (see Fidelity
-  note above) — have it compare modifier chains and argument lists against the
-  plan **verbatim**. Attach the **same reference files** the implementer
-  received (the task's `Conforms to:` files): the spec reviewer checks the
-  code against the task spec **and** the cited canonical shape — the plan is
-  not the sole yardstick.
-- **Code-quality review (per task)** — dispatch the gor-mobile reviewer
-  **directly**: `Agent(gor-mobile-code-reviewer)` (or `-deep` on the escalation
-  triggers — large diff, security/auth/payments/crypto/IPC, explicit deep-review
-  ask). Per-task checkpoints run the gor-mobile reviewer **only — no Codex**.
-  Codex reviewing half-built, mid-plan state at every task is low signal and the
+- **Combined per-task review** — dispatch `Agent(gor-mobile-code-reviewer)`
+  directly, once per task, with a prompt that carries BOTH checklists as two
+  separate report sections. Do **NOT** dispatch a separate spec reviewer —
+  the `./spec-reviewer-prompt.md` step from the skill body is folded into
+  section 1 here (override):
+  1. **Spec compliance** — code vs the task spec **verbatim**, including
+     modifier chains and argument lists (the Fidelity note above), against
+     the plan text, never a paraphrase.
+  2. **Code quality** — correctness, conventions, and diff shape vs the
+     cited canonical examples.
+  Attach the **same reference files** the implementer received (the task's
+  `Conforms to:` files) — they serve both sections; one load instead of two.
+  Per-task reviews run the gor-mobile reviewer **only — no Codex**. Codex
+  reviewing half-built, mid-plan state at every task is low signal and the
   main source of token/time overrun; it is deferred to one pass at the end.
+- **Tier by task category:**
+  - TDD-gate verdict was **not warranted** (wiring / DI / resources /
+    UI-flag — no behavioral logic) → downgrade the dispatch to
+    `model = "haiku"` (Codex: effort `low`) with a reduced checklist:
+    allowed-paths respected, compiles, diff shape vs the reference files.
+    Nothing else.
+  - Default → the reviewer agent's own model (Sonnet; Codex: `medium`).
+  - Escalation triggers (diff > ~400 LOC in one task,
+    security/auth/payments/crypto/IPC, explicit deep-review ask) →
+    `Agent(gor-mobile-code-reviewer-deep)`, which runs on the session model.
 
 **Final full-implementation review (after ALL tasks) — the one Codex gate.**
 When every plan task is implemented and verified, run a single final review over
 the complete diff through `Skill(gor-mobile-requesting-code-review)`. That skill
-owns the two-pass mandate — gor-mobile reviewer + Codex (when `$CODEX_COMPANION`
-resolves) — so Codex runs **exactly once per plan, here, on the finished
-implementation**, never per task. This final gate is mandatory: skipping it is
-the only way Codex would never run, which is a review failure.
+owns the two-pass mandate — the **deep** reviewer (session model) focused on
+cross-task properties (consistency between tasks, architecture drift,
+duplication, dead leftovers — NOT a re-check of findings the per-task reviews
+already approved) + Codex (when `$CODEX_COMPANION` resolves) — so Codex runs
+**exactly once per plan, here, on the finished implementation**, never per task.
+This final gate is mandatory: skipping it is the only way Codex would never run,
+which is a review failure.
 
-**Definition of done:** a per-task code-quality review is done when the
-gor-mobile reviewer approves. The plan is done when the final review (gor-mobile
+**Definition of done:** a per-task review is done when the combined gor-mobile
+review approves both sections. The plan is done when the final review (deep
 reviewer + Codex) has returned and its findings are addressed.
 
 **Tool disambiguation** (upstream bug obra/superpowers#1077): `requesting-code-review`

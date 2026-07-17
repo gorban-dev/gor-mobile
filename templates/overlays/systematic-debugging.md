@@ -11,8 +11,8 @@ Load `core` + `debug-*` sections from `$HOME/.gor-mobile/rules/` via
 
 ### Phase-to-model assignment
 
-- **Phase 1 — symptom narrowing.** Main orchestrator (Opus). Clarifying
-  what "broken" actually means is judgement work.
+- **Phase 1 — symptom narrowing.** Main orchestrator (session model).
+  Clarifying what "broken" actually means is judgement work.
 - **Phase 2 — evidence gathering.** Log scan, stack-trace reading,
   skimming unfamiliar modules for a suspect function — high-volume
   read-only work. Delegate to Sonnet with read-only tools only:
@@ -26,8 +26,8 @@ Load `core` + `debug-*` sections from `$HOME/.gor-mobile/rules/` via
   Instruct the subagent to use only Grep / Read / Glob and to return a
   structured report (findings + cited file:line references). No Edit,
   no Write.
-- **Phase 3 — hypothesis formation.** Main orchestrator (Opus). Causal
-  reasoning over the evidence is not worth a round-trip.
+- **Phase 3 — hypothesis formation.** Main orchestrator (session model).
+  Causal reasoning over the evidence is not worth a round-trip.
 - **Phase 4 — failing test + fix.** Before writing ANY failing test, this
   is **MANDATORY**: invoke `[[gor-mobile-test-driven-development]]` and run
   its **TDD applicability gate** against the *minimal* fix. The body's

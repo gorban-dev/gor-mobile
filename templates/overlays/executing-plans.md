@@ -22,7 +22,7 @@ For every task in the plan, in order:
 
     - Cross-module refactor, scope > 6 files, or the plan marks the task
       as "design decision" / "human review required" → do it yourself
-      (Opus).
+      (session model).
 3. Run the task's verification step yourself (Gradle, compile check). A
    subagent "DONE" without a passing verification is not done.
 4. Mark TodoWrite `completed`, advance.
@@ -39,7 +39,7 @@ test merely because the plan listed one, and never fabricate a new seam to test.
 - Build config (`gradle`, CI, release machinery).
 - Tasks the plan flags "design decision" or "human review required".
 - Anything where the allowed-paths list would balloon past ~6 files —
-  those go to Opus directly.
+  the orchestrator handles those itself (session model).
 
 ### Rules-pack usage
 Read section paths from `$HOME/.gor-mobile/rules/manifest.json → .sections`
@@ -56,7 +56,7 @@ the pack root
 names repo files directly. A layer whose line reads `Shape per user: <...>`
 contributes no reference file — quote that line in the prompt instead.
 Dispatching a layer-touching prompt without its reference files is a
-**dispatch defect**. Executing a layer-touching task yourself (Opus path)
+**dispatch defect**. Executing a layer-touching task yourself (session-model path)
 obeys the same
 contract: read the referenced files before writing code. A layer-touching
 task with no artifact line is a plan defect — stop and fix the plan (run
@@ -78,21 +78,32 @@ uncommitted modifications in the working tree until the user decides
 to commit. Verification (`./gradlew :<module>:test ...`) still runs
 after every task — that's correctness gating, not git state.
 
-### Review routing — gor-mobile reviewer per checkpoint, Codex once at the end
+### Review routing — one combined review per checkpoint, Codex once at the end
 
-Per-checkpoint code review runs the gor-mobile reviewer **directly** and
-**without Codex**: `Agent(gor-mobile-code-reviewer)` (or `-deep` on the
-escalation triggers — large diff, security/auth/payments/crypto/IPC, or an
-explicit deep-review ask). Codex reviewing mid-plan, half-built state at every
-checkpoint is low signal and the main source of token/time overrun.
+Per-checkpoint review is **one** dispatch of `Agent(gor-mobile-code-reviewer)`
+with both checklists in a single prompt, as two report sections: spec
+compliance (code vs the plan text **verbatim**, including modifier chains and
+argument lists) and code quality (correctness, conventions, diff shape vs the
+task's `Conforms to:` reference files — attach them once, they serve both
+sections). **No Codex per checkpoint** — Codex reviewing mid-plan, half-built
+state at every checkpoint is low signal and the main source of token/time
+overrun. Tier by task category: TDD-gate **not warranted** tasks (wiring / DI /
+resources — no behavioral logic) downgrade to `model = "haiku"` (Codex: effort
+`low`) with a reduced checklist (allowed-paths respected, compiles, diff
+shape); escalation triggers (large diff, security/auth/payments/crypto/IPC, an
+explicit deep-review ask) go to `Agent(gor-mobile-code-reviewer-deep)`, which
+runs on the session model.
 
 **One Codex gate, at the end.** After the last plan task is implemented and
 verified — during Complete Development, before you present completion options —
 run a single final review over the whole change through
 `Skill(gor-mobile-requesting-code-review)`. That skill owns the two-pass mandate
-(gor-mobile reviewer + Codex when `$CODEX_COMPANION` resolves), so Codex runs
-**exactly once per plan, here, on the finished implementation**. This final gate
-is mandatory: skipping it is the only way Codex never runs.
+— the **deep** reviewer (session model) focused on cross-task properties
+(consistency between tasks, architecture drift, duplication, dead leftovers —
+not a re-check of what per-checkpoint reviews approved) plus Codex when
+`$CODEX_COMPANION` resolves — so Codex runs **exactly once per plan, here, on
+the finished implementation**. This final gate is mandatory: skipping it is the
+only way Codex never runs.
 
 ### Android CLI — phase command mapping
 

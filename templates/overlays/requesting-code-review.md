@@ -48,10 +48,10 @@ Codex" and then not dispatching it is a review failure.
 the review of *finished* work: a standalone "review this" request, or the
 **final full-implementation review** after every task in a plan is done. That is
 the one place the Codex pass fires. Mid-plan **per-task / per-checkpoint**
-code-quality reviews in the `subagent-driven-development` and `executing-plans`
-flows do **not** invoke this skill — they dispatch
-`Agent(gor-mobile-code-reviewer)` directly (gor-mobile reviewer only) and defer
-Codex to this final gate. This is deliberate: Codex re-reviewing half-built
+reviews in the `subagent-driven-development` and `executing-plans`
+flows do **not** invoke this skill — they dispatch one **combined** per-task
+review (`Agent(gor-mobile-code-reviewer)`, spec compliance + code quality in
+a single pass) and defer Codex to this final gate. This is deliberate: Codex re-reviewing half-built
 mid-plan state at every checkpoint is the token/time overrun this removes. The
 guarantee is the inverse of the old one — Codex must run **at the end**, exactly
 once, and the flows' mandatory final-review step routes here to ensure it does.
@@ -65,15 +65,27 @@ Default path — dispatch the Sonnet reviewer:
 
     Task(subagent_type = "gor-mobile-code-reviewer", prompt = <review-prompt>)
 
-Escalate to the Opus reviewer when any of:
+Escalate to the deep reviewer when any of:
 - Diff exceeds ~400 LOC changed.
 - The change touches security, auth, payments, crypto, IPC, or binder code.
 - The user explicitly asks for a "deep" / "thorough" review.
+- This is the **final full-implementation review** of a plan (see below).
 
         Task(subagent_type = "gor-mobile-code-reviewer-deep", prompt = <review-prompt>)
 
 Both reviewers share a system prompt; the deep variant carries extra
-scrutiny instructions and runs on Opus.
+scrutiny instructions and runs on the session's main model
+(`model: inherit` — whatever the user set as their default), never a pinned
+model. On Codex the tiers map to reasoning effort instead: standard
+reviewer → `medium`, deep → `high`.
+
+**Final full-implementation review of a plan** (routed here by
+`subagent-driven-development` / `executing-plans` after all tasks pass):
+dispatch the **deep** reviewer, and direct its `<review-prompt>` at
+cross-task properties — consistency between tasks, architecture drift,
+duplication, dead leftovers. Do not re-litigate findings the per-task
+combined reviews already approved: per-task-scope issues were their job;
+the whole-diff synthesis is this pass's.
 
 ### Override: review the working tree, not a SHA range
 
@@ -183,7 +195,7 @@ this pass is `$CODEX_COMPANION` being empty (plugin absent).
    coverage.
 
 3. **Run the pass.** Pick the command by the *same* trigger that escalates
-   Sonnet → Opus above. Normal change → standard review:
+   Sonnet → deep above. Normal change → standard review:
 
         # dirty working tree (mid-cycle): no --base
         node "$CODEX_COMPANION" review "--wait"

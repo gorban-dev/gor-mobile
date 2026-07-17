@@ -90,7 +90,7 @@ from `$HOME/.gor-mobile/rules/` (always `core` + `architecture`; plus
 
 ### Stage-to-model assignment
 
-- **RED (write the failing test)** — main orchestrator (Opus). The
+- **RED (write the failing test)** — main orchestrator (session model). The
   assertion set is the contract; drafting it is judgement work.
 - **GREEN (make the failing test pass)** — delegate to Sonnet:
 
@@ -115,8 +115,8 @@ from `$HOME/.gor-mobile/rules/` (always `core` + `architecture`; plus
   ast-index → ask the user). Dispatching a layer-touching GREEN
   prompt without its reference shape is a **dispatch defect**.
 
-- **REFACTOR** — main orchestrator (Opus). Refactoring requires holistic
-  judgement across files the GREEN subagent wasn't scoped to see.
+- **REFACTOR** — main orchestrator (session model). Refactoring requires
+  holistic judgement across files the GREEN subagent wasn't scoped to see.
 
 After every GREEN dispatch, the orchestrator runs the Gradle test itself:
 `./gradlew :<module>:test --tests "*<Name>Test*"`.
