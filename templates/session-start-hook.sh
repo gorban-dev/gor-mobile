@@ -21,27 +21,30 @@ cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null || true)"
 [[ -n "$cwd" ]] || cwd="$PWD"
 src="$(printf '%s' "$input" | jq -r '.source // empty' 2>/dev/null || true)"
 
+# Repo root via the .gor-mobile.json marker walk. Claude mode gates injection
+# on it; both modes use it to locate the .gor-mobile/state checkpoint.
+root=""
+dir="$cwd"
+while [[ -n "$dir" && "$dir" != "/" ]]; do
+    if [[ -f "$dir/.gor-mobile.json" ]]; then root="$dir"; break; fi
+    [[ "$dir" == "$HOME" ]] && break
+    nd="$(dirname "$dir")"
+    [[ "$nd" == "$dir" ]] && break
+    dir="$nd"
+done
+
 platform=""
+[[ -n "$root" ]] && platform="$(jq -r '.platform // empty' "$root/.gor-mobile.json" 2>/dev/null || true)"
 if [[ -n "${GORM_SKILLS_DIR:-}" ]]; then
     # Codex user-level: always inject.
     skills_dir="$GORM_SKILLS_DIR"
 else
-    # Claude per-project: gate on the .gor-mobile.json marker.
-    root=""
-    dir="$cwd"
-    while [[ -n "$dir" && "$dir" != "/" ]]; do
-        if [[ -f "$dir/.gor-mobile.json" ]]; then root="$dir"; break; fi
-        [[ "$dir" == "$HOME" ]] && break
-        nd="$(dirname "$dir")"
-        [[ "$nd" == "$dir" ]] && break
-        dir="$nd"
-    done
+    # Claude per-project: no marker → stay silent.
     if [[ -z "$root" ]]; then
         printf '{}\n'
         exit 0
     fi
     skills_dir="$root/.claude/skills"
-    platform="$(jq -r '.platform // empty' "$root/.gor-mobile.json" 2>/dev/null || true)"
 fi
 
 SKILL_FILE="$skills_dir/gor-mobile-using-superpowers/SKILL.md"
@@ -80,6 +83,12 @@ if [[ -n "${root:-}" ]]; then
     state_dir="$root/.gor-mobile/state"
     cp_file="$(ls -t "$state_dir"/*.progress.md 2>/dev/null | head -1 || true)"
     if [[ -n "$cp_file" ]]; then
+        # A clear right after a checkpoint was written (< 60 min) is the
+        # writing-plans handoff — plan approved with "Yes, clear context" or a
+        # manual /clear after the fallback dialog — so rehydrate strictly.
+        # An old checkpoint on an unrelated /clear stays a soft pointer.
+        fresh=""
+        [[ -n "$(find "$cp_file" -mmin -60 2>/dev/null)" ]] && fresh=1
         if [[ "$src" == "compact" || "$src" == "resume" ]]; then
             checkpoint_block="<gor-mobile-resume>
 You are resuming a gor-mobile session after a compaction. A checkpoint exists at:
@@ -87,6 +96,17 @@ You are resuming a gor-mobile session after a compaction. A checkpoint exists at
 BEFORE anything else: read it and the plan/spec it references. Take task state
 from the checkpoint and the plan, NOT from the summary above. Continue from its
 'Next action'.
+</gor-mobile-resume>"
+        elif [[ "$src" == "clear" && -n "$fresh" ]]; then
+            checkpoint_block="<gor-mobile-resume>
+Context was cleared at the plan→execution boundary (the clear option was
+chosen at the writing-plans handoff). A fresh checkpoint exists at:
+  ${cp_file}
+BEFORE anything else: read it and the plan/spec it references, then start
+executing from its 'Next action' using the sub-skill named in the plan header
+(gor-mobile-subagent-driven-development unless the plan says otherwise). If the
+user's first message asks for something unrelated instead, do that and leave the
+checkpoint alone.
 </gor-mobile-resume>"
         else
             checkpoint_block="<gor-mobile-resume>

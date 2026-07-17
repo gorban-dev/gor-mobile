@@ -9,7 +9,7 @@ A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Cl
 
 Two-level install (since v0.3.0): `gor-mobile setup` provisions the machine once (`~/.gor-mobile/` rules + hook scripts, the Android CLI, and the user-level Codex workflow under `~/.codex/`, honoring `$CODEX_HOME`); `gor-mobile init` installs the Claude workflow **per repo** under `<repo>/.claude/`. Skills are shared (cross-compatible `SKILL.md`); hooks, reviewer agents, and the global-instructions handling adapt to each agent's format. See [Targets](#targets-claude--codex).
 
-> Status: `v0.3.0` — pre-release scaffolding, under active development on `main`. See `CHANGELOG.md`.
+> Status: `v0.3.2` — pre-release scaffolding, under active development on `main`. See `CHANGELOG.md`.
 
 ## Requirements
 
@@ -81,12 +81,14 @@ Installs the workflow into the current repository, locally (nothing committed):
   .claude/agents/gor-mobile-code-reviewer{,-deep}.md
   .claude/settings.local.json      # SessionStart + UserPromptSubmit + PreToolUse hooks
                                    # + enabledPlugins: superpowers disabled for this repo
+                                   # + showClearContextOnPlanAccept: plan-approval clear-context option
   .gor-mobile.json                 # marker: platform, version, install date
 ```
 
 - Hooks reference `~/.gor-mobile/templates/*.sh` by absolute path; `settings.local.json` is never committed by Claude Code, so no foreign-path problem. The **PreToolUse ast-index guard** denies bare-identifier `grep`/`rg` in ast-indexed repos (`.claude/rules/ast-index.md` present) and fails open otherwise.
 - No `CLAUDE.md` managed section: the former workflow pointers are injected by the SessionStart hook, keyed on the `.gor-mobile.json` marker (walk up from cwd). A repo with no marker injects nothing.
 - `superpowers@claude-plugins-official` is disabled in `settings.local.json` so the bundled upstream skills don't duplicate the `gor-mobile-*` copies. `--plugins figma,swagger-android,…` additionally enables named plugins for the repo.
+- `showClearContextOnPlanAccept` is enabled in `settings.local.json`: the writing-plans handoff exits through the plan-approval dialog, whose first option ("Yes, clear context") clears the planning context exactly once; the SessionStart hook then rehydrates execution from the `.gor-mobile/state/*.progress.md` checkpoint. Tracked in `.gor-mobile.json` `managed_settings`, removed on `uninstall --project` unless it was already on. Without plan-mode tools the skill falls back to a two-option dialog + manual `/clear` (Codex: `/compact`).
 - `.claude/`, `.gor-mobile/`, and `.gor-mobile.json` are added to `.git/info/exclude` (local ignore — no repo diff). If the folder is not a git repo, `init` offers `git init`; declining falls back to a committed `.gitignore` with a warning.
 - **Greenfield**: in an empty folder with no build markers, `init` asks the platform (Android / iOS) instead of guessing, then points you at `claude` to scaffold the project.
 - Idempotent: re-running refreshes copies and bumps the marker version.

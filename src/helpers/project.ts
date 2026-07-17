@@ -19,6 +19,8 @@ export interface ProjectMarker {
   installed_at?: string;
   /** enabledPlugins keys in settings.local.json that init wrote (for uninstall). */
   managed_plugins?: string[];
+  /** top-level settings.local.json keys that init turned on (for uninstall). */
+  managed_settings?: string[];
   [key: string]: unknown;
 }
 

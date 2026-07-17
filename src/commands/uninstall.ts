@@ -12,7 +12,9 @@ import { androidCliPath } from "../helpers/deps.js";
 import { removeEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
 import { findProjectRoot, readProjectMarker, removeLocalExclude } from "../helpers/project.js";
 import {
+  CLEAR_CONTEXT_ON_PLAN_ACCEPT,
   removeAstIndexGuardHook,
+  removeClearContextOnPlanAccept,
   removeSessionStartHook,
   removeUserPromptSubmitHook
 } from "../helpers/settings-merge.js";
@@ -84,6 +86,9 @@ async function uninstallProject(opts: UninstallOptions): Promise<void> {
   removeUserPromptSubmitHook(spec);
   removeAstIndexGuardHook(spec);
   removeEnabledPlugins(spec.hooksFile, marker.managed_plugins ?? [SUPERPOWERS_KEY]);
+  if ((marker.managed_settings ?? []).includes(CLEAR_CONTEXT_ON_PLAN_ACCEPT)) {
+    removeClearContextOnPlanAccept(spec.hooksFile);
+  }
   log.ok(`Hooks + plugin overrides removed (${spec.hooksFile})`);
 
   if (existsSync(spec.skillsDir)) {

@@ -25,6 +25,8 @@ import {
 } from "../helpers/project.js";
 import { readManifest } from "../helpers/rules-pack.js";
 import {
+  CLEAR_CONTEXT_ON_PLAN_ACCEPT,
+  enableClearContextOnPlanAccept,
   installAstIndexGuardHook,
   installSessionStartHook,
   installUserPromptSubmitHook
@@ -162,6 +164,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       `merge SessionStart + UserPromptSubmit + PreToolUse → ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` +
         (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
+      `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
       "android init → copy stock skill into .claude/skills, drop Claude-home copy",
       `write ${PROJECT_MARKER_NAME} (platform=${platform})`,
       `git exclude += ${EXCLUDE_ENTRIES.join(", ")}`
@@ -199,6 +202,14 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       : "Disabled duplicate superpowers plugin for this repo"
   );
 
+  const clearContextEnabled = enableClearContextOnPlanAccept(spec.hooksFile);
+  const managedSettings = clearContextEnabled
+    ? [...new Set([...(marker.managed_settings ?? []), CLEAR_CONTEXT_ON_PLAN_ACCEPT])]
+    : (marker.managed_settings ?? []);
+  if (clearContextEnabled) {
+    log.ok(`Enabled ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} (plan-approval "clear context" option)`);
+  }
+
   const android = await provisionProjectAndroidSkill(spec.skillsDir);
   if (android.installed) log.ok(`android-cli skill → ${spec.skillsDir}/android-cli/`);
   else if (!android.ran) log.warn("android CLI not on PATH — skipped android-cli skill (run 'gor-mobile setup')");
@@ -211,7 +222,8 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     platform,
     version: GOR_MOBILE_VERSION,
     installed_at: opts.now ?? marker.installed_at ?? new Date().toISOString().slice(0, 10),
-    managed_plugins: managedPlugins
+    managed_plugins: managedPlugins,
+    managed_settings: managedSettings
   };
   writeProjectMarker(root, nextMarker);
   log.ok(`Wrote ${PROJECT_MARKER_NAME}`);

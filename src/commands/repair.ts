@@ -20,6 +20,8 @@ import {
 } from "../helpers/install-assets.js";
 import { findProjectRoot, readProjectMarker, writeProjectMarker } from "../helpers/project.js";
 import {
+  CLEAR_CONTEXT_ON_PLAN_ACCEPT,
+  enableClearContextOnPlanAccept,
   installAstIndexGuardHook,
   installSessionStartHook,
   installUserPromptSubmitHook
@@ -85,7 +87,12 @@ async function repairProject(root: string): Promise<void> {
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
 
   const marker = readProjectMarker(root);
-  writeProjectMarker(root, { ...marker, version: GOR_MOBILE_VERSION });
+  const enabledNow = enableClearContextOnPlanAccept(spec.hooksFile);
+  const managedSettings = enabledNow
+    ? [...new Set([...(marker.managed_settings ?? []), CLEAR_CONTEXT_ON_PLAN_ACCEPT])]
+    : (marker.managed_settings ?? []);
+  if (enabledNow) log.ok(`Enabled ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} (plan-approval "clear context" option)`);
+  writeProjectMarker(root, { ...marker, version: GOR_MOBILE_VERSION, managed_settings: managedSettings });
   log.ok(`Marker refreshed (v${GOR_MOBILE_VERSION})`);
 }
 

@@ -125,6 +125,31 @@ export function removeAstIndexGuardHook(target: TargetSpec): void {
   removeHook(target.hooksFile, "PreToolUse");
 }
 
+// Claude Code's plan-approval dialog is the one place the harness clears
+// context exactly once, at the plan→execute seam ("Yes, clear context …").
+// The option is gated by this setting, off by default — the writing-plans
+// handoff relies on it, so init/repair enable it in settings.local.json.
+// If a future CLI drops the setting, the dialog simply loses the option and
+// the overlay's AskUserQuestion fallback still covers the seam.
+export const CLEAR_CONTEXT_ON_PLAN_ACCEPT = "showClearContextOnPlanAccept";
+
+/** Returns true if this run turned the setting on (false = already enabled). */
+export function enableClearContextOnPlanAccept(file: string): boolean {
+  const settings = ensureSettingsFile(file);
+  if (settings[CLEAR_CONTEXT_ON_PLAN_ACCEPT] === true) return false;
+  settings[CLEAR_CONTEXT_ON_PLAN_ACCEPT] = true;
+  writeJson(file, settings);
+  return true;
+}
+
+export function removeClearContextOnPlanAccept(file: string): void {
+  if (!existsSync(file)) return;
+  const settings = readJsonSafe<ManagedSettings>(file, {});
+  if (!(CLEAR_CONTEXT_ON_PLAN_ACCEPT in settings)) return;
+  delete settings[CLEAR_CONTEXT_ON_PLAN_ACCEPT];
+  writeJson(file, settings);
+}
+
 export function countManagedHooks(hookType: HookType, target: TargetSpec): number {
   const settings = readJsonSafe<ManagedSettings>(target.hooksFile, {});
   const entries = settings.hooks?.[hookType] ?? [];

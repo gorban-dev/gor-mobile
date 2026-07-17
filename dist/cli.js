@@ -5,7 +5,7 @@ import { Command } from "commander";
 import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-var GOR_MOBILE_VERSION = "0.3.1";
+var GOR_MOBILE_VERSION = "0.3.2";
 var HOME = homedir();
 var GOR_MOBILE_HOME = process.env.GOR_MOBILE_HOME ?? join(HOME, ".gor-mobile");
 var GOR_MOBILE_RULES_DIR = join(GOR_MOBILE_HOME, "rules");
@@ -157,6 +157,21 @@ function installAstIndexGuardHook(target) {
 }
 function removeAstIndexGuardHook(target) {
   removeHook(target.hooksFile, "PreToolUse");
+}
+var CLEAR_CONTEXT_ON_PLAN_ACCEPT = "showClearContextOnPlanAccept";
+function enableClearContextOnPlanAccept(file) {
+  const settings = ensureSettingsFile(file);
+  if (settings[CLEAR_CONTEXT_ON_PLAN_ACCEPT] === true) return false;
+  settings[CLEAR_CONTEXT_ON_PLAN_ACCEPT] = true;
+  writeJson(file, settings);
+  return true;
+}
+function removeClearContextOnPlanAccept(file) {
+  if (!existsSync2(file)) return;
+  const settings = readJsonSafe(file, {});
+  if (!(CLEAR_CONTEXT_ON_PLAN_ACCEPT in settings)) return;
+  delete settings[CLEAR_CONTEXT_ON_PLAN_ACCEPT];
+  writeJson(file, settings);
 }
 function countManagedHooks(hookType, target) {
   const settings = readJsonSafe(target.hooksFile, {});
@@ -1924,6 +1939,7 @@ async function cmdInit(opts = {}) {
       `install agents \u2192 ${spec.agentsDir}`,
       `merge SessionStart + UserPromptSubmit + PreToolUse \u2192 ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` + (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
+      `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
       "android init \u2192 copy stock skill into .claude/skills, drop Claude-home copy",
       `write ${PROJECT_MARKER_NAME} (platform=${platform})`,
       `git exclude += ${EXCLUDE_ENTRIES.join(", ")}`
@@ -1949,6 +1965,11 @@ async function cmdInit(opts = {}) {
   log.ok(
     extraPlugins.length > 0 ? `Plugins: disabled superpowers, enabled ${extraPlugins.join(", ")}` : "Disabled duplicate superpowers plugin for this repo"
   );
+  const clearContextEnabled = enableClearContextOnPlanAccept(spec.hooksFile);
+  const managedSettings = clearContextEnabled ? [.../* @__PURE__ */ new Set([...marker.managed_settings ?? [], CLEAR_CONTEXT_ON_PLAN_ACCEPT])] : marker.managed_settings ?? [];
+  if (clearContextEnabled) {
+    log.ok(`Enabled ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} (plan-approval "clear context" option)`);
+  }
   const android = await provisionProjectAndroidSkill(spec.skillsDir);
   if (android.installed) log.ok(`android-cli skill \u2192 ${spec.skillsDir}/android-cli/`);
   else if (!android.ran) log.warn("android CLI not on PATH \u2014 skipped android-cli skill (run 'gor-mobile setup')");
@@ -1959,7 +1980,8 @@ async function cmdInit(opts = {}) {
     platform,
     version: GOR_MOBILE_VERSION,
     installed_at: opts.now ?? marker.installed_at ?? (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
-    managed_plugins: managedPlugins
+    managed_plugins: managedPlugins,
+    managed_settings: managedSettings
   };
   writeProjectMarker(root, nextMarker);
   log.ok(`Wrote ${PROJECT_MARKER_NAME}`);
@@ -2482,7 +2504,10 @@ async function repairProject(root) {
   applyEnabledPlugins(spec.hooksFile, [], [SUPERPOWERS_KEY]);
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
   const marker = readProjectMarker(root);
-  writeProjectMarker(root, { ...marker, version: GOR_MOBILE_VERSION });
+  const enabledNow = enableClearContextOnPlanAccept(spec.hooksFile);
+  const managedSettings = enabledNow ? [.../* @__PURE__ */ new Set([...marker.managed_settings ?? [], CLEAR_CONTEXT_ON_PLAN_ACCEPT])] : marker.managed_settings ?? [];
+  if (enabledNow) log.ok(`Enabled ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} (plan-approval "clear context" option)`);
+  writeProjectMarker(root, { ...marker, version: GOR_MOBILE_VERSION, managed_settings: managedSettings });
   log.ok(`Marker refreshed (v${GOR_MOBILE_VERSION})`);
 }
 async function repairCodex(target) {
@@ -2576,6 +2601,9 @@ async function uninstallProject(opts) {
   removeUserPromptSubmitHook(spec);
   removeAstIndexGuardHook(spec);
   removeEnabledPlugins(spec.hooksFile, marker.managed_plugins ?? [SUPERPOWERS_KEY]);
+  if ((marker.managed_settings ?? []).includes(CLEAR_CONTEXT_ON_PLAN_ACCEPT)) {
+    removeClearContextOnPlanAccept(spec.hooksFile);
+  }
   log.ok(`Hooks + plugin overrides removed (${spec.hooksFile})`);
   if (existsSync18(spec.skillsDir)) {
     for (const entry of readdirSync8(spec.skillsDir)) {

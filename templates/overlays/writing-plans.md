@@ -117,24 +117,57 @@ no-automatic-git policy, code accumulates as uncommitted working-tree
 modifications and the user decides when to commit. Replace each "Commit" step
 with the task's verification step (Gradle test / compile / on-device check).
 
-### Context compaction — the planning seam (write the checkpoint, then compact)
+### Override: Execution Handoff — the clear-context seam (MANDATORY)
 
-The brainstorm→implement boundary is the cleanest point to shrink context: the
-spec and plan are complete ground truth by design, and the brainstorm transcript
-becomes dead weight. Before the Execution Handoff:
+The body's Execution Handoff is **replaced**. Never end planning with the
+body's two-option "Which approach?" prose. The plan→execute boundary is the
+cleanest point to shed context — spec, plan, and checkpoint on disk are
+complete ground truth; the planning transcript is dead weight — so **every**
+plan exits through a handoff that offers clearing.
 
-1. Write the initial checkpoint to
+1. **Write the initial checkpoint** — unconditionally, first — to
    `.gor-mobile/state/<plan-basename>.progress.md` (basename of the plan file,
    `.md` → `.progress.md`). Seed it with:
    - `Spec:` and `Plan:` — the two file paths.
    - A task table with every task `pending`.
-   - `Next action:` — Task 1.
-   Execution fills in decisions/deviations/touched-files later.
-2. If the brainstorm/planning phase was substantial (multiple rounds, large
-   exploration), tell the user in one line: "Checkpoint written — safe to run
-   `/compact` before execution; the SessionStart hook rehydrates from it."
-   gor-mobile cannot run `/compact` itself; the user (or Claude Code
-   auto-compact) triggers it, and it is safe either way because the checkpoint
-   is on disk. Skip the recommendation for a trivial short plan (nothing to shed).
+   - `Next action:` — Task 1, plus the execution mode (Subagent-Driven per
+     the plan header unless the user chose otherwise earlier).
+   Execution fills in decisions/deviations/touched-files later. This must be
+   on disk BEFORE the handoff: when the user picks the clear option, you do
+   not get another turn.
+2. **Hand off through plan mode** (primary path). Call `EnterPlanMode` (skip
+   if already in plan mode), then `ExitPlanMode`. Its plan argument is the
+   **handoff card**, not the full plan: goal (one line), `Spec:` / `Plan:` /
+   `Checkpoint:` file paths, task count, execution mode. The approval dialog's
+   first option — "Yes, clear context …" (enabled per-repo by `gor-mobile
+   init` via `showClearContextOnPlanAccept`) — makes the harness clear the
+   planning context exactly once and restart; the SessionStart hook (source
+   `clear`, fresh checkpoint) rehydrates and execution starts at Task 1 via
+   `[[gor-mobile-subagent-driven-development]]` (or
+   `[[gor-mobile-executing-plans]]` if the plan header says inline). A plain
+   "Yes" → same execution, this session, no clearing. "No, keep planning" →
+   back to editing.
+3. **Fallback — no plan-mode tools available** (tool absent or the call is
+   refused): show the same choice as a two-option AskUserQuestion dialog —
+   "Clear context & execute (recommended): you run `/clear`, the checkpoint
+   rehydrates execution at Task 1" / "Execute without clearing". If clear is
+   chosen, reply with exactly one line — "Checkpoint written — run `/clear`
+   now; execution resumes at Task 1 after rehydration." — and END YOUR TURN
+   (you cannot clear context yourself).
+4. **Codex:** no plan mode and no AskUserQuestion — ask the same two options
+   as a plain-text numbered question, then stop and wait; the clear analogue
+   is `/compact`.
+
+**If the whole session ran in user-initiated plan mode:** files are not
+writable before approval — skip step 1, put the full plan text (not the card)
+into `ExitPlanMode`, and make writing the plan file + checkpoint the plan's
+step 0, executed first thing after the handoff lands (post-clear the seeded
+plan text carries everything needed to do that).
+
+> **Red Flag — STOP.** Emitting the body's "Which approach?" question, ending
+> planning with prose, or skipping the handoff because the plan "looks short"
+> or the session "feels light". Checkpoint first, then the plan-approval
+> dialog (or its fallback) on every plan — the user decides whether to clear,
+> not you.
 
 <!-- END gor-mobile overlay -->

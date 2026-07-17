@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.2 — 2026-07-17
 
 Review pipeline: fewer dispatches, no pinned Opus.
 
@@ -22,6 +22,26 @@ Review pipeline: fewer dispatches, no pinned Opus.
 - Codex parity documented in the overlays: haiku → `low`, sonnet →
   `medium`, session model → `high`; the standard reviewer TOML now pins
   `model_reasoning_effort = "medium"` explicitly.
+- fix: the `/compact` offer at the plan→execution seam never surfaced — it was
+  a conditional one-liner appended after the body's Execution Handoff, so the
+  model reproduced the stock two-option handoff and skipped it (same
+  optional-step leak as v0.2.5). Replaced with a hybrid clear-context handoff:
+  - `init`/`repair` enable `showClearContextOnPlanAccept` in the repo's
+    `settings.local.json` (tracked in `.gor-mobile.json` `managed_settings`,
+    removed on `uninstall --project` unless the user already had it on).
+  - The writing-plans overlay replaces the Execution Handoff: checkpoint
+    written unconditionally, then `EnterPlanMode`/`ExitPlanMode` with a
+    handoff card — Claude Code's plan-approval dialog offers "Yes, clear
+    context" first and the harness clears exactly once, zero manual steps.
+  - Fallback when plan-mode tools are unavailable: a two-option
+    AskUserQuestion dialog ("Clear context & execute" / "Execute without
+    clearing") ending the turn with a one-line "run `/clear` now". Codex: the
+    same two options as a plain-text question, clear analogue `/compact`.
+  - The SessionStart hook gained a strict `clear` branch: a checkpoint
+    fresher than 60 min rehydrates execution from Task 1 (stale checkpoints
+    on unrelated `/clear` stay a soft pointer), and the marker walk-up now
+    also runs in Codex mode so the checkpoint block works after a Codex
+    compaction.
 
 Templates changed — run `gor-mobile repair` (and re-run `gor-mobile init`
 in each initialized repo) to pick up the new skills/agents.
