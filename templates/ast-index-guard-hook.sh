@@ -148,6 +148,37 @@ else
     done
 fi
 
+# Alternation of bare identifiers is N symbol queries in one pattern — the most
+# structural shape there is, yet it slips past is_bare_identifier because of the
+# metacharacter. Worse, the aggregate count invites attributing it to a single
+# branch (field case: a 3-name pattern counted ~30 files, reported as usages of
+# one function that had zero external callers). Split it into one query per name.
+alt="${pattern//\\|/|}"
+if [[ "$alt" == *"|"* ]]; then
+    IFS='|' read -r -a branches <<< "$alt"
+    all_bare=1
+    [[ ${#branches[@]} -ge 2 ]] || all_bare=0
+    if [[ "$all_bare" == 1 ]]; then
+        for b in "${branches[@]}"; do
+            is_bare_identifier "$b" || { all_bare=0; break; }
+        done
+    fi
+    if [[ "$all_bare" == 1 ]]; then
+        {
+            printf 'ast-index guard: "%s" is %d symbol queries in one pattern.\n' \
+                "$pattern" "${#branches[@]}"
+            printf 'An aggregate count cannot be attributed to a single branch.\n'
+            printf 'Ask one at a time:\n'
+            for b in "${branches[@]}"; do
+                printf '  ast-index usages %s --limit 1000\n' "$b"
+            done
+            printf 'A result equal to the limit is a lower bound, not a count —\n'
+            printf 're-run with a higher --limit.\n'
+        } >&2
+        exit 2
+    fi
+fi
+
 is_bare_identifier "$pattern" || exit 0
 
 cat >&2 <<EOF

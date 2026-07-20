@@ -87,6 +87,12 @@ assert_guard 2 "escaped quote + post-pipe noncode word still denies" \
         '{tool_name:"Bash",cwd:$cwd,tool_input:{command:$cmd}}')"
 assert_guard 2 "piped counting grep (leading structural query) → deny" \
     "$(bash_json "$indexed" "grep -c getFormatValue app.kt | wc -l")"
+assert_guard 2 "bash alternation of bare identifiers → deny" \
+    "$(bash_json "$indexed" "rg 'foo|bar' app/")"
+assert_guard 2 "Grep alternation of bare identifiers → deny" \
+    "$(grep_json "$indexed" "processError|onResponseError")"
+assert_guard 2 "escaped alternation, three branches → deny" \
+    "$(bash_json "$indexed" "grep -rn 'alpha\\\\|beta\\\\|gamma' app/")"
 
 # --- allow cases ---------------------------------------------------------------
 assert_guard 0 "no ast-index marker → allow" \
@@ -107,8 +113,12 @@ assert_guard 0 "bash grep into res/ path → allow" \
     "$(bash_json "$indexed" "grep -rn price_with_rouble res/")"
 assert_guard 0 "bash grep -A value flag + xml target → allow" \
     "$(bash_json "$indexed" "grep -A 3 price_with_rouble res/values/strings.xml")"
-assert_guard 0 "quoted regex alternation → allow" \
-    "$(bash_json "$indexed" "rg 'foo|bar' app/")"
+assert_guard 0 "mixed alternation (one branch is a regex) → allow" \
+    "$(grep_json "$indexed" "processError|R\\\\.string\\\\.foo")"
+assert_guard 0 "alternation of comment tags → allow" \
+    "$(bash_json "$indexed" "rg 'TODO|FIXME' app/")"
+assert_guard 0 "alternation with an empty branch → allow" \
+    "$(grep_json "$indexed" "foo||bar")"
 assert_guard 0 "comment tag TODO → allow" \
     "$(bash_json "$indexed" "rg TODO")"
 assert_guard 0 "docs/ path → allow" \
