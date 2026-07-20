@@ -73,27 +73,45 @@ printf '{"platform":"android"}\n' > "$idx_repo/.gor-mobile.json"
 printf 'stub skill\n' > "$idx_repo/.claude/skills/gor-mobile-using-superpowers/SKILL.md"
 
 STUB_BIN="$(mktemp -d)"
+# Real ast-index stream split (v3.38.0, measured by capturing stdout/stderr
+# separately): "Checking for changes..." and the "Updated: ..." /
+# "Index is up to date." summary go to stdout; "Loaded ...", "Found ..." and
+# "Time: ..." go to stderr. The hook must parse stdout's own vocabulary.
 cat > "$STUB_BIN/ast-index" <<'STUB'
 #!/bin/sh
 echo "Checking for changes..."
-echo "Found 42 new/changed files, 12 deleted files"
 echo "Updated: 54 files (42 changed, 12 deleted)"
+echo "Loaded 2 files from index" >&2
+echo "Found 42 new/changed files, 12 deleted files" >&2
+echo "Time: 9.856917ms" >&2
 STUB
 chmod +x "$STUB_BIN/ast-index"
 
 out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
     | PATH="$STUB_BIN:$PATH" bash "$HOOK" 2>/dev/null)"
-if printf '%s' "$out" | grep -q '42'; then
-    ok "stale index reports counts into context"
+if printf '%s' "$out" | grep -q '<gor-mobile-ast-index>'; then
+    ok "stale index (real stream split): note fires"
 else
-    bad "stale index did not report counts"
+    bad "stale index (real stream split): note missing"
+fi
+if printf '%s' "$out" | grep -q '42 changed'; then
+    ok "stale index (real stream split): changed count correct (42)"
+else
+    bad "stale index (real stream split): changed count wrong or missing"
+fi
+if printf '%s' "$out" | grep -q '12 deleted'; then
+    ok "stale index (real stream split): deleted count correct (12)"
+else
+    bad "stale index (real stream split): deleted count wrong or missing"
 fi
 
 cat > "$STUB_BIN/ast-index" <<'STUB'
 #!/bin/sh
 echo "Checking for changes..."
-echo "Found 0 new/changed files, 0 deleted files"
 echo "Index is up to date."
+echo "Loaded 2 files from index" >&2
+echo "Found 0 new/changed files, 0 deleted files" >&2
+echo "Time: 1.234ms" >&2
 STUB
 chmod +x "$STUB_BIN/ast-index"
 
@@ -105,6 +123,30 @@ if printf '%s' "$out" | grep -q '<gor-mobile-ast-index>'; then
     bad "fresh index must stay silent"
 else
     ok "fresh index stays silent"
+fi
+
+# Regression guard for the bug this suite used to certify: a stub that
+# prints the real "Found ..." summary ONLY to stderr, with no "Updated:"
+# line on stdout at all. Before the fix, the hook parsed this exact line —
+# but the real CLI only ever prints it to stderr, which the hook discards by
+# design, so the note could never fire against the real binary. The hook
+# must stay silent here, not invent counts from a line it never reads.
+cat > "$STUB_BIN/ast-index" <<'STUB'
+#!/bin/sh
+echo "Found 7 new/changed files, 3 deleted files" >&2
+STUB
+chmod +x "$STUB_BIN/ast-index"
+out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+    | PATH="$STUB_BIN:$PATH" bash "$HOOK" 2>/dev/null)"
+if printf '%s' "$out" | grep -q '<gor-mobile-ast-index>'; then
+    bad "Found-only-on-stderr, no Updated: line: must not invent counts"
+else
+    ok "Found-only-on-stderr, no Updated: line: hook stays silent"
+fi
+if printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
+    ok "Found-only-on-stderr, no Updated: line: still valid JSON"
+else
+    bad "Found-only-on-stderr, no Updated: line: invalid JSON"
 fi
 
 # A repo without the ast-index marker must not invoke the CLI at all.
@@ -132,7 +174,8 @@ err_file="$(mktemp)"
 
 cat > "$STUB_BIN/ast-index" <<'STUB'
 #!/bin/sh
-echo "Found 008 new/changed files, 003 deleted files"
+echo "Updated: 011 files (008 changed, 003 deleted)"
+echo "Found 008 new/changed files, 003 deleted files" >&2
 STUB
 chmod +x "$STUB_BIN/ast-index"
 out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
@@ -155,9 +198,10 @@ fi
 
 cat > "$STUB_BIN/ast-index" <<'STUB'
 #!/bin/sh
-echo "Found 5 new/changed files, 1 deleted files"
-echo "Found 5 new/changed files, 1 deleted files"
-echo "Found 5 new/changed files, 1 deleted files"
+echo "Updated: 6 files (5 changed, 1 deleted)"
+echo "Updated: 6 files (5 changed, 1 deleted)"
+echo "Updated: 6 files (5 changed, 1 deleted)"
+echo "Found 5 new/changed files, 1 deleted files" >&2
 STUB
 chmod +x "$STUB_BIN/ast-index"
 : > "$err_file"
@@ -250,7 +294,8 @@ fi
 # default and still emit exactly one valid JSON object on stdout, rc 0.
 cat > "$STUB_BIN/ast-index" <<'STUB'
 #!/bin/sh
-echo "Found 0 new/changed files, 0 deleted files"
+echo "Index is up to date."
+echo "Found 0 new/changed files, 0 deleted files" >&2
 STUB
 chmod +x "$STUB_BIN/ast-index"
 
@@ -282,7 +327,8 @@ done
 # even when the indexer had already exited by the time the watchdog looked.
 cat > "$STUB_BIN/ast-index" <<'STUB'
 #!/bin/sh
-echo "Found 0 new/changed files, 0 deleted files"
+echo "Index is up to date."
+echo "Found 0 new/changed files, 0 deleted files" >&2
 STUB
 chmod +x "$STUB_BIN/ast-index"
 start_fine="$(date +%s.%N)"
@@ -330,7 +376,8 @@ chmod +x "$FRAC_STUB_BIN/sleep"
 # before the poll loop even starts, so this alone exercises the shim.
 cat > "$STUB_BIN/ast-index" <<'STUB'
 #!/bin/sh
-echo "Found 0 new/changed files, 0 deleted files"
+echo "Index is up to date."
+echo "Found 0 new/changed files, 0 deleted files" >&2
 STUB
 chmod +x "$STUB_BIN/ast-index"
 out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \

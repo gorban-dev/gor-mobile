@@ -125,15 +125,22 @@ if [[ -n "$root" && -f "$root/.claude/rules/ast-index.md" ]] \
     ) 2>/dev/null || true
     upd="$(cat "$upd_out" 2>/dev/null || true)"
     rm -f "$upd_out"
-    # Only the first match: an indexer that logs more than one "Found ..."
+    # Parsed from stdout's own "Updated: <total> files (<changed> changed,
+    # <deleted> deleted)" line, not the "Found N new/changed files, M deleted
+    # files" summary — the real CLI prints that one to stderr, which this
+    # block discards by design (a noisy or crashing indexer must never leak
+    # into the hook). "Index is up to date." (the fresh-index case) has no
+    # "Updated:" line, so it falls through the same empty-match, no-note path
+    # below as a stub that prints nothing at all.
+    # Only the first match: an indexer that logs more than one "Updated: ..."
     # line must not turn changed/deleted into multi-line values (breaks the
     # arithmetic below with "syntax error in expression"). Both values are
     # validated as plain digit strings, then read in base 10 explicitly: a
     # leading-zero count like "008" would otherwise be parsed as octal and
     # abort with "value too great for base".
-    counts="$(printf '%s' "$upd" | grep -o 'Found [0-9]* new/changed files, [0-9]* deleted files' | head -n1 || true)"
-    changed="$(printf '%s' "$counts" | sed -n 's/Found \([0-9]*\) new.*/\1/p')"
-    deleted="$(printf '%s' "$counts" | sed -n 's/.*files, \([0-9]*\) deleted.*/\1/p')"
+    counts="$(printf '%s' "$upd" | grep -o 'Updated: [0-9]* files ([0-9]* changed, [0-9]* deleted)' | head -n1 || true)"
+    changed="$(printf '%s' "$counts" | sed -n 's/.*(\([0-9]*\) changed.*/\1/p')"
+    deleted="$(printf '%s' "$counts" | sed -n 's/.*, \([0-9]*\) deleted).*/\1/p')"
     if [[ "$changed" =~ ^[0-9]+$ && "$deleted" =~ ^[0-9]+$ ]] \
         && [[ $((10#$changed + 10#$deleted)) -gt 0 ]]; then
         ast_index_note="<gor-mobile-ast-index>
