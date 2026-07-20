@@ -86,8 +86,8 @@ device ops, replacing direct `adb` / `./gradlew` invocations.
 In Phase 2 (evidence gathering), prefer `[[gor-mobile-ast-index]]`
 queries over `Grep` when distilling stack traces or chasing call chains:
 
-- `ast-index usages "<Symbol>"` — every place the suspected symbol is
-  touched.
+- `ast-index usages "<Symbol>" --limit 1000` — every place the suspected
+  symbol is touched (the default `--limit 50` clips the headline count).
 - `ast-index callers "<function>"` — who calls a suspect function.
 - `ast-index implementations "<Interface>"` — to enumerate concrete
   paths when the trace lands on an interface.

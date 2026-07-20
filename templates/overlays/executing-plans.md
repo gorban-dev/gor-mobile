@@ -119,7 +119,8 @@ Before editing code for a task, locate the entry points via
 
 - `ast-index symbol "<Name>"` — exact class/function lookup.
 - `ast-index class "<Name>"` — class definition + supertype chain.
-- `ast-index usages "<Symbol>"` — every caller, for impact analysis.
+- `ast-index usages "<Symbol>" --limit 1000` — every caller, for impact
+  analysis (the default `--limit 50` clips the headline count).
 - `ast-index implementations "<Interface>"` — concrete classes for an
   interface (useful before adding a new variant).
 

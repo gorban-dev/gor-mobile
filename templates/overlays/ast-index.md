@@ -32,11 +32,13 @@ resources (`R.string.foo`), log messages, XML/manifest content, comments.
 
 ### Counting: the default limit truncates the answer
 
-`ast-index usages` defaults to `--limit 50`, and the limit clips the **headline
-number**, not just the listing: 70 real usages print as `Usages of 'X' (50)`.
-There is no ellipsis and no "showing 50 of 70". Always pass `--limit 1000`. If a
-result comes back exactly equal to the limit, that is a lower bound, not a
-count — re-run with a higher one.
+`ast-index usages` and `ast-index callers` both default to `--limit 50`, and
+the limit clips the **headline number**, not just the listing: 70 real usages
+print as `Usages of 'X' (50)`, and 70 real callers print as `Callers of 'X'
+(49)` — the callers headline caps one below the stated default, so "count
+equals the limit" is not a safe truncation check for it. There is no
+ellipsis and no "showing 50 of 70" for either command. Always pass `--limit
+1000` up front on both, rather than waiting for a suspicious-looking count.
 
 Never attribute a number obtained from a combined pattern to a single name. One
 symbol, one query, one number.
@@ -48,8 +50,17 @@ Subcommands split in two, and only the first half can go stale:
 - **Index-backed:** `symbol`, `class`, `hierarchy`, `implementations`,
   `outline`, `refs`, `module` / `deps` / `api`.
 - **grep-backed:** `usages`, `callers`, `extensions`, `suspend`, `flows`,
-  `composables`, `annotations`, `todo` — the "Code Patterns (grep-based)"
-  section of `ast-index --help`. Their output is tagged `Time: … (grep)`.
+  `composables`, `annotations`, `todo`.
+
+There is no way to recognise which bucket a subcommand falls into from
+`ast-index --help` or from its own output — don't infer it, rely on the list
+above. `--help` files `usages` under "Search & Navigation" next to
+`symbol`/`class`/`refs`, not under the "Code Patterns (grep-based)" heading
+it actually shares with the other seven. At runtime, only `usages` ever
+appends an `(indexed)`/`(grep)` suffix to its `Time: …` line, and that
+reflects whether that one query resolved from the index or fell back to
+grep, not a fixed per-command label; the other seven grep-backed commands
+always print a bare `Time: …ms` with no suffix at all.
 
 Two consequences worth stating outright:
 

@@ -244,9 +244,9 @@ cat >&2 <<EOF
 ast-index guard: "$pattern" looks like a structural symbol query, and this
 repo has ast-index initialized. grep undercounts symbols (field case: 14 vs
 24 usages, plus a missed extension function). Run instead:
-  ast-index usages "$pattern"       # every caller / reference
-  ast-index symbol "$pattern"       # definition lookup
-  ast-index implementations "<X>"   # interface -> concrete classes
+  ast-index usages "$pattern" --limit 1000  # every caller / reference
+  ast-index symbol "$pattern"               # definition lookup
+  ast-index implementations "<X>"           # interface -> concrete classes
 If this is genuinely a literal / resource / log-string search, re-run the
 grep restricted to non-code targets (e.g. glob for res/, *.xml, *.md), or
 use a pattern with regex metacharacters or dots (e.g. R\\.string\\.foo).

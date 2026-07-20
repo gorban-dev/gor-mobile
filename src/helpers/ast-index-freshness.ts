@@ -18,7 +18,16 @@ export async function runAstIndexUpdate(
 ): Promise<AstIndexDelta | null> {
   if (!astIndexPath()) return null;
   if (!existsSync(join(root, ".claude", "rules", "ast-index.md"))) return null;
-  const res = await execa("ast-index", ["update"], { cwd: root, reject: false });
+  // Bounded like the bash twin (templates/session-start-hook.sh's watchdog,
+  // default 10s): a wedged indexer must not hang `doctor`/`update` forever.
+  // `reject: false` means a timeout resolves (not throws) with `exitCode`
+  // left undefined, so the existing check below already treats it as a
+  // silent failure.
+  const res = await execa("ast-index", ["update"], {
+    cwd: root,
+    reject: false,
+    timeout: 10_000,
+  });
   if (res.exitCode !== 0) return null;
   // The "Found N new/changed files, M deleted files" line lands on stderr on
   // the real CLI (progress-style logging), while the terse "Checking for

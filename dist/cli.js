@@ -2226,7 +2226,11 @@ import { execa as execa6 } from "execa";
 async function runAstIndexUpdate(root) {
   if (!astIndexPath()) return null;
   if (!existsSync17(join12(root, ".claude", "rules", "ast-index.md"))) return null;
-  const res = await execa6("ast-index", ["update"], { cwd: root, reject: false });
+  const res = await execa6("ast-index", ["update"], {
+    cwd: root,
+    reject: false,
+    timeout: 1e4
+  });
   if (res.exitCode !== 0) return null;
   const combined = `${res.stdout}
 ${res.stderr}`;
