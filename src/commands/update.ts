@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { execa } from "execa";
 import { GOR_MOBILE_RULES_DIR } from "../constants.js";
 import { has } from "../helpers/deps.js";
+import { runAstIndexUpdate } from "../helpers/ast-index-freshness.js";
+import { findProjectRoot } from "../helpers/project.js";
 import { log } from "../ui/log.js";
 import { cmdRepair } from "./repair.js";
 
@@ -39,6 +41,17 @@ export async function cmdUpdate(): Promise<void> {
       } catch {
         // ignore parse errors
       }
+    }
+  }
+
+  const projectRoot = findProjectRoot();
+  if (projectRoot) {
+    const delta = await runAstIndexUpdate(projectRoot);
+    if (delta && delta.changed + delta.deleted > 0) {
+      log.step("Refreshing ast-index");
+      log.ok(`ast-index updated (${delta.changed} changed, ${delta.deleted} deleted)`);
+    } else if (delta) {
+      log.ok("ast-index up-to-date");
     }
   }
 

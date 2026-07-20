@@ -17,6 +17,7 @@ import { statusLineState } from "../helpers/settings-statusline.js";
 import { codexStatusLineState } from "../helpers/codex-statusline.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
+import { runAstIndexUpdate } from "../helpers/ast-index-freshness.js";
 import { findProjectRoot, readProjectMarker } from "../helpers/project.js";
 import { readManifest } from "../helpers/rules-pack.js";
 import {
@@ -337,6 +338,17 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
     await checkAndroidContract();
   }
   reportDep("ast-index", astIndexPath(), false);
+  const dRoot = findProjectRoot();
+  if (dRoot && astIndexPath()) {
+    const delta = await runAstIndexUpdate(dRoot);
+    if (delta && delta.changed + delta.deleted > 0) {
+      log.warn(
+        `ast-index was stale (${delta.changed} changed, ${delta.deleted} deleted) — refreshed just now`
+      );
+    } else if (delta) {
+      log.ok("ast-index database is fresh");
+    }
+  }
   if (!astIndexPath()) {
     log.info(
       "  → install: brew tap defendend/ast-index && brew install ast-index"
