@@ -65,6 +65,12 @@ if [[ -n "$root" && -f "$root/.claude/rules/ast-index.md" ]] \
     # Bound the subprocess: a hang here is worse than an error, since errors
     # are caught below but a hang blocks the session forever. GORM_AST_INDEX_
     # WATCHDOG_SECS overrides the 10s default (tests use a short value).
+    # Validated as a plain digit string before any arithmetic use, same as
+    # $changed/$deleted below: an identifier-shaped value (true/false/off/
+    # disabled/none/...) would otherwise hit bash arithmetic under `set -u`
+    # as an unset-variable reference — a fatal error even inside a `while`
+    # condition, since that's `set -u`, not `set -e` — and take the whole
+    # hook down, not just this block. Falls back to the 10s default.
     # `set -m` puts the backgrounded job in its own process group (pgid ==
     # its pid, since `exec` replaces the subshell instead of forking again),
     # so the watchdog can `kill` the *group* — a file-scanning indexer
@@ -72,14 +78,23 @@ if [[ -n "$root" && -f "$root/.claude/rules/ast-index.md" ]] \
     # would leave those running as orphans after the hook returns.
     upd_out="${TMPDIR:-/tmp}/gor-mobile-ast-index-update.$$"
     watchdog_secs="${GORM_AST_INDEX_WATCHDOG_SECS:-10}"
+    [[ "$watchdog_secs" =~ ^[0-9]+$ ]] || watchdog_secs=10
+    # Deciseconds, not seconds: an up-to-date index is the common, silent
+    # case, and the indexer has usually already exited by the time the
+    # watchdog first looks — polling at 1s granularity was taxing every
+    # session start ~1s just to notice that. `* 10` on a validated digit
+    # string can't overflow into anything pathological; watchdog_secs=0
+    # yields watchdog_ticks=0, so the loop body never runs and the process
+    # is killed immediately instead of looping.
+    watchdog_ticks=$((watchdog_secs * 10))
     (
         set -m
         (cd "$root" && exec ast-index update >"$upd_out" 2>/dev/null) &
         upd_pid=$!
-        waited=0
-        while kill -0 "$upd_pid" 2>/dev/null && [[ $waited -lt "$watchdog_secs" ]]; do
-            sleep 1
-            waited=$((waited + 1))
+        ticks=0
+        while kill -0 "$upd_pid" 2>/dev/null && [[ $ticks -lt "$watchdog_ticks" ]]; do
+            sleep 0.1
+            ticks=$((ticks + 1))
         done
         kill -9 -"$upd_pid" 2>/dev/null || true
         wait "$upd_pid" 2>/dev/null || true

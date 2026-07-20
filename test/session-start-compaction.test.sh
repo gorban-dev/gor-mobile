@@ -189,13 +189,25 @@ sleep 300
 STUB
 chmod +x "$STUB_BIN/ast-index"
 start_ts=$(date +%s)
+start_fine="$(date +%s.%N)"
 out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
     | PATH="$STUB_BIN:$PATH" GORM_AST_INDEX_WATCHDOG_SECS=1 bash "$HOOK" 2>/dev/null)"
+end_fine="$(date +%s.%N)"
 elapsed=$(( $(date +%s) - start_ts ))
 if [[ "$elapsed" -le 5 ]]; then
     ok "hanging indexer: hook returns bounded (${elapsed}s)"
 else
     bad "hanging indexer: hook took ${elapsed}s, watchdog did not bound it"
+fi
+# Fine-grained companion to the assertion above: the watchdog must fire at
+# approximately watchdog_secs (1s here), not noticeably sooner (which would
+# mean the poll granularity is too coarse in the other direction, tripping
+# early) and not much later (the bound above already catches "way later").
+fine_elapsed="$(awk -v s="$start_fine" -v e="$end_fine" 'BEGIN{printf "%.3f", e-s}')"
+if awk -v e="$fine_elapsed" 'BEGIN{exit !(e >= 0.8 && e <= 4.0)}'; then
+    ok "hanging indexer: watchdog fires at ~1s, not sooner (${fine_elapsed}s)"
+else
+    bad "hanging indexer: watchdog fired at ${fine_elapsed}s, expected ~0.8-4.0s"
 fi
 if printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
     ok "hanging indexer: still valid JSON"
@@ -228,6 +240,65 @@ if pgrep -f "sleep $orphan_secs" >/dev/null 2>&1; then
     pkill -9 -f "sleep $orphan_secs" >/dev/null 2>&1 || true
 else
     ok "hanging indexer: no orphan grandchild survives"
+fi
+
+# --- ast-index watchdog: malformed GORM_AST_INDEX_WATCHDOG_SECS ---------------
+# Identifier-shaped values are the dangerous case: under `set -u`, bash
+# arithmetic treats a bare identifier as a variable reference and aborts —
+# fatal even inside a `while` condition — taking the whole hook down with
+# it, not just this block. Every value here must fall back to the 10s
+# default and still emit exactly one valid JSON object on stdout, rc 0.
+cat > "$STUB_BIN/ast-index" <<'STUB'
+#!/bin/sh
+echo "Found 0 new/changed files, 0 deleted files"
+STUB
+chmod +x "$STUB_BIN/ast-index"
+
+for bad_val in true false disabled off none abc; do
+    out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+        | PATH="$STUB_BIN:$PATH" GORM_AST_INDEX_WATCHDOG_SECS="$bad_val" bash "$HOOK" 2>/dev/null)"
+    rc=$?
+    if [[ "$rc" -eq 0 ]] && printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
+        ok "watchdog secs '$bad_val' (identifier-shaped): rc 0, valid JSON"
+    else
+        bad "watchdog secs '$bad_val' (identifier-shaped): rc=$rc out='$out'"
+    fi
+done
+
+for bad_val in '10s' '-5' ''; do
+    out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+        | PATH="$STUB_BIN:$PATH" GORM_AST_INDEX_WATCHDOG_SECS="$bad_val" bash "$HOOK" 2>/dev/null)"
+    rc=$?
+    if [[ "$rc" -eq 0 ]] && printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
+        ok "watchdog secs '$bad_val' (non-numeric garbage): rc 0, valid JSON"
+    else
+        bad "watchdog secs '$bad_val' (non-numeric garbage): rc=$rc out='$out'"
+    fi
+done
+
+# --- ast-index watchdog: an up-to-date index must not cost a full second ------
+# The design intent is that an up-to-date index is the silent, cheap, normal
+# case. Polling liveness at 1s granularity taxed every session start ~1.05s
+# even when the indexer had already exited by the time the watchdog looked.
+cat > "$STUB_BIN/ast-index" <<'STUB'
+#!/bin/sh
+echo "Found 0 new/changed files, 0 deleted files"
+STUB
+chmod +x "$STUB_BIN/ast-index"
+start_fine="$(date +%s.%N)"
+out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+    | PATH="$STUB_BIN:$PATH" bash "$HOOK" 2>/dev/null)"
+end_fine="$(date +%s.%N)"
+fine_elapsed="$(awk -v s="$start_fine" -v e="$end_fine" 'BEGIN{printf "%.3f", e-s}')"
+if awk -v e="$fine_elapsed" 'BEGIN{exit !(e < 0.7)}'; then
+    ok "instant indexer: hook returns well under 1s (${fine_elapsed}s)"
+else
+    bad "instant indexer: hook took ${fine_elapsed}s, expected comfortably under 1s"
+fi
+if printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
+    ok "instant indexer: still valid JSON"
+else
+    bad "instant indexer: invalid JSON"
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
