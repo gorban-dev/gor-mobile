@@ -30,6 +30,36 @@ resources (`R.string.foo`), log messages, XML/manifest content, comments.
 > query wearing a text-search costume — run `ast-index usages/symbol`
 > instead.
 
+### Counting: the default limit truncates the answer
+
+`ast-index usages` defaults to `--limit 50`, and the limit clips the **headline
+number**, not just the listing: 70 real usages print as `Usages of 'X' (50)`.
+There is no ellipsis and no "showing 50 of 70". Always pass `--limit 1000`. If a
+result comes back exactly equal to the limit, that is a lower bound, not a
+count — re-run with a higher one.
+
+Never attribute a number obtained from a combined pattern to a single name. One
+symbol, one query, one number.
+
+### Where the tool stops being authoritative
+
+Subcommands split in two, and only the first half can go stale:
+
+- **Index-backed:** `symbol`, `class`, `hierarchy`, `implementations`,
+  `outline`, `refs`, `module` / `deps` / `api`.
+- **grep-backed:** `usages`, `callers`, `extensions`, `suspend`, `flows`,
+  `composables`, `annotations`, `todo` — the "Code Patterns (grep-based)"
+  section of `ast-index --help`. Their output is tagged `Time: … (grep)`.
+
+Two consequences worth stating outright:
+
+- An empty `symbol X` means "X is not a project symbol" — stdlib and library
+  symbols (`onSuccess` / `onFailure` on `kotlin.Result`) are simply not indexed.
+  It does not mean X does not exist.
+- `usages X` does not list occurrences inside the file where X is defined. For
+  "can this be made `internal` / deleted?" that is exactly right. For "how many
+  call sites are there?" it undercounts by every in-file call.
+
 ### Before searching: ensure the project is initialized
 
 If the current working directory looks like an Android repo
