@@ -22,7 +22,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "clean": "rm -rf dist",
-    "test": "bash test/hooks-idempotency.sh && bash test/statusline.sh && bash test/ast-index-guard.test.sh && bash test/session-start-compaction.test.sh"
+    "test": "bash test/hooks-idempotency.sh && bash test/statusline.sh && bash test/ast-index-guard.test.sh && bash test/session-start-compaction.test.sh && bash test/init-dir-gate.test.sh"
   },
   "repository": {
     "type": "git",

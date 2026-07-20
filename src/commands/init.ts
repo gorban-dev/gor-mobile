@@ -13,6 +13,7 @@ import { astIndexPath } from "../helpers/ast-index.js";
 import { applyEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
 import { installAgents, installSkills } from "../helpers/install-assets.js";
 import {
+  classifyDir,
   detectPlatform,
   ensureGitignoreFallback,
   ensureLocalExclude,
@@ -149,6 +150,43 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   console.log(pc.bold(pc.magenta(`gor-mobile init`)) + pc.dim(`  ·  ${root}`));
   if (reinit) log.info("Existing install found — refreshing (idempotent re-init).");
   if (opts.dryRun) log.info("DRY RUN — no changes will be made");
+
+  // Re-init and an explicit --platform both mean the user already answered the
+  // question this gate asks; a marker platform means we installed here before.
+  const gateApplies = !reinit && !marker.platform && !opts.platform;
+  if (gateApplies) {
+    const { shape, evidence } = classifyDir(root);
+    const why = evidence.join(", ");
+    if (opts.dryRun) {
+      if (shape === "foreign") log.warn(`would refuse: foreign directory (${why})`);
+      else if (shape === "empty") log.info("would prompt: empty directory (greenfield)");
+    } else if (shape === "foreign") {
+      if (opts.yes || !isTuiOn()) {
+        log.err(`This does not look like an Android/iOS project: ${why}.`);
+        log.info("Re-run with --platform android|ios if this is intentional.");
+        process.exit(1);
+      }
+      const proceed = await confirmStep(
+        `This does not look like an Android/iOS project (${why}). Install anyway?`,
+        false
+      );
+      if (!proceed) {
+        cancel("Cancelled");
+        process.exit(130);
+      }
+    } else if (shape === "empty" && !(opts.yes || !isTuiOn())) {
+      const proceed = await confirmStep(
+        "This folder is empty. Initialize it as a new project?",
+        true
+      );
+      if (!proceed) {
+        cancel("Cancelled");
+        process.exit(130);
+      }
+    } else if (shape === "empty") {
+      log.info("Empty folder — initializing as a greenfield project.");
+    }
+  }
 
   const platform = await resolvePlatform(root, opts, marker);
   log.info(`Platform: ${platform}`);

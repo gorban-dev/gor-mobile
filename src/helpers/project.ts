@@ -69,6 +69,55 @@ export function detectPlatform(root: string): ProjectPlatform | null {
   return null;
 }
 
+export type DirShape = "platform" | "empty" | "foreign";
+
+/** Entries that do not mean "there is already a project here". */
+const NEUTRAL_ENTRIES = new Set([
+  ".git",
+  ".gitignore",
+  ".DS_Store",
+  ".claude",
+  ".idea",
+  PROJECT_MARKER_NAME,
+  "README.md",
+  "LICENSE"
+]);
+
+const FOREIGN_MARKERS = [
+  "package.json",
+  "Cargo.toml",
+  "go.mod",
+  "pyproject.toml",
+  "Gemfile",
+  "composer.json"
+];
+
+/**
+ * Split what detectPlatform lumps into `null`: a deliberate greenfield folder
+ * versus somebody's Node/Rust/Go repo that gor-mobile has no business in.
+ */
+export function classifyDir(root: string): { shape: DirShape; evidence: string[] } {
+  if (detectPlatform(root)) return { shape: "platform", evidence: [] };
+  let entries: string[];
+  try {
+    entries = readdirSync(root);
+  } catch {
+    return { shape: "empty", evidence: [] };
+  }
+  const meaningful = entries.filter((e) => !NEUTRAL_ENTRIES.has(e));
+  if (meaningful.length === 0) return { shape: "empty", evidence: [] };
+  const found = meaningful.filter(
+    (e) => FOREIGN_MARKERS.includes(e) || e.endsWith(".csproj")
+  );
+  return {
+    shape: "foreign",
+    evidence:
+      found.length > 0
+        ? found
+        : [`${meaningful.length} files, no Android/iOS markers`]
+  };
+}
+
 /** Nearest enclosing git worktree root (dir containing .git). */
 export function findGitRoot(from: string): string | null {
   let dir = from;

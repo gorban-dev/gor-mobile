@@ -1778,6 +1778,42 @@ function detectPlatform(root) {
   }
   return null;
 }
+var NEUTRAL_ENTRIES = /* @__PURE__ */ new Set([
+  ".git",
+  ".gitignore",
+  ".DS_Store",
+  ".claude",
+  ".idea",
+  PROJECT_MARKER_NAME,
+  "README.md",
+  "LICENSE"
+]);
+var FOREIGN_MARKERS = [
+  "package.json",
+  "Cargo.toml",
+  "go.mod",
+  "pyproject.toml",
+  "Gemfile",
+  "composer.json"
+];
+function classifyDir(root) {
+  if (detectPlatform(root)) return { shape: "platform", evidence: [] };
+  let entries;
+  try {
+    entries = readdirSync5(root);
+  } catch {
+    return { shape: "empty", evidence: [] };
+  }
+  const meaningful = entries.filter((e) => !NEUTRAL_ENTRIES.has(e));
+  if (meaningful.length === 0) return { shape: "empty", evidence: [] };
+  const found = meaningful.filter(
+    (e) => FOREIGN_MARKERS.includes(e) || e.endsWith(".csproj")
+  );
+  return {
+    shape: "foreign",
+    evidence: found.length > 0 ? found : [`${meaningful.length} files, no Android/iOS markers`]
+  };
+}
 function findGitRoot(from) {
   let dir = from;
   while (true) {
@@ -1927,6 +1963,40 @@ async function cmdInit(opts = {}) {
   console.log(pc8.bold(pc8.magenta(`gor-mobile init`)) + pc8.dim(`  \xB7  ${root}`));
   if (reinit) log.info("Existing install found \u2014 refreshing (idempotent re-init).");
   if (opts.dryRun) log.info("DRY RUN \u2014 no changes will be made");
+  const gateApplies = !reinit && !marker.platform && !opts.platform;
+  if (gateApplies) {
+    const { shape, evidence } = classifyDir(root);
+    const why = evidence.join(", ");
+    if (opts.dryRun) {
+      if (shape === "foreign") log.warn(`would refuse: foreign directory (${why})`);
+      else if (shape === "empty") log.info("would prompt: empty directory (greenfield)");
+    } else if (shape === "foreign") {
+      if (opts.yes || !isTuiOn()) {
+        log.err(`This does not look like an Android/iOS project: ${why}.`);
+        log.info("Re-run with --platform android|ios if this is intentional.");
+        process.exit(1);
+      }
+      const proceed = await confirmStep(
+        `This does not look like an Android/iOS project (${why}). Install anyway?`,
+        false
+      );
+      if (!proceed) {
+        cancel4("Cancelled");
+        process.exit(130);
+      }
+    } else if (shape === "empty" && !(opts.yes || !isTuiOn())) {
+      const proceed = await confirmStep(
+        "This folder is empty. Initialize it as a new project?",
+        true
+      );
+      if (!proceed) {
+        cancel4("Cancelled");
+        process.exit(130);
+      }
+    } else if (shape === "empty") {
+      log.info("Empty folder \u2014 initializing as a greenfield project.");
+    }
+  }
   const platform = await resolvePlatform(root, opts, marker);
   log.info(`Platform: ${platform}`);
   if (opts.dryRun) {
