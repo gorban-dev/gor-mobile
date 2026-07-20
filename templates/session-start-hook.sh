@@ -33,42 +33,6 @@ while [[ -n "$dir" && "$dir" != "/" ]]; do
     dir="$nd"
 done
 
-# A stale index is worse than a missing one: it answers from the state the repo
-# was in at the last rebuild, and the answer is self-consistent. Refresh before
-# the first query of the session. Fail-open — a broken indexer must never take
-# the skill injection down with it (this file runs under `set -euo pipefail`).
-ast_index_note=""
-if [[ -n "$root" && -f "$root/.claude/rules/ast-index.md" ]] \
-    && command -v ast-index >/dev/null 2>&1; then
-    # Bound the subprocess: a hang here is worse than an error, since errors
-    # are caught below but a hang blocks the session forever. 10s, then kill.
-    upd_out="${TMPDIR:-/tmp}/gor-mobile-ast-index-update.$$"
-    (cd "$root" && exec ast-index update >"$upd_out" 2>/dev/null) &
-    upd_pid=$!
-    waited=0
-    while kill -0 "$upd_pid" 2>/dev/null && [[ $waited -lt 10 ]]; do
-        sleep 1
-        waited=$((waited + 1))
-    done
-    kill -9 "$upd_pid" 2>/dev/null || true
-    wait "$upd_pid" 2>/dev/null || true
-    upd="$(cat "$upd_out" 2>/dev/null || true)"
-    rm -f "$upd_out"
-    counts="$(printf '%s' "$upd" | grep -o 'Found [0-9]* new/changed files, [0-9]* deleted files' || true)"
-    changed="$(printf '%s' "$counts" | sed -n 's/Found \([0-9]*\) new.*/\1/p')"
-    deleted="$(printf '%s' "$counts" | sed -n 's/.*files, \([0-9]*\) deleted.*/\1/p')"
-    if [[ -n "$changed" && -n "$deleted" && $((changed + deleted)) -gt 0 ]]; then
-        ast_index_note="<gor-mobile-ast-index>
-The ast-index database was stale and has been refreshed: ${changed} changed
-files, ${deleted} deleted. Anything concluded in earlier sessions from the
-index-backed subcommands (symbol, class, hierarchy, implementations, outline,
-refs, module/deps/api) may have been built on the pre-refresh state — a changed
-file returned a false negative, a deleted one returned a phantom result with a
-path and a line number. Re-verify such conclusions before relying on them.
-</gor-mobile-ast-index>"
-    fi
-fi
-
 platform=""
 [[ -n "$root" ]] && platform="$(jq -r '.platform // empty' "$root/.gor-mobile.json" 2>/dev/null || true)"
 if [[ -n "${GORM_SKILLS_DIR:-}" ]]; then
@@ -87,6 +51,61 @@ SKILL_FILE="$skills_dir/gor-mobile-using-superpowers/SKILL.md"
 if [[ ! -f "$SKILL_FILE" ]]; then
     printf '{}\n'
     exit 0
+fi
+
+# A stale index is worse than a missing one: it answers from the state the repo
+# was in at the last rebuild, and the answer is self-consistent. Refresh before
+# the first query of the session. Fail-open — a broken indexer must never take
+# the skill injection down with it (this file runs under `set -euo pipefail`).
+# Only reached once we know the hook is actually going to inject something —
+# a repo with the marker but no SKILL_FILE exits above without paying for this.
+ast_index_note=""
+if [[ -n "$root" && -f "$root/.claude/rules/ast-index.md" ]] \
+    && command -v ast-index >/dev/null 2>&1; then
+    # Bound the subprocess: a hang here is worse than an error, since errors
+    # are caught below but a hang blocks the session forever. GORM_AST_INDEX_
+    # WATCHDOG_SECS overrides the 10s default (tests use a short value).
+    # `set -m` puts the backgrounded job in its own process group (pgid ==
+    # its pid, since `exec` replaces the subshell instead of forking again),
+    # so the watchdog can `kill` the *group* — a file-scanning indexer
+    # plausibly forks worker processes, and killing only the direct child
+    # would leave those running as orphans after the hook returns.
+    upd_out="${TMPDIR:-/tmp}/gor-mobile-ast-index-update.$$"
+    watchdog_secs="${GORM_AST_INDEX_WATCHDOG_SECS:-10}"
+    (
+        set -m
+        (cd "$root" && exec ast-index update >"$upd_out" 2>/dev/null) &
+        upd_pid=$!
+        waited=0
+        while kill -0 "$upd_pid" 2>/dev/null && [[ $waited -lt "$watchdog_secs" ]]; do
+            sleep 1
+            waited=$((waited + 1))
+        done
+        kill -9 -"$upd_pid" 2>/dev/null || true
+        wait "$upd_pid" 2>/dev/null || true
+    ) 2>/dev/null
+    upd="$(cat "$upd_out" 2>/dev/null || true)"
+    rm -f "$upd_out"
+    # Only the first match: an indexer that logs more than one "Found ..."
+    # line must not turn changed/deleted into multi-line values (breaks the
+    # arithmetic below with "syntax error in expression"). Both values are
+    # validated as plain digit strings, then read in base 10 explicitly: a
+    # leading-zero count like "008" would otherwise be parsed as octal and
+    # abort with "value too great for base".
+    counts="$(printf '%s' "$upd" | grep -o 'Found [0-9]* new/changed files, [0-9]* deleted files' | head -n1 || true)"
+    changed="$(printf '%s' "$counts" | sed -n 's/Found \([0-9]*\) new.*/\1/p')"
+    deleted="$(printf '%s' "$counts" | sed -n 's/.*files, \([0-9]*\) deleted.*/\1/p')"
+    if [[ "$changed" =~ ^[0-9]+$ && "$deleted" =~ ^[0-9]+$ ]] \
+        && [[ $((10#$changed + 10#$deleted)) -gt 0 ]]; then
+        ast_index_note="<gor-mobile-ast-index>
+The ast-index database was stale and has been refreshed: ${changed} changed
+files, ${deleted} deleted. Anything concluded in earlier sessions from the
+index-backed subcommands (symbol, class, hierarchy, implementations, outline,
+refs, module/deps/api) may have been built on the pre-refresh state — a changed
+file returned a false negative, a deleted one returned a phantom result with a
+path and a line number. Re-verify such conclusions before relying on them.
+</gor-mobile-ast-index>"
+    fi
 fi
 
 content=$(cat "$SKILL_FILE")

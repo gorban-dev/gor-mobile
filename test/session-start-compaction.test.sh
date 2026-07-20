@@ -125,5 +125,110 @@ else
     ok "unindexed repo does not run ast-index"
 fi
 
+# --- ast-index malformed-count parsing -----------------------------------------
+# A misbehaving indexer must not crash the arithmetic or leak raw bash errors
+# to stderr; the count line must be read as the first match only, in base 10.
+err_file="$(mktemp)"
+
+cat > "$STUB_BIN/ast-index" <<'STUB'
+#!/bin/sh
+echo "Found 008 new/changed files, 003 deleted files"
+STUB
+chmod +x "$STUB_BIN/ast-index"
+out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+    | PATH="$STUB_BIN:$PATH" bash "$HOOK" 2>"$err_file")"
+if printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
+    ok "leading-zero counts: still valid JSON"
+else
+    bad "leading-zero counts: invalid JSON"
+fi
+if printf '%s' "$out" | grep -q '<gor-mobile-ast-index>'; then
+    ok "leading-zero counts: note present (008/003 read as base 10, not octal)"
+else
+    bad "leading-zero counts: note missing"
+fi
+if [[ -s "$err_file" ]]; then
+    bad "leading-zero counts: stderr should be empty, got: $(cat "$err_file")"
+else
+    ok "leading-zero counts: no stderr noise"
+fi
+
+cat > "$STUB_BIN/ast-index" <<'STUB'
+#!/bin/sh
+echo "Found 5 new/changed files, 1 deleted files"
+echo "Found 5 new/changed files, 1 deleted files"
+echo "Found 5 new/changed files, 1 deleted files"
+STUB
+chmod +x "$STUB_BIN/ast-index"
+: > "$err_file"
+out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+    | PATH="$STUB_BIN:$PATH" bash "$HOOK" 2>"$err_file")"
+if printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
+    ok "repeated match lines: still valid JSON"
+else
+    bad "repeated match lines: invalid JSON"
+fi
+if printf '%s' "$out" | grep -q '<gor-mobile-ast-index>'; then
+    ok "repeated match lines: note present (first match used)"
+else
+    bad "repeated match lines: note missing"
+fi
+if [[ -s "$err_file" ]]; then
+    bad "repeated match lines: stderr should be empty, got: $(cat "$err_file")"
+else
+    ok "repeated match lines: no stderr noise"
+fi
+rm -f "$err_file"
+
+# --- ast-index watchdog: a hanging indexer must not hang the hook -------------
+# GORM_AST_INDEX_WATCHDOG_SECS overrides the hook's 10s default so this case
+# stays fast in CI; the hook's real-world default is unaffected.
+cat > "$STUB_BIN/ast-index" <<'STUB'
+#!/bin/sh
+sleep 300
+STUB
+chmod +x "$STUB_BIN/ast-index"
+start_ts=$(date +%s)
+out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+    | PATH="$STUB_BIN:$PATH" GORM_AST_INDEX_WATCHDOG_SECS=1 bash "$HOOK" 2>/dev/null)"
+elapsed=$(( $(date +%s) - start_ts ))
+if [[ "$elapsed" -le 5 ]]; then
+    ok "hanging indexer: hook returns bounded (${elapsed}s)"
+else
+    bad "hanging indexer: hook took ${elapsed}s, watchdog did not bound it"
+fi
+if printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
+    ok "hanging indexer: still valid JSON"
+else
+    bad "hanging indexer: invalid JSON"
+fi
+if printf '%s' "$out" | grep -q '<gor-mobile-ast-index>'; then
+    bad "hanging indexer: note should be absent"
+else
+    ok "hanging indexer: note absent"
+fi
+
+# --- ast-index watchdog: grandchildren must not survive as orphans ------------
+# A file-scanning indexer plausibly forks worker processes; killing only the
+# direct child would leave those running after the hook returns. Uses a
+# per-run sleep duration as a poor-man's unique marker for pgrep.
+orphan_secs=$((300 + ($$ % 90)))
+pkill -9 -f "sleep $orphan_secs" >/dev/null 2>&1 || true
+cat > "$STUB_BIN/ast-index" <<STUB
+#!/bin/sh
+sleep $orphan_secs &
+wait
+STUB
+chmod +x "$STUB_BIN/ast-index"
+printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+    | PATH="$STUB_BIN:$PATH" GORM_AST_INDEX_WATCHDOG_SECS=1 bash "$HOOK" >/dev/null 2>&1
+sleep 1
+if pgrep -f "sleep $orphan_secs" >/dev/null 2>&1; then
+    bad "hanging indexer: grandchild orphan survives (sleep $orphan_secs)"
+    pkill -9 -f "sleep $orphan_secs" >/dev/null 2>&1 || true
+else
+    ok "hanging indexer: no orphan grandchild survives"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
