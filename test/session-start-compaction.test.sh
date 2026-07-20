@@ -63,5 +63,67 @@ case "$out_none" in
     *) ok "no-checkpoint: no resume block" ;;
 esac
 
+# --- ast-index freshness ------------------------------------------------------
+# A stale index answers confidently and wrongly: a changed file yields a false
+# negative, a deleted one yields a phantom with a signature and a line number.
+idx_repo="$(mktemp -d)"
+mkdir -p "$idx_repo/.claude/rules" "$idx_repo/.claude/skills/gor-mobile-using-superpowers"
+printf '{"platform":"android"}\n' > "$idx_repo/.gor-mobile.json"
+: > "$idx_repo/.claude/rules/ast-index.md"
+printf 'stub skill\n' > "$idx_repo/.claude/skills/gor-mobile-using-superpowers/SKILL.md"
+
+STUB_BIN="$(mktemp -d)"
+cat > "$STUB_BIN/ast-index" <<'STUB'
+#!/bin/sh
+echo "Checking for changes..."
+echo "Found 42 new/changed files, 12 deleted files"
+echo "Updated: 54 files (42 changed, 12 deleted)"
+STUB
+chmod +x "$STUB_BIN/ast-index"
+
+out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+    | PATH="$STUB_BIN:$PATH" bash "$HOOK" 2>/dev/null)"
+if printf '%s' "$out" | grep -q '42'; then
+    ok "stale index reports counts into context"
+else
+    bad "stale index did not report counts"
+fi
+
+cat > "$STUB_BIN/ast-index" <<'STUB'
+#!/bin/sh
+echo "Checking for changes..."
+echo "Found 0 new/changed files, 0 deleted files"
+echo "Index is up to date."
+STUB
+chmod +x "$STUB_BIN/ast-index"
+
+out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+    | PATH="$STUB_BIN:$PATH" bash "$HOOK" 2>/dev/null)"
+# Match the note's own tag, not the bare word: the always-injected workflow
+# pointers already reference the [[gor-mobile-ast-index]] skill by name.
+if printf '%s' "$out" | grep -q '<gor-mobile-ast-index>'; then
+    bad "fresh index must stay silent"
+else
+    ok "fresh index stays silent"
+fi
+
+# A repo without the ast-index marker must not invoke the CLI at all.
+noidx="$(mktemp -d)"
+mkdir -p "$noidx/.claude/skills/gor-mobile-using-superpowers"
+printf '{"platform":"android"}\n' > "$noidx/.gor-mobile.json"
+printf 'stub skill\n' > "$noidx/.claude/skills/gor-mobile-using-superpowers/SKILL.md"
+cat > "$STUB_BIN/ast-index" <<'STUB'
+#!/bin/sh
+echo "Found 9 new/changed files, 9 deleted files"
+STUB
+chmod +x "$STUB_BIN/ast-index"
+out="$(printf '{"cwd":"%s","source":"startup"}' "$noidx" \
+    | PATH="$STUB_BIN:$PATH" bash "$HOOK" 2>/dev/null)"
+if printf '%s' "$out" | grep -q '9 new/changed'; then
+    bad "unindexed repo must not run ast-index"
+else
+    ok "unindexed repo does not run ast-index"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
