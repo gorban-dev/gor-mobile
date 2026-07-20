@@ -71,34 +71,58 @@ if [[ -n "$root" && -f "$root/.claude/rules/ast-index.md" ]] \
     # as an unset-variable reference — a fatal error even inside a `while`
     # condition, since that's `set -u`, not `set -e` — and take the whole
     # hook down, not just this block. Falls back to the 10s default.
-    # `set -m` puts the backgrounded job in its own process group (pgid ==
-    # its pid, since `exec` replaces the subshell instead of forking again),
-    # so the watchdog can `kill` the *group* — a file-scanning indexer
-    # plausibly forks worker processes, and killing only the direct child
-    # would leave those running as orphans after the hook returns.
     upd_out="${TMPDIR:-/tmp}/gor-mobile-ast-index-update.$$"
     watchdog_secs="${GORM_AST_INDEX_WATCHDOG_SECS:-10}"
     [[ "$watchdog_secs" =~ ^[0-9]+$ ]] || watchdog_secs=10
-    # Deciseconds, not seconds: an up-to-date index is the common, silent
-    # case, and the indexer has usually already exited by the time the
-    # watchdog first looks — polling at 1s granularity was taxing every
-    # session start ~1s just to notice that. `* 10` on a validated digit
-    # string can't overflow into anything pathological; watchdog_secs=0
-    # yields watchdog_ticks=0, so the loop body never runs and the process
-    # is killed immediately instead of looping.
-    watchdog_ticks=$((watchdog_secs * 10))
+    # Poll granularity is a latency optimization for the common already-fresh
+    # case, not a correctness guarantee: POSIX only promises whole-second
+    # `sleep`, and BusyBox / some minimal coreutils builds reject a fractional
+    # argument outright (nonzero exit). Probe once; fall back to 1s polling
+    # when fractions are rejected — the correct degradation, not a bug. Both
+    # modes scale watchdog_ticks so the bound still fires at approximately
+    # watchdog_secs.
+    poll_arg="0.1"
+    ticks_per_sec=10
+    if ! sleep 0.01 2>/dev/null; then
+        poll_arg="1"
+        ticks_per_sec=1
+    fi
+    # `* ticks_per_sec` on a validated digit string can't overflow into
+    # anything pathological; watchdog_secs=0 yields watchdog_ticks=0, so the
+    # loop body never runs and the process is killed immediately instead of
+    # looping.
+    watchdog_ticks=$((watchdog_secs * ticks_per_sec))
+    # This subshell must be incapable of aborting the hook, whatever happens
+    # inside it. `set -m` puts the backgrounded job in its own process group
+    # (pgid == its pid, since `exec` replaces the subshell instead of forking
+    # again), so the watchdog can `kill` the *group* — a file-scanning indexer
+    # plausibly forks worker processes, and killing only the direct child
+    # would leave those running as orphans after the hook returns. The `trap
+    # ... EXIT` is what makes that kill+wait cleanup unconditional: it fires
+    # on every way this subshell can end, including an early `set -e` abort
+    # from a broken command anywhere in the body (a rejected fractional
+    # `sleep` is exactly this shape) — not only the ordinary fall-through
+    # after the while loop. The trailing `|| true` on the subshell invocation
+    # is the other half of the guarantee: even if the subshell still exits
+    # nonzero after its own cleanup runs, that status dies right here and
+    # never reaches this script's own `set -e`.
     (
+        upd_pid=""
+        trap '
+            if [[ -n "$upd_pid" ]]; then
+                kill -9 -"$upd_pid" >/dev/null 2>&1 || true
+                wait "$upd_pid" >/dev/null 2>&1 || true
+            fi
+        ' EXIT
         set -m
         (cd "$root" && exec ast-index update >"$upd_out" 2>/dev/null) &
         upd_pid=$!
         ticks=0
         while kill -0 "$upd_pid" 2>/dev/null && [[ $ticks -lt "$watchdog_ticks" ]]; do
-            sleep 0.1
+            sleep "$poll_arg"
             ticks=$((ticks + 1))
         done
-        kill -9 -"$upd_pid" 2>/dev/null || true
-        wait "$upd_pid" 2>/dev/null || true
-    ) 2>/dev/null
+    ) 2>/dev/null || true
     upd="$(cat "$upd_out" 2>/dev/null || true)"
     rm -f "$upd_out"
     # Only the first match: an indexer that logs more than one "Found ..."

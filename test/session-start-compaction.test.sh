@@ -301,5 +301,132 @@ else
     bad "instant indexer: invalid JSON"
 fi
 
+# --- ast-index watchdog: fraction-rejecting `sleep` (BusyBox/minimal coreutils) --
+# `sleep 0.1` is not POSIX. On a system whose `sleep` rejects a fractional
+# argument, the old poll loop's `sleep 0.1` failed under the `set -euo
+# pipefail` inherited into the watchdog subshell, aborting the subshell
+# before its kill/wait cleanup ran — and the subshell's nonzero exit then
+# aborted the whole hook. Shimmed here as a `sleep` placed ahead of the real
+# one on PATH for the hook's own invocation only (never exported to the rest
+# of this script, so the harness's own timing calls below are unaffected).
+FRAC_STUB_BIN="$(mktemp -d)"
+cat > "$FRAC_STUB_BIN/sleep" <<'STUB'
+#!/bin/sh
+for arg in "$@"; do
+    case "$arg" in
+        *.*) echo "sleep: invalid time interval '$arg'" >&2; exit 1 ;;
+    esac
+done
+if [ -x /bin/sleep ]; then
+    exec /bin/sleep "$@"
+elif [ -x /usr/bin/sleep ]; then
+    exec /usr/bin/sleep "$@"
+fi
+exit 1
+STUB
+chmod +x "$FRAC_STUB_BIN/sleep"
+
+# Instant-indexer path: the watchdog's probe sleep runs unconditionally
+# before the poll loop even starts, so this alone exercises the shim.
+cat > "$STUB_BIN/ast-index" <<'STUB'
+#!/bin/sh
+echo "Found 0 new/changed files, 0 deleted files"
+STUB
+chmod +x "$STUB_BIN/ast-index"
+out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+    | PATH="$FRAC_STUB_BIN:$STUB_BIN:$PATH" bash "$HOOK" 2>/dev/null)"
+rc=$?
+if [[ "$rc" -eq 0 ]]; then
+    ok "fraction-rejecting sleep + instant indexer: hook exits 0"
+else
+    bad "fraction-rejecting sleep + instant indexer: exited $rc"
+fi
+if printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
+    ok "fraction-rejecting sleep + instant indexer: valid JSON"
+else
+    bad "fraction-rejecting sleep + instant indexer: invalid JSON, got: $out"
+fi
+
+# Hanging-indexer path: forces the fallback poll loop itself (not just the
+# probe) to run under the shim, bounded by a short watchdog.
+frac_orphan_secs=$((300 + (($$ + 1) % 90)))
+pkill -9 -f "sleep $frac_orphan_secs" >/dev/null 2>&1 || true
+cat > "$STUB_BIN/ast-index" <<STUB
+#!/bin/sh
+sleep $frac_orphan_secs
+STUB
+chmod +x "$STUB_BIN/ast-index"
+start_ts=$(date +%s)
+out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+    | PATH="$FRAC_STUB_BIN:$STUB_BIN:$PATH" GORM_AST_INDEX_WATCHDOG_SECS=1 bash "$HOOK" 2>/dev/null)"
+rc=$?
+elapsed=$(( $(date +%s) - start_ts ))
+if [[ "$rc" -eq 0 && "$elapsed" -le 5 ]]; then
+    ok "fraction-rejecting sleep + hanging indexer: hook exits 0, bounded (${elapsed}s)"
+else
+    bad "fraction-rejecting sleep + hanging indexer: rc=$rc elapsed=${elapsed}s"
+fi
+if printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
+    ok "fraction-rejecting sleep + hanging indexer: valid JSON"
+else
+    bad "fraction-rejecting sleep + hanging indexer: invalid JSON, got: $out"
+fi
+sleep 1
+if pgrep -f "sleep $frac_orphan_secs" >/dev/null 2>&1; then
+    bad "fraction-rejecting sleep + hanging indexer: orphan survives (sleep $frac_orphan_secs)"
+    pkill -9 -f "sleep $frac_orphan_secs" >/dev/null 2>&1 || true
+else
+    ok "fraction-rejecting sleep + hanging indexer: no orphan indexer survives"
+fi
+rm -rf "$FRAC_STUB_BIN"
+
+# --- ast-index watchdog: structural containment (Level 1) ---------------------
+# The watchdog subshell must be incapable of aborting the hook no matter what
+# fails inside it — not just the fractional-sleep case above. Proven directly:
+# take a disposable copy of the hook, inject a guaranteed-failing command
+# right after the indexer is backgrounded (so there is a real child to reap),
+# and confirm the hook still emits valid JSON and leaves no orphan. The
+# injection touches only the copy — the committed hook file is never modified.
+FAULT_HOOK="$(mktemp)"
+cp "$HOOK" "$FAULT_HOOK"
+# Portable in-place edit (works with both BSD and GNU sed): write to a temp
+# file and move it back, rather than relying on `sed -i` flag differences.
+FAULT_HOOK_TMP="$(mktemp)"
+sed 's/^        upd_pid=\$!$/        upd_pid=$!\n        gor_mobile_test_guaranteed_failure_xyz/' \
+    "$FAULT_HOOK" > "$FAULT_HOOK_TMP"
+mv "$FAULT_HOOK_TMP" "$FAULT_HOOK"
+if ! grep -q 'gor_mobile_test_guaranteed_failure_xyz' "$FAULT_HOOK"; then
+    bad "structural containment: fault injection anchor not found in hook copy"
+else
+    fault_secs=$((300 + (($$ + 2) % 90)))
+    pkill -9 -f "sleep $fault_secs" >/dev/null 2>&1 || true
+    cat > "$STUB_BIN/ast-index" <<STUB
+#!/bin/sh
+sleep $fault_secs
+STUB
+    chmod +x "$STUB_BIN/ast-index"
+    out="$(printf '{"cwd":"%s","source":"startup"}' "$idx_repo" \
+        | PATH="$STUB_BIN:$PATH" GORM_AST_INDEX_WATCHDOG_SECS=1 bash "$FAULT_HOOK" 2>/dev/null)"
+    rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+        ok "structural containment: hook exits 0 despite injected failure"
+    else
+        bad "structural containment: hook exited $rc"
+    fi
+    if printf '%s' "$out" | jq -e . >/dev/null 2>&1; then
+        ok "structural containment: valid JSON despite injected failure"
+    else
+        bad "structural containment: invalid JSON, got: $out"
+    fi
+    sleep 1
+    if pgrep -f "sleep $fault_secs" >/dev/null 2>&1; then
+        bad "structural containment: orphan survives (sleep $fault_secs)"
+        pkill -9 -f "sleep $fault_secs" >/dev/null 2>&1 || true
+    else
+        ok "structural containment: no orphan indexer survives injected failure"
+    fi
+fi
+rm -f "$FAULT_HOOK"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
