@@ -68,8 +68,12 @@ is_noncode_type() {
 }
 
 pattern=""
+dialect=""
 
 if [[ "$tool" == "Grep" ]]; then
+    # The Grep tool always runs on ripgrep's engine: bare | is alternation,
+    # \| is a literal pipe.
+    dialect="ere"
     pattern="$(jqr '.tool_input.pattern')"
     glob="$(jqr '.tool_input.glob')"
     path="$(jqr '.tool_input.path')"
@@ -116,6 +120,42 @@ else
     while [[ $idx -lt ${#words[@]} && "${words[$idx]}" == *=* ]]; do idx=$((idx+1)); done
     bin="${words[$idx]:-}"
     case "${bin##*/}" in grep|egrep|fgrep|rg) ;; *) exit 0 ;; esac
+    # Regex dialect decides which spelling of alternation is live: BRE
+    # (plain grep) treats \| as alternation and a bare | as a literal pipe
+    # character; ERE (grep -E/egrep), PCRE (grep -P) and rg's regex engine
+    # all invert that — bare | is alternation, \| is literal. Fixed strings
+    # (-F/fgrep) has no alternation in either spelling.
+    is_ere=0; is_fixed=0
+    case "${bin##*/}" in egrep) is_ere=1 ;; fgrep) is_fixed=1 ;; esac
+    for ((fpos=idx+1; fpos<${#words[@]}; fpos++)); do
+        fw="${words[$fpos]}"
+        case "$fw" in
+            --extended-regexp) is_ere=1 ;;
+            --fixed-strings) is_fixed=1 ;;
+            --perl-regexp) is_ere=1 ;;
+            --*) : ;;
+            -*)
+                fchars="${fw#-}"
+                for ((fci=0; fci<${#fchars}; fci++)); do
+                    fch="${fchars:$fci:1}"
+                    case "$fch" in
+                        E|P) is_ere=1 ;;
+                        F) is_fixed=1 ;;
+                    esac
+                    # A value-taking short option ends the bundle — anything
+                    # after it in this token is an attached value, not flags.
+                    case "$fch" in e|t|T|g|f|A|B|C|m|D|d) break ;; esac
+                done
+                ;;
+        esac
+    done
+    if [[ "$is_fixed" == 1 ]]; then
+        dialect="fixed"
+    elif [[ "${bin##*/}" == "rg" || "$is_ere" == 1 ]]; then
+        dialect="ere"
+    else
+        dialect="bre"
+    fi
     # First non-flag argument is the pattern, honoring -e/--regexp in both
     # separate and attached forms. Flags taking a SEPARATE value must not
     # have that value mistaken for the pattern; type/glob/include values
@@ -153,19 +193,38 @@ fi
 # metacharacter. Worse, the aggregate count invites attributing it to a single
 # branch (field case: a 3-name pattern counted ~30 files, reported as usages of
 # one function that had zero external callers). Split it into one query per name.
-alt="${pattern//\\|/|}"
-if [[ "$alt" == *"|"* ]]; then
-    IFS='|' read -r -a branches <<< "$alt"
+case "$dialect" in
+    bre)
+        # \| is alternation; a bare | is a literal pipe character, so it
+        # must never split the pattern. $'\x01' is unusable as an IFS
+        # separator on macOS's bash 3.2 (it silently fails to split) —
+        # \x02 splits correctly there and elsewhere.
+        delim=$'\x02'
+        alt="${pattern//\\|/$delim}"
+        ;;
+    ere)
+        # Bare | is alternation; protect escaped \| first so it isn't
+        # read as a delimiter — it's a literal pipe under this dialect.
+        delim='|'
+        esc=$'\x03'
+        alt="${pattern//\\|/$esc}"
+        ;;
+    *)
+        # Fixed strings (or an unrecognized dialect): no alternation at all.
+        delim=""
+        alt=""
+        ;;
+esac
+if [[ -n "$delim" && "$alt" == *"$delim"* ]]; then
+    IFS="$delim" read -r -a branches <<< "$alt"
     all_bare=1
     [[ ${#branches[@]} -ge 2 ]] || all_bare=0
-    if [[ "$all_bare" == 1 ]]; then
-        for b in "${branches[@]}"; do
-            is_bare_identifier "$b" || { all_bare=0; break; }
-        done
-    fi
+    for b in "${branches[@]}"; do
+        is_bare_identifier "$b" || { all_bare=0; break; }
+    done
     if [[ "$all_bare" == 1 ]]; then
         {
-            printf 'ast-index guard: "%s" is %d symbol queries in one pattern.\n' \
+            printf 'ast-index guard: "%s" are %d symbol queries in one pattern.\n' \
                 "$pattern" "${#branches[@]}"
             printf 'An aggregate count cannot be attributed to a single branch.\n'
             printf 'Ask one at a time:\n'

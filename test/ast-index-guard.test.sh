@@ -93,6 +93,16 @@ assert_guard 2 "Grep alternation of bare identifiers → deny" \
     "$(grep_json "$indexed" "processError|onResponseError")"
 assert_guard 2 "escaped alternation, three branches → deny" \
     "$(bash_json "$indexed" "grep -rn 'alpha\\\\|beta\\\\|gamma' app/")"
+assert_guard 2 "BRE escaped alternation, plain grep → deny" \
+    "$(bash_json "$indexed" "grep 'foo\\\\|bar' app/")"
+assert_guard 2 "ERE bare alternation, grep -E → deny" \
+    "$(bash_json "$indexed" "grep -E 'foo|bar' app/")"
+assert_guard 2 "ERE bare alternation, combined -rE → deny" \
+    "$(bash_json "$indexed" "grep -rE 'foo|bar' app/")"
+assert_guard 2 "ERE bare alternation, egrep → deny" \
+    "$(bash_json "$indexed" "egrep 'foo|bar' app/")"
+assert_guard 2 "PCRE bare alternation, grep -P → deny" \
+    "$(bash_json "$indexed" "grep -P 'foo|bar' app/")"
 
 # --- allow cases ---------------------------------------------------------------
 assert_guard 0 "no ast-index marker → allow" \
@@ -137,6 +147,24 @@ assert_guard 0 "other tool name → allow" \
     '{"tool_name":"Read","cwd":"'"$indexed"'","tool_input":{"file_path":"/x"}}'
 assert_guard 0 "malformed stdin → fail-open allow" 'not json at all'
 assert_guard 0 "empty stdin → fail-open allow" ''
+assert_guard 0 "BRE bare pipe is literal, plain grep → allow" \
+    "$(bash_json "$indexed" "grep 'foo|bar' app/")"
+assert_guard 0 "ERE escaped pipe is literal, grep -E → allow" \
+    "$(bash_json "$indexed" "grep -E 'foo\\\\|bar' app/")"
+assert_guard 0 "ERE escaped pipe is literal, egrep → allow" \
+    "$(bash_json "$indexed" "egrep 'foo\\\\|bar' app/")"
+assert_guard 0 "rg escaped pipe is literal → allow" \
+    "$(bash_json "$indexed" "rg 'foo\\\\|bar' app/")"
+assert_guard 0 "PCRE escaped pipe is literal, grep -P → allow" \
+    "$(bash_json "$indexed" "grep -P 'foo\\\\|bar' app/")"
+assert_guard 0 "fixed strings, fgrep bare pipe → allow" \
+    "$(bash_json "$indexed" "fgrep 'foo|bar' app/")"
+assert_guard 0 "fixed strings, grep -F bare pipe → allow" \
+    "$(bash_json "$indexed" "grep -F 'foo|bar' app/")"
+assert_guard 0 "fixed strings, grep -F escaped pipe still literal → allow" \
+    "$(bash_json "$indexed" "grep -F 'foo\\\\|bar' app/")"
+assert_guard 0 "Grep tool escaped pipe is literal, ripgrep engine → allow" \
+    "$(grep_json "$indexed" "foo\\\\|bar")"
 
 # non-absolute cwd must fail open FAST (regression: dirname "." hang)
 ( printf '{"tool_name":"Grep","cwd":".","tool_input":{"pattern":"getFormatValue"}}' \
