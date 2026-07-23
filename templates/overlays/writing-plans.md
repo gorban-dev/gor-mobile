@@ -5,33 +5,25 @@
 The skill body above runs verbatim. The following ADDS to it when the target
 is an Android/Kotlin codebase.
 
-### TDD applicability gate — per task, before baking in a test step (run this FIRST)
+### No test steps by default (run this FIRST)
 
 The body's task template hardcodes "**Step 1: Write the failing test**" and
-lists `TDD` under Remember. That test step is **not unconditional** — it is
-governed by the **TDD applicability gate** in
-`[[gor-mobile-test-driven-development]]`, the single source of truth for "does
-this change need a test." Bake the gate's *verdict* into each task instead of a
-blanket test step:
+lists `TDD` under Remember. The gor-mobile overlay **overrides this**: do NOT
+emit test steps. Plan each task around the implementation plus its verification
+step (`[[gor-mobile-verification-before-completion]]`, on-device per
+`[[gor-mobile-using-android-cli]]` where relevant) — never a "write the failing
+test" step.
 
-- For each task, while authoring the plan, run the gate (Q1 behavioral logic? /
-  Q2 harness reachable?) against that task's **minimal** change.
-- Verdict **applies** → write the failing-test step with real assertions, as
-  the body prescribes.
-- Verdict **not warranted** (UI-flag / wiring / DI / resources — no behavioral
-  logic) → do NOT write a test step. Record one line — `TDD skipped: <reason>` —
-  plus an explicit verification step
-  (`[[gor-mobile-verification-before-completion]]`, on-device per
-  `[[gor-mobile-using-android-cli]]` where relevant).
-- Verdict **deferred** (logic, but no harness) → no fabricated harness step;
-  note the gap for the user per the gate.
+The one exception is an **explicit user request** for tests. If the user asked
+for tests (for a specific task or the whole feature), plan a normal test step
+for the tasks it covers, with real assertions against behavior. Absent that
+request, tests are not part of the plan.
 
-> **Red Flag — STOP.** Emitting "Step 1: Write the failing test" into every task
-> by reflex, without running the gate. A plan that mandates a test for a
-> button-visibility / wiring task is the leak this gate closes — the executor
-> will then write that pointless test under the plan's authority. Never invent a
-> new seam (a flag, an extracted helper) in a task purely to make something
-> unit-testable; plan the minimal fix and gate it as-is.
+> **Red Flag — STOP.** Emitting "Step 1: Write the failing test" into a task by
+> reflex. The user did not ask for tests → the plan has no test step. Never
+> invent a new seam (a flag, an extracted helper) purely to make something
+> unit-testable; plan the minimal change and verify it, on-device where the
+> effect is only observable there.
 
 ### Docs-first gate (plan phase) — cite the API source in every step
 

@@ -246,7 +246,6 @@ which skills carry an Android-rules / Task(model=...) appendix.
 | `brainstorming` | superpowers | rules-pack pointer |
 | `writing-plans` | superpowers | — |
 | `subagent-driven-development` | superpowers | rules + implementer → Sonnet |
-| `test-driven-development` | superpowers | rules + GREEN → Sonnet |
 | `executing-plans` | superpowers | task-loop classification (Sonnet / session model) |
 | `dispatching-parallel-agents` | superpowers | — |
 | `requesting-code-review` | superpowers | Sonnet reviewer default, deep reviewer (session model) on escalation and for the final plan review; optional Codex second opinion when `codex@openai-codex` is installed |
@@ -258,10 +257,9 @@ which skills carry an Android-rules / Task(model=...) appendix.
 | `ast-index` | upstream `defendend/Claude-ast-index-search` v3.29.1 | Android-only scope, slash-command pointer (`/ast-index:initialize-android`), brew install hint |
 | `writing-skills` | superpowers | — |
 
-The 5 phase overlays (`brainstorming`, `executing-plans`,
-`systematic-debugging`, `test-driven-development`,
-`verification-before-completion`) each carry a one-line pointer at
-`[[gor-mobile-using-android-cli]]`, which holds the canonical
+The 4 phase overlays (`brainstorming`, `executing-plans`,
+`systematic-debugging`, `verification-before-completion`) each carry a one-line
+pointer at `[[gor-mobile-using-android-cli]]`, which holds the canonical
 phase→command mapping in one place.
 
 Agents:

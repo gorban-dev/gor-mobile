@@ -25,9 +25,9 @@ digraph STYLE_GUIDE {
         "Process complete" [shape=doublecircle];
 
         // Examples of each
-        "Is test passing?" [shape=diamond];
-        "Write test first" [shape=box];
-        "npm test" [shape=plaintext];
+        "Is the build green?" [shape=diamond];
+        "Run the linter" [shape=box];
+        "npm run build" [shape=plaintext];
         "I am stuck" [shape=ellipse];
         "NEVER use git add -A" [shape=octagon, style=filled, fillcolor=red, fontcolor=white];
     }

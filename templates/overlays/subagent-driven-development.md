@@ -94,15 +94,15 @@ a passing Gradle run is not DONE.
 Tests are Gradle:
 `./gradlew :<module>:test --tests "*<Name>Test*"`.
 
-### TDD step is gated (delta)
+### No test paths by default (delta)
 
-Before putting a **Test** path into the implementer prompt's allowed-paths, run
-the **TDD applicability gate** (`[[gor-mobile-test-driven-development]]`) for
-that task's change. Verdict **not warranted** (UI-flag / wiring / DI /
-resources — no behavioral logic) → omit the test from the prompt, record
-`TDD skipped: <reason>`, and rely on the verification step instead. A plan that
-hardcodes a test step does not override the gate; never instruct a subagent to
-fabricate a test — or a new seam to test — for a non-behavioral change.
+Do NOT put a **Test** path into the implementer prompt's allowed-paths. The
+subagent implements the change and the orchestrator runs the verification step
+— no test file. The only exception is an **explicit user request** for tests:
+then include the test path the user asked for. A plan that hardcodes a test
+step does not by itself justify one; never instruct a subagent to fabricate a
+test — or a new seam to test — for a change the user did not ask to have
+tested.
 
 Doc paths land in the gitignored project-local workspace:
 `.gor-mobile/specs/YYYY-MM-DD-<topic>-design.md`
@@ -140,8 +140,8 @@ load-bearing for the Codex second opinion:
   reviewing half-built, mid-plan state at every task is low signal and the
   main source of token/time overrun; it is deferred to one pass at the end.
 - **Tier by task category:**
-  - TDD-gate verdict was **not warranted** (wiring / DI / resources /
-    UI-flag — no behavioral logic) → downgrade the dispatch to
+  - **Non-behavioral** task (wiring / DI / resources / UI-flag — no
+    input→output or state-transition logic) → downgrade the dispatch to
     `model = "haiku"` (Codex: effort `low`) with a reduced checklist:
     allowed-paths respected, compiles, diff shape vs the reference files.
     Nothing else.

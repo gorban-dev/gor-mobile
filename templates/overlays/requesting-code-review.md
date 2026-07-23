@@ -90,8 +90,8 @@ the whole-diff synthesis is this pass's.
 ### Override: review the working tree, not a SHA range
 
 gor-mobile cycles do not commit between tasks (see the overlays for
-`executing-plans`, `subagent-driven-development`, and
-`test-driven-development`). The upstream reviewer prompt template at
+`executing-plans` and `subagent-driven-development`). The upstream reviewer
+prompt template at
 `requesting-code-review/code-reviewer.md` (and the dispatch templates
 referenced from `subagent-driven-development/*-reviewer-prompt.md`)
 assumes a `BASE_SHA..HEAD_SHA` range. With no commits, that range is

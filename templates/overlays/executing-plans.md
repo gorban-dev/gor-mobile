@@ -27,13 +27,12 @@ For every task in the plan, in order:
    subagent "DONE" without a passing verification is not done.
 4. Mark TodoWrite `completed`, advance.
 
-**A baked-in "write the failing test" step is gated.** If a task prescribes
-writing a failing test, that step is subordinate to the **TDD applicability
-gate** in `[[gor-mobile-test-driven-development]]` — run the gate for the
-task's change before executing the step. Verdict **not warranted** (UI-flag /
-wiring / no behavioral logic) → skip the test step, record
-`TDD skipped: <reason>`, and keep the task's verification step. Do not write a
-test merely because the plan listed one, and never fabricate a new seam to test.
+**Skip baked-in test steps unless the user asked for tests.** If a task
+prescribes writing a failing test (a leftover from the upstream body's
+template), do NOT execute it — implement the change and run the task's
+verification step instead. The only exception is an explicit user request for
+tests; if the user asked, write the test the task describes. Never write a test
+merely because the plan listed one, and never fabricate a new seam to test.
 
 ### What NOT to delegate
 - Build config (`gradle`, CI, release machinery).
@@ -87,12 +86,12 @@ argument lists) and code quality (correctness, conventions, diff shape vs the
 task's `Conforms to:` reference files — attach them once, they serve both
 sections). **No Codex per checkpoint** — Codex reviewing mid-plan, half-built
 state at every checkpoint is low signal and the main source of token/time
-overrun. Tier by task category: TDD-gate **not warranted** tasks (wiring / DI /
-resources — no behavioral logic) downgrade to `model = "haiku"` (Codex: effort
-`low`) with a reduced checklist (allowed-paths respected, compiles, diff
-shape); escalation triggers (large diff, security/auth/payments/crypto/IPC, an
-explicit deep-review ask) go to `Agent(gor-mobile-code-reviewer-deep)`, which
-runs on the session model.
+overrun. Tier by task category: **non-behavioral** tasks (wiring / DI /
+resources / UI-flag — no input→output or state-transition logic) downgrade to
+`model = "haiku"` (Codex: effort `low`) with a reduced checklist (allowed-paths
+respected, compiles, diff shape); escalation triggers (large diff,
+security/auth/payments/crypto/IPC, an explicit deep-review ask) go to
+`Agent(gor-mobile-code-reviewer-deep)`, which runs on the session model.
 
 **One Codex gate, at the end.** After the last plan task is implemented and
 verified — during Complete Development, before you present completion options —
