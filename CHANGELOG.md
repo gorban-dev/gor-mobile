@@ -1,25 +1,45 @@
 # Changelog
 
-## 0.3.3
+## 0.3.3 — 2026-07-24
 
-Требуется `gor-mobile repair` — меняются оба хука и оверлей ast-index.
+Requires `gor-mobile repair` — templates changed: the TDD skill is removed,
+both hook scripts and the ast-index overlays are updated.
 
-- guard: альтернация bare-идентификаторов (`a|b|c`) больше не проходит как
-  «регексп». Раньше это был документированный обход, а форма при этом самая
-  структурная из возможных — и агрегатный счёт по ней легко приписывался одной
-  ветви. Теперь deny с разбивкой на один запрос по символу.
-- SessionStart: протухший ast-index обновляется до первого запроса сессии.
-  Сообщает в контекст только когда было что чинить, с числами изменённых и
-  удалённых файлов.
-- `update` и `doctor` тоже обновляют и рапортуют свежесть индекса.
-- оверлей ast-index: `usages` по умолчанию режет счёт на 50 и печатает
-  обрезанное число как итоговое — теперь требуется `--limit 1000`. Плюс
-  разделение подкоманд на индексные и grep-based и два слепых пятна: пустой
-  `symbol` значит «символ не проектный», `usages` не видит вхождения в файле
-  определения.
-- `init` больше не ставится молча в любую папку: чужая экосистема
-  (`package.json`, `Cargo.toml`, …) отклоняется, пустая папка спрашивает
-  подтверждение. Обход — явный `--platform`.
+- **TDD removed — no tests unless the user asks.** Delete the
+  `test-driven-development` skill and its applicability gate. The
+  `writing-plans` / `executing-plans` / `systematic-debugging` /
+  `subagent-driven-development` overlays flip from "route through the TDD gate"
+  to "no test steps by default, only on explicit user request", and
+  `requesting-code-review` drops the gate reference. The RED-GREEN-REFACTOR
+  metaphor is scrubbed from the upstream bodies that named the deleted skill
+  (`writing-skills`, `testing-skills-with-subagents`, `using-superpowers`,
+  `systematic-debugging` Phase 4, `verification-before-completion`, the
+  implementer prompt) → BASELINE→WRITE→HARDEN. Review-tiering is preserved but
+  decoupled from the gate: the haiku downgrade now keys off the inline
+  "non-behavioral (wiring/DI/resources/UI-flag)" category. README skill
+  registry updated (5 → 4 phase overlays).
+- SessionStart refreshes a stale ast-index before the session's first request
+  and reports it to context only when there was something to fix, with counts
+  of changed and deleted files. The parse reads the indexer's own stdout
+  (`Updated: <total> files (<changed> changed, <deleted> deleted)`), not the
+  stderr line the block discards — an earlier draft grepped that discarded line,
+  so the note could never fire against the real binary while every stub passed.
+- `update` and `doctor` refresh the index too and report its freshness. The
+  freshness helper bounds the indexer at 10s so a wedged indexer can't hang
+  either command.
+- guard: bare-identifier alternation (`a|b|c`) no longer passes as a "regex".
+  It was a documented bypass, and the most structural form available — an
+  aggregate count over it was easy to pin on a single branch. Now denied
+  (dialect-aware), with a substitute one-request-per-symbol command.
+- ast-index overlay: `usages` and `callers` default to a 50-result limit and
+  print the clipped number as the total — use `--limit 1000` for the real
+  count. Plus the DB-vs-grep subcommand split corrected against ast-index 3.38.0
+  (only `usages` tags its Time line indexed/grep; the other seven never do) and
+  two blind spots: an empty `symbol` means "not a project symbol", and `usages`
+  misses occurrences inside the defining file.
+- `init` no longer installs silently into any folder: a foreign ecosystem
+  (`package.json`, `Cargo.toml`, …) is refused, an empty folder asks for
+  confirmation. Override with an explicit `--platform`.
 
 ## 0.3.2 — 2026-07-17
 

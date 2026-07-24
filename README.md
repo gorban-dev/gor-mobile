@@ -9,7 +9,7 @@ A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Cl
 
 Two-level install (since v0.3.0): `gor-mobile setup` provisions the machine once (`~/.gor-mobile/` rules + hook scripts, the Android CLI, and the user-level Codex workflow under `~/.codex/`, honoring `$CODEX_HOME`); `gor-mobile init` installs the Claude workflow **per repo** under `<repo>/.claude/`. Skills are shared (cross-compatible `SKILL.md`); hooks, reviewer agents, and the global-instructions handling adapt to each agent's format. See [Targets](#targets-claude--codex).
 
-> Status: `v0.3.2` — pre-release scaffolding, under active development on `main`. See `CHANGELOG.md`.
+> Status: `v0.3.3` — pre-release scaffolding, under active development on `main`. See `CHANGELOG.md`.
 
 ## Requirements
 
