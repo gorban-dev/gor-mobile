@@ -1,9 +1,21 @@
-# gor-mobile — Android-aware overlay installer for Claude Code and Codex
+<p align="center">
+  <img src=".github/assets/banner.png" alt="Camel — gor-mobile" width="100%">
+</p>
 
-[![release](https://img.shields.io/github/v/release/gorban-dev/gor-mobile?label=release&color=blue)](https://github.com/gorban-dev/gor-mobile/releases)
-[![license](https://img.shields.io/github/license/gorban-dev/gor-mobile)](./LICENSE)
-[![homebrew](https://img.shields.io/badge/homebrew-gorban--dev%2Fgor--mobile-orange)](https://github.com/gorban-dev/homebrew-gor-mobile)
-[![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)]()
+<h1 align="center">Camel</h1>
+
+<p align="center">
+  <b>Turn Claude Code &amp; Codex into a mobile engineer.</b><br>
+  Mobile-dev workflow overlay for Claude Code and OpenAI Codex CLI — Android/Kotlin-aware today.<br>
+  Install &amp; run as <code>gor-mobile</code>.
+</p>
+
+<p align="center">
+  <a href="https://github.com/gorban-dev/gor-mobile/releases"><img src="https://img.shields.io/github/v/release/gorban-dev/gor-mobile?label=release&color=blue" alt="release"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/gorban-dev/gor-mobile" alt="license"></a>
+  <a href="https://github.com/gorban-dev/homebrew-gor-mobile"><img src="https://img.shields.io/badge/homebrew-gorban--dev%2Fgor--mobile-orange" alt="homebrew"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey" alt="platform">
+</p>
 
 A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Claude Code **and OpenAI Codex CLI**: a superpowers-style workflow (`brainstorm → plan → implement → review → verify`), a swappable rules pack, and two reviewer agents (Sonnet + a deep one on the session's main model). Everything runs on the host agent itself — no external inference, no local model runtime.
 
