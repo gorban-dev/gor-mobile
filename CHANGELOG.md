@@ -19,6 +19,17 @@ Requires `gor-mobile repair` — templates changed.
   artifact inventory (counts, oldest age, TTL in effect) and warns about
   unmigrated flat checkpoints.
 
+- **SDD reviewer dispatches: no pre-judging, no filler directives, no
+  redundant test runs.** Three upstream dispatch rules land in the skill
+  body's Reviewing a Task and, pointedly, in the overlay's hand-assembled
+  combined-review prompt: never instruct a reviewer to ignore or downgrade
+  a specific issue ("do not flag", "don't treat X as a defect", "at most
+  Minor", "the plan chose" in a draft prompt = pre-judging to dodge a
+  review loop — suspected false positives get raised and adjudicated in
+  the loop instead); no open-ended directives ("check all uses") without a
+  concrete task-specific reason; and no asking the reviewer to re-run the
+  Gradle verification the orchestrator already ran green.
+
 - **SDD artifacts travel as files: task briefs, report files, review
   packages.** Ported the upstream superpowers file-passing design and
   adapted it to the no-commit model. Four scripts land in the SDD skill:

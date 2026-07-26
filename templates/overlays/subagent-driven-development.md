@@ -143,6 +143,13 @@ load-bearing for the Codex second opinion:
   snapshot..snapshot (`scripts/sdd-snapshot` BASE before dispatching the
   implementer, HEAD at DONE, `scripts/review-package` between them) — never
   a bare `git diff`, which shows every task's accumulated changes at once.
+  The body's three dispatch rules bind hardest here because this prompt is
+  assembled by hand: no pre-judging findings ("do not flag", "don't treat
+  X as a defect", "at most Minor", "the plan chose" in your draft — stop);
+  no open-ended directives ("check all uses", "run race tests if useful")
+  without a concrete task-specific reason; no asking the reviewer to
+  re-run the Gradle verification you already ran green — state that it
+  passed, the reviewer's job is code-level inspection.
   Per-task reviews run the gor-mobile reviewer **only — no Codex**. Codex
   reviewing half-built, mid-plan state at every task is low signal and the
   main source of token/time overrun; it is deferred to one pass at the end.

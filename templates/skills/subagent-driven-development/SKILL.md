@@ -150,6 +150,21 @@ review package — plus the global constraints that bind the task, copied
 verbatim from the plan. Never dispatch a reviewer without a review-package
 file.
 
+Three dispatch rules keep reviews honest:
+
+- **Do not pre-judge findings for the reviewer** — never instruct a
+  reviewer to ignore or not flag a specific issue. If you believe a
+  finding would be a false positive, let the reviewer raise it and
+  adjudicate it in the fix loop. If the prompt you are writing contains
+  "do not flag," "don't treat X as a defect," "at most Minor," or "the
+  plan chose" — stop: you are pre-judging, usually to spare yourself a
+  review loop.
+- Do not add open-ended directives like "check all uses" or "run race
+  tests if useful" without a concrete, task-specific reason.
+- Do not ask a reviewer to re-run tests already run on the same code —
+  the implementer's report (or your own verification run) carries the
+  test evidence; the reviewer's job is code-level inspection.
+
 ## Handling Implementer Status
 
 Implementer subagents report one of four statuses. Handle each appropriately:
