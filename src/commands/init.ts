@@ -25,6 +25,7 @@ import {
   type ProjectPlatform
 } from "../helpers/project.js";
 import { readManifest } from "../helpers/rules-pack.js";
+import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
   enableClearContextOnPlanAccept,
@@ -255,13 +256,19 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
 
   if (platform === "android") noteAstIndex(root);
 
+  const stateMigration = migrateStateLayout(root);
+  if (stateMigration.migrated.length > 0) {
+    log.ok(`Migrated ${stateMigration.migrated.length} checkpoint(s) → .gor-mobile/state/<plan>/progress.md`);
+  }
+
   const nextMarker: ProjectMarker = {
     ...marker,
     platform,
     version: GOR_MOBILE_VERSION,
     installed_at: opts.now ?? marker.installed_at ?? new Date().toISOString().slice(0, 10),
     managed_plugins: managedPlugins,
-    managed_settings: managedSettings
+    managed_settings: managedSettings,
+    artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };
   writeProjectMarker(root, nextMarker);
   log.ok(`Wrote ${PROJECT_MARKER_NAME}`);

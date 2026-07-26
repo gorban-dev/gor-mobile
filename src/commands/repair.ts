@@ -19,6 +19,7 @@ import {
   installSkills
 } from "../helpers/install-assets.js";
 import { findProjectRoot, readProjectMarker, writeProjectMarker } from "../helpers/project.js";
+import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
   enableClearContextOnPlanAccept,
@@ -86,13 +87,26 @@ async function repairProject(root: string): Promise<void> {
   applyEnabledPlugins(spec.hooksFile, [], [SUPERPOWERS_KEY]);
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
 
+  const stateMigration = migrateStateLayout(root);
+  if (stateMigration.migrated.length > 0) {
+    log.ok(`Migrated ${stateMigration.migrated.length} checkpoint(s) → .gor-mobile/state/<plan>/progress.md`);
+  }
+  for (const s of stateMigration.skipped) {
+    log.warn(`Left legacy ${s} in place — a workspace checkpoint already exists for that plan`);
+  }
+
   const marker = readProjectMarker(root);
   const enabledNow = enableClearContextOnPlanAccept(spec.hooksFile);
   const managedSettings = enabledNow
     ? [...new Set([...(marker.managed_settings ?? []), CLEAR_CONTEXT_ON_PLAN_ACCEPT])]
     : (marker.managed_settings ?? []);
   if (enabledNow) log.ok(`Enabled ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} (plan-approval "clear context" option)`);
-  writeProjectMarker(root, { ...marker, version: GOR_MOBILE_VERSION, managed_settings: managedSettings });
+  writeProjectMarker(root, {
+    ...marker,
+    version: GOR_MOBILE_VERSION,
+    managed_settings: managedSettings,
+    artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
+  });
   log.ok(`Marker refreshed (v${GOR_MOBILE_VERSION})`);
 }
 

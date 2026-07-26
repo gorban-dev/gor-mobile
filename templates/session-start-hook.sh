@@ -176,13 +176,95 @@ research/exec/verify phases — it owns the phase→CLI-command mapping and
 is authoritative for Android device ops."
 fi
 
+# Retention sweep: .gor-mobile plan artifacts are working files, not
+# documentation — anything worth keeping long-term lives in git. Delete
+# plans/specs/state entries untouched for artifact_ttl_days (marker field,
+# default 30; 0 disables). Freshness is linked through the plan slug: a plan
+# file, its workspace (state/<slug>/), and any spec its checkpoint references
+# live and die as one unit while any of them is fresh. Runs before the
+# checkpoint block so a just-pruned checkpoint is never advertised.
+retention_note=""
+if [[ -n "$root" ]]; then
+    ttl_days="$(jq -r '.artifact_ttl_days // empty' "$root/.gor-mobile.json" 2>/dev/null || true)"
+    [[ "$ttl_days" =~ ^[0-9]+$ ]] || ttl_days=30
+    gm="$root/.gor-mobile"
+    if [[ "$ttl_days" -gt 0 && -d "$gm" ]]; then
+        # 1) fresh slugs: plan file touched, workspace containing any recent
+        #    file, or legacy flat checkpoint touched — within the TTL window.
+        fresh_slugs=" "
+        for f in "$gm"/plans/*.md; do
+            [[ -e "$f" ]] || continue
+            [[ -n "$(find "$f" -mtime "-$ttl_days" 2>/dev/null)" ]] || continue
+            fresh_slugs="${fresh_slugs}$(basename "$f" .md) "
+        done
+        for d in "$gm"/state/*/; do
+            [[ -d "$d" ]] || continue
+            [[ -n "$(find "$d" -type f -mtime "-$ttl_days" -print -quit 2>/dev/null)" ]] || continue
+            fresh_slugs="${fresh_slugs}$(basename "$d") "
+        done
+        for f in "$gm"/state/*.progress.md; do
+            [[ -e "$f" ]] || continue
+            [[ -n "$(find "$f" -mtime "-$ttl_days" 2>/dev/null)" ]] || continue
+            fresh_slugs="${fresh_slugs}$(basename "$f" .progress.md) "
+        done
+        # 2) specs referenced by a fresh plan's checkpoint stay alive even
+        #    when their own mtime is old (specs are read, not rewritten).
+        protected_specs=" "
+        for p in "$gm"/state/*/progress.md "$gm"/state/*.progress.md; do
+            [[ -e "$p" ]] || continue
+            case "$p" in
+                */progress.md) slug="$(basename "$(dirname "$p")")" ;;
+                *) slug="$(basename "$p" .progress.md)" ;;
+            esac
+            [[ "$fresh_slugs" == *" $slug "* ]] || continue
+            while IFS= read -r ref; do
+                protected_specs="${protected_specs}$(basename "$ref") "
+            done < <(grep -o 'specs/[A-Za-z0-9._-]*\.md' "$p" 2>/dev/null | sort -u || true)
+        done
+        # 3) prune everything whose slug is stale.
+        pruned=0
+        for d in "$gm"/state/*/; do
+            [[ -d "$d" ]] || continue
+            [[ "$fresh_slugs" == *" $(basename "$d") "* ]] && continue
+            rm -rf "$d" 2>/dev/null || continue
+            pruned=$((pruned + 1))
+        done
+        for f in "$gm"/state/*.progress.md; do
+            [[ -e "$f" ]] || continue
+            [[ "$fresh_slugs" == *" $(basename "$f" .progress.md) "* ]] && continue
+            rm -f "$f" 2>/dev/null || continue
+            pruned=$((pruned + 1))
+        done
+        for f in "$gm"/plans/*.md; do
+            [[ -e "$f" ]] || continue
+            [[ "$fresh_slugs" == *" $(basename "$f" .md) "* ]] && continue
+            rm -f "$f" 2>/dev/null || continue
+            pruned=$((pruned + 1))
+        done
+        for f in "$gm"/specs/*.md; do
+            [[ -e "$f" ]] || continue
+            [[ -n "$(find "$f" -mtime "-$ttl_days" 2>/dev/null)" ]] && continue
+            [[ "$protected_specs" == *" $(basename "$f") "* ]] && continue
+            rm -f "$f" 2>/dev/null || continue
+            pruned=$((pruned + 1))
+        done
+        if [[ "$pruned" -gt 0 ]]; then
+            retention_note="<gor-mobile-retention>
+Session-start retention sweep removed ${pruned} stale plan artifact(s) —
+plans/specs/state under .gor-mobile/ untouched for ${ttl_days}+ days. Configure
+via \"artifact_ttl_days\" in .gor-mobile.json (0 disables the sweep).
+</gor-mobile-retention>"
+        fi
+    fi
+fi
+
 # Project-local checkpoint (written by the plan/execution skills on safe
 # boundaries). If present, point the session at it — strongly after a compact/
 # resume, softly otherwise — so state is rehydrated from disk, not the summary.
 checkpoint_block=""
 if [[ -n "${root:-}" ]]; then
     state_dir="$root/.gor-mobile/state"
-    cp_file="$(ls -t "$state_dir"/*.progress.md 2>/dev/null | head -1 || true)"
+    cp_file="$(ls -t "$state_dir"/*/progress.md "$state_dir"/*.progress.md 2>/dev/null | head -1 || true)"
     if [[ -n "$cp_file" ]]; then
         # A clear right after a checkpoint was written (< 60 min) is the
         # writing-plans handoff — plan approved with "Yes, clear context" or a
@@ -241,6 +323,10 @@ $checkpoint_block"
 [[ -n "$ast_index_note" ]] && injection="$injection
 
 $ast_index_note"
+
+[[ -n "$retention_note" ]] && injection="$injection
+
+$retention_note"
 
 jq -n --arg ctx "$injection" '{
     hookSpecificOutput: {

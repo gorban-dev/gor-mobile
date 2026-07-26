@@ -137,6 +137,12 @@ load-bearing for the Codex second opinion:
      cited canonical examples.
   Attach the **same reference files** the implementer received (the task's
   `Conforms to:` files) — they serve both sections; one load instead of two.
+  All other inputs travel as paths per the skill body's Reviewing a Task:
+  the task brief, the implementer's report file, and the per-task review
+  package. With no commits between tasks the package range is
+  snapshot..snapshot (`scripts/sdd-snapshot` BASE before dispatching the
+  implementer, HEAD at DONE, `scripts/review-package` between them) — never
+  a bare `git diff`, which shows every task's accumulated changes at once.
   Per-task reviews run the gor-mobile reviewer **only — no Codex**. Codex
   reviewing half-built, mid-plan state at every task is low signal and the
   main source of token/time overrun; it is deferred to one pass at the end.
@@ -176,14 +182,16 @@ load-bearing for the Codex second opinion:
   harness supports messaging a finished subagent; Codex cannot — there,
   every round is a fresh dispatch carrying the task text, the open
   findings, and the fix history (the skill body's fallback).
-- **Bookkeeping** lands in the existing checkpoint file
-  `.gor-mobile/state/<plan-basename>.progress.md` (see Context compaction
-  below): the per-round `Task <N>: fix round <R>/5 (…)` line, deferred
-  minors, parked rulings, and `Task <N>: BLOCKED — <reason>`. There is no
-  separate ledger.
+- **Bookkeeping** lands in the checkpoint file
+  `.gor-mobile/state/<plan-basename>/progress.md` inside the plan
+  workspace (see Context compaction below): the per-round
+  `Task <N>: fix round <R>/5 (…)` line, deferred minors, parked rulings,
+  and `Task <N>: BLOCKED — <reason>`. There is no separate ledger.
 - **No commits between rounds** (the override above stands): fix diffs
   accumulate uncommitted like task diffs, so the re-review scopes by the
-  findings list and the files the fix touched — never by commit ranges.
+  fix-range review package — `scripts/sdd-snapshot` after the fix,
+  `scripts/review-package` from the snapshot the previous review saw —
+  never by commit ranges.
 
 **Final full-implementation review (after ALL tasks) — the one Codex gate.**
 When every plan task is implemented and verified, run a single final review over
@@ -204,6 +212,12 @@ reviewer + Codex) has returned and its findings are addressed; point that
 final review at the checkpoint's deferred-minor and parked lines so it can
 triage which must be fixed before merge.
 
+**After the final review:** append the completion entry to the checkpoint
+(`all tasks complete, final review clean`) and leave every artifact in
+place — no manual cleanup. The SessionStart retention sweep deletes plan
+artifacts (plan, spec, workspace) once nothing in the group has been
+touched for `artifact_ttl_days` (`.gor-mobile.json`, default 30 days).
+
 **Tool disambiguation** (upstream bug obra/superpowers#1077): `requesting-code-review`
 and `writing-plans` are **Skills** (invoke via the `Skill` tool);
 `gor-mobile-code-reviewer` / `gor-mobile-code-reviewer-deep` are **Agents**
@@ -217,8 +231,11 @@ The orchestrator's context grows across tasks (subagent results, verification
 output, review reports) even though each implementer runs in its own fresh
 context. Keep the orchestrator rehydratable:
 
-- **On start**, if `.gor-mobile/state/<plan-basename>.progress.md` exists, read
-  it FIRST and resume from its `Next action`.
+- **On start**, if `.gor-mobile/state/<plan-basename>/progress.md` exists,
+  read it FIRST and resume from its `Next action`. (Legacy installs wrote a
+  flat `.gor-mobile/state/<plan-basename>.progress.md` — if only that
+  exists, read it and continue at the new path inside the workspace from
+  `scripts/sdd-workspace`.)
 - **After a task's verification passes** (orchestrator-run, not the subagent's
   self-report), rewrite the checkpoint before dispatching the next task,
   preserving its `Spec:`/`Plan:` links: task status (done + one line of what

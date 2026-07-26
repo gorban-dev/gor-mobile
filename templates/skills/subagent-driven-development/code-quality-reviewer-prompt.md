@@ -22,10 +22,10 @@ Use this template when dispatching a code quality reviewer subagent.
 Task tool (superpowers:code-reviewer):
   Use template at requesting-code-review/code-reviewer.md
 
-  WHAT_WAS_IMPLEMENTED: [from implementer's report]
-  PLAN_OR_REQUIREMENTS: Task N from [plan-file]
-  BASE_SHA: [commit before task]
-  HEAD_SHA: [current commit]
+  WHAT_WAS_IMPLEMENTED: [implementer's one-line status; full report at REPORT_PATH]
+  PLAN_OR_REQUIREMENTS: task brief at [BRIEF_PATH]
+  REVIEW_PACKAGE: [PACKAGE_PATH — stat + full diff from scripts/review-package;
+                  replaces the template's BASE_SHA..HEAD_SHA git commands]
   DESCRIPTION: [task summary]
 ```
 

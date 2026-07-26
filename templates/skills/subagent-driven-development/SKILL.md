@@ -11,6 +11,14 @@ Execute plan by dispatching fresh subagent per task, with two-stage review after
 
 **Core principle:** Fresh subagent per task + two-stage review (spec then quality) = high quality, fast iteration
 
+**Artifacts travel as files.** Everything you paste into a dispatch prompt —
+and everything a subagent prints back — stays resident in your context for
+the rest of the session and is re-read on every later turn. Hand artifacts
+over as paths: task briefs (`scripts/task-brief`), implementer reports
+(report files in the plan workspace), review diffs
+(`scripts/review-package`). Exact values (numbers, magic strings,
+signatures) live in the brief — never retyped into the prompt.
+
 ## When to Use
 
 ```dot
@@ -49,6 +57,7 @@ digraph process {
         "Implementer subagent asks questions?" [shape=diamond];
         "Answer questions, provide context" [shape=box];
         "Implementer subagent implements, tests, commits, self-reviews" [shape=box];
+        "Generate review package (scripts/sdd-snapshot + scripts/review-package)" [shape=box];
         "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)" [shape=box];
         "Spec reviewer subagent confirms code matches spec?" [shape=diamond];
         "Fix loop: implementer fixes spec gaps (round R of 5)" [shape=box];
@@ -58,17 +67,18 @@ digraph process {
         "Mark task complete in TodoWrite" [shape=box];
     }
 
-    "Read plan, extract all tasks with full text, note context, create TodoWrite" [shape=box];
+    "Setup: workspace (scripts/sdd-workspace), read plan once, create TodoWrite" [shape=box];
     "More tasks remain?" [shape=diamond];
     "Dispatch final code reviewer subagent for entire implementation" [shape=box];
     "Use superpowers:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
-    "Read plan, extract all tasks with full text, note context, create TodoWrite" -> "Dispatch implementer subagent (./implementer-prompt.md)";
+    "Setup: workspace (scripts/sdd-workspace), read plan once, create TodoWrite" -> "Dispatch implementer subagent (./implementer-prompt.md)";
     "Dispatch implementer subagent (./implementer-prompt.md)" -> "Implementer subagent asks questions?";
     "Implementer subagent asks questions?" -> "Answer questions, provide context" [label="yes"];
     "Answer questions, provide context" -> "Dispatch implementer subagent (./implementer-prompt.md)";
     "Implementer subagent asks questions?" -> "Implementer subagent implements, tests, commits, self-reviews" [label="no"];
-    "Implementer subagent implements, tests, commits, self-reviews" -> "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)";
+    "Implementer subagent implements, tests, commits, self-reviews" -> "Generate review package (scripts/sdd-snapshot + scripts/review-package)";
+    "Generate review package (scripts/sdd-snapshot + scripts/review-package)" -> "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)";
     "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)" -> "Spec reviewer subagent confirms code matches spec?";
     "Spec reviewer subagent confirms code matches spec?" -> "Fix loop: implementer fixes spec gaps (round R of 5)" [label="no"];
     "Fix loop: implementer fixes spec gaps (round R of 5)" -> "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)" [label="scoped re-review (./re-review-prompt.md)"];
@@ -98,6 +108,47 @@ Use the least powerful model that can handle each role to conserve cost and incr
 - Touches 1-2 files with a complete spec → cheap model
 - Touches multiple files with integration concerns → standard model
 - Requires design judgment or broad codebase understanding → most capable model
+
+## Dispatching a Task
+
+Record BASE before dispatching: `scripts/sdd-snapshot PLAN_FILE` prints a
+tree SHA of the current working tree — no commit, no ref change, the real
+index untouched. The review package and fix-round diffs need it.
+
+- **Task brief:** run `scripts/task-brief PLAN_FILE N` — it extracts the
+  task's full text to a file in the plan workspace and prints the path.
+  The dispatch contains: (1) one line on where this task fits in the
+  project; (2) the brief path, introduced as "read this first — it is your
+  requirements, with the exact values to use verbatim"; (3) interfaces and
+  decisions from earlier tasks the brief cannot know; (4) your resolution
+  of any ambiguity you noticed in the brief; (5) the report-file path and
+  report contract. Exact values (numbers, magic strings, signatures, test
+  cases) appear only in the brief. Never make a subagent read the whole
+  plan file.
+- **Report file:** name it after the brief (`task-N-brief.md` →
+  `task-N-report.md`) and put the path in the dispatch. The implementer
+  writes the full report there and returns only status, a one-line
+  summary, and concerns.
+- A dispatch prompt describes one task, not the session's history. Do not
+  paste accumulated prior-task summaries ("state after Tasks 1-3") into
+  later dispatches — a real session's dispatch hit 42k chars of which 99%
+  was pasted history. A fresh subagent needs its task, the interfaces it
+  touches, and the global constraints. Nothing else.
+
+## Reviewing a Task
+
+When the implementer reports DONE: snapshot HEAD (`scripts/sdd-snapshot`)
+and run `scripts/review-package PLAN_FILE BASE HEAD` — it writes the stat
+summary and full diff (`-U10`) to a uniquely named file and prints the
+path. BASE is the snapshot recorded before dispatching — never a bare
+`git diff`, which sees every task's accumulated uncommitted changes at
+once. The diff never enters your context; the reviewer sees it in one
+Read call.
+
+Reviewers get paths, not content: the brief, the report file, and the
+review package — plus the global constraints that bind the task, copied
+verbatim from the plan. Never dispatch a reviewer without a review-package
+file.
 
 ## Handling Implementer Status
 
@@ -137,18 +188,22 @@ scoped re-review. **Five rounds maximum per task.**
 **Rounds 1-3 — resume the original implementer.** Send it the open findings
 verbatim. Its context is intact: it knows the task, the code, and its own
 choices. If your harness cannot send another message to a finished
-subagent, dispatch a fresh implementer carrying the task text, the fix
-history so far, and the findings.
+subagent, dispatch a fresh implementer carrying the brief path, the
+report-file path, and the findings — the report file is the persistent
+memory either way.
 
 **Rounds 4-5 — dispatch a fresh implementer on a more capable model**, with
-the task text, the open findings, the fix history, and this framing: "A
-prior implementer attempted this task [N] times; you own it now. Here is
-what was tried." A loop that survives three resumes usually means the
-implementer cannot see its own problem — fresh eyes and a capability bump
-in one move.
+the brief path, the report-file path, the open findings, and this framing:
+"A prior implementer attempted this task [N] times; you own it now. Read
+the report file for what was tried." A loop that survives three resumes
+usually means the implementer cannot see its own problem — fresh eyes and
+a capability bump in one move.
 
-**Every round ends with a scoped re-review** — dispatch
-[re-review-prompt.md](re-review-prompt.md) with the findings list. The
+**Every round ends with a scoped re-review** — snapshot after the fix and
+run `scripts/review-package PLAN_FILE FIX_BASE HEAD` (FIX_BASE = the
+snapshot the previous review saw), then dispatch
+[re-review-prompt.md](re-review-prompt.md) with the findings list, the
+brief path, the report-file path, and the printed diff path. The
 re-reviewer verdicts each finding ADDRESSED or NOT ADDRESSED ("attempted"
 is not addressed) and inspects only what the fix touched for new breakage.
 New Critical/Important breakage introduced by the fix joins the open
@@ -194,19 +249,30 @@ a silent discard is forbidden.
 - `./code-quality-reviewer-prompt.md` - Dispatch code quality reviewer subagent
 - `./re-review-prompt.md` - Dispatch scoped re-review after a fix round
 
+## Scripts
+
+- `./scripts/sdd-workspace PLAN_FILE` - Print this plan's artifact directory
+  (`.gor-mobile/state/<plan-basename>/`), creating it if needed
+- `./scripts/task-brief PLAN_FILE N` - Extract Task N's full text into a
+  brief file, print the path
+- `./scripts/sdd-snapshot PLAN_FILE` - Snapshot the working tree as a git
+  tree object (no commit, no ref change), print the tree SHA
+- `./scripts/review-package PLAN_FILE BASE HEAD` - Write stat + full diff
+  between two snapshots (or any tree-ish) to a file, print the path
+
 ## Example Workflow
 
 ```
 You: I'm using Subagent-Driven Development to execute this plan.
 
-[Read plan file once: docs/superpowers/plans/feature-plan.md]
-[Extract all 5 tasks with full text and context]
+[Resolve workspace: scripts/sdd-workspace docs/plans/feature-plan.md]
+[Read plan file once, note context and constraints]
 [Create TodoWrite with all tasks]
 
 Task 1: Hook installation script
 
-[Get Task 1 text and context (already extracted)]
-[Dispatch implementation subagent with full task text + context]
+[Record BASE: scripts/sdd-snapshot; run scripts/task-brief for Task 1]
+[Dispatch implementer with brief + report paths + one line of context]
 
 Implementer: "Before I begin - should the hook be installed at user or system level?"
 
@@ -219,18 +285,19 @@ Implementer: "Got it. Implementing now..."
   - Self-review: Found I missed --force flag, added it
   - Committed
 
-[Dispatch spec compliance reviewer]
+[Snapshot HEAD; run scripts/review-package; dispatch spec reviewer with
+ brief + report + package paths]
 Spec reviewer: ✅ Spec compliant - all requirements met, nothing extra
 
-[Get git SHAs, dispatch code quality reviewer]
+[Dispatch code quality reviewer with the same package]
 Code reviewer: Strengths: Good test coverage, clean. Issues: None. Approved.
 
 [Mark Task 1 complete]
 
 Task 2: Recovery modes
 
-[Get Task 2 text and context (already extracted)]
-[Dispatch implementation subagent with full task text + context]
+[Record BASE: scripts/sdd-snapshot; run scripts/task-brief for Task 2]
+[Dispatch implementer with brief + report paths]
 
 Implementer: [No questions, proceeds]
 Implementer:
@@ -239,7 +306,7 @@ Implementer:
   - Self-review: All good
   - Committed
 
-[Dispatch spec compliance reviewer]
+[Snapshot HEAD; run scripts/review-package; dispatch spec reviewer]
 Spec reviewer: ❌ Issues:
   - Missing: Progress reporting (spec says "report every 100 items")
   - Extra: Added --json flag (not requested)
@@ -247,6 +314,7 @@ Spec reviewer: ❌ Issues:
 [Fix round 1/5: resume implementer with both findings]
 Implementer: Removed --json flag, added progress reporting
 
+[Snapshot; run scripts/review-package over the fix range]
 [Dispatch scoped re-review (./re-review-prompt.md)]
 Re-reviewer: Missing progress reporting — ADDRESSED (src/recovery.js:41).
   Extra --json flag — ADDRESSED (removed). New breakage: none.
@@ -258,6 +326,7 @@ Code reviewer: Strengths: Solid. Issues (Important): Magic number (100)
 [Fix round 1/5: resume implementer]
 Implementer: Extracted PROGRESS_INTERVAL constant
 
+[Snapshot; run scripts/review-package over the fix range]
 [Dispatch scoped re-review (./re-review-prompt.md)]
 Re-reviewer: Magic number — ADDRESSED (src/recovery.js:7). Verdict: all
   findings addressed.
@@ -286,9 +355,10 @@ Done!
 - Review checkpoints automatic
 
 **Efficiency gains:**
-- No file reading overhead (controller provides full text)
+- Briefs, reports, and review diffs travel as file paths — the controller's
+  context stays lean across the whole plan
 - Controller curates exactly what context is needed
-- Subagent gets complete information upfront
+- Subagent gets complete information upfront (one Read call per artifact)
 - Questions surfaced before work begins (not after)
 
 **Quality gates:**
@@ -311,7 +381,11 @@ Done!
 - Skip reviews (spec compliance OR code quality)
 - Proceed with unfixed issues
 - Dispatch multiple implementation subagents in parallel (conflicts)
-- Make subagent read plan file (provide full text instead)
+- Make a subagent read the whole plan file (run scripts/task-brief; hand it
+  the brief path)
+- Paste task text, reports, or diffs into prompts (artifacts travel as
+  file paths — pasted content stays resident in your context all session)
+- Dispatch a reviewer without a review-package file
 - Skip scene-setting context (subagent needs to understand where task fits)
 - Ignore subagent questions (answer before letting them proceed)
 - Accept "close enough" on spec compliance (spec reviewer found issues = not done)

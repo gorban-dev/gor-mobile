@@ -4,6 +4,44 @@
 
 Requires `gor-mobile repair` — templates changed.
 
+- **Plan artifacts get a lifecycle: checkpoint migration + retention TTL.**
+  `repair`/`init` migrate legacy flat checkpoints
+  (`.gor-mobile/state/<plan>.progress.md` → `state/<plan>/progress.md`,
+  never overwriting a live workspace checkpoint) and stamp
+  `artifact_ttl_days: 30` into `.gor-mobile.json`. The SessionStart hook
+  now runs a retention sweep before injecting the checkpoint pointer:
+  plans, specs, and workspaces untouched for `artifact_ttl_days` (0 = off)
+  are deleted, so finished plans stop accumulating as dead weight.
+  Freshness is linked per plan slug — a fresh plan file keeps its
+  workspace, a fresh workspace keeps its plan, and specs referenced by a
+  fresh checkpoint survive even though specs are read, not rewritten. The
+  sweep reports itself in the injected context; `doctor` prints the
+  artifact inventory (counts, oldest age, TTL in effect) and warns about
+  unmigrated flat checkpoints.
+
+- **SDD artifacts travel as files: task briefs, report files, review
+  packages.** Ported the upstream superpowers file-passing design and
+  adapted it to the no-commit model. Four scripts land in the SDD skill:
+  `scripts/sdd-workspace` (per-plan artifact dir
+  `.gor-mobile/state/<plan-basename>/`, self-ignoring `.gitignore` at
+  `state/`), `scripts/task-brief` (extracts one task's text from the plan
+  into a file — fence-safe awk), `scripts/sdd-snapshot` (snapshots the
+  working tree as a git tree object via a scratch index — no commit, no
+  ref change, real index untouched), `scripts/review-package` (stat +
+  `-U10` diff between two tree-ish into one file). Dispatches carry paths,
+  not content: the implementer reads a brief and writes a full report
+  file, returning one status line; reviewers and fix-round re-reviews get
+  the brief, the report, and a review package whose range is
+  snapshot..snapshot — a task touching a file an earlier task also touched
+  still gets an exact diff of its own changes, even though all diffs
+  accumulate uncommitted. The checkpoint moves into the plan workspace:
+  `.gor-mobile/state/<plan>/progress.md` (was flat `<plan>.progress.md`;
+  the SessionStart hook and the skills read both, new writes use the new
+  path). The skill body now states the principle driving all of this:
+  everything pasted into a dispatch prompt — and everything a subagent
+  prints back — stays resident in the controller's context for the rest
+  of the session.
+
 - **SDD fix loop gets a breaker: 5 rounds max, scoped re-review.** The
   skill body's fix cycle was unbounded — "repeat until approved", no
   counter, no exit when reviewer and implementer disagree. Ported from
@@ -18,9 +56,10 @@ Requires `gor-mobile repair` — templates changed.
   gor-mobile: re-review = `gor-mobile-code-reviewer` (haiku for
   non-behavioral fixes, Codex `low`/`medium`), escalation follows the
   review-tier ladder (haiku → sonnet → session model; Codex effort
-  low → medium → high), bookkeeping lands in the existing
-  `.gor-mobile/state/<plan>.progress.md` checkpoint, and scoping is by
-  fix-touched files, not commit ranges (no-commit override stands). Every
+  low → medium → high), bookkeeping lands in the
+  `.gor-mobile/state/<plan>/progress.md` checkpoint, and scoping is by
+  the fix-range review package, not commit ranges (no-commit override
+  stands). Every
   re-review dispatch carries the task's `Conforms to:` reference files —
   the reviewer's examples tripwire is dispatch-proof and would otherwise
   flag a spurious review-context defect each round. The template's test

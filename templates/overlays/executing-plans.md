@@ -131,9 +131,11 @@ need to read.
 Long plans grow the orchestrator's context (accumulated diffs, test output,
 subagent results). Keep the session rehydratable:
 
-- **On start**, if `.gor-mobile/state/<plan-basename>.progress.md` exists, read
-  it FIRST and resume from its `Next action` — the plan may have been partly
-  executed before a compaction.
+- **On start**, if `.gor-mobile/state/<plan-basename>/progress.md` exists,
+  read it FIRST and resume from its `Next action` — the plan may have been
+  partly executed before a compaction. (Legacy installs wrote a flat
+  `.gor-mobile/state/<plan-basename>.progress.md` — if only that exists,
+  read it and continue at the new path.)
 - **After each task's verification passes** (task-loop step 3 above), rewrite the
   checkpoint before advancing, preserving its `Spec:`/`Plan:` links: task status
   (done + one line of what changed + any

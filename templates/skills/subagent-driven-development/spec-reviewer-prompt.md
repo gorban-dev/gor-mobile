@@ -12,11 +12,24 @@ Task tool (general-purpose):
 
     ## What Was Requested
 
-    [FULL TEXT of task requirements]
+    Read the task brief — it is the requirements, exact values included:
+
+    [BRIEF_PATH — the same brief file the implementer received]
 
     ## What Implementer Claims They Built
 
-    [From implementer's report]
+    The implementer's full report:
+
+    [REPORT_PATH]
+
+    ## The Change
+
+    Review package (stat summary + full diff of exactly this task's
+    changes):
+
+    [PACKAGE_PATH — from scripts/review-package PLAN_FILE BASE HEAD]
+
+    Read the actual files where the diff needs surrounding context.
 
     ## CRITICAL: Do Not Trust the Report
 

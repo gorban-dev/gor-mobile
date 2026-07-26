@@ -8,13 +8,20 @@ Task tool (general-purpose):
   prompt: |
     You are implementing Task N: [task name]
 
-    ## Task Description
+    ## Task Brief
 
-    [FULL TEXT of task from plan - paste it here, don't make subagent read file]
+    Read this file FIRST — it is your requirements, with the exact values
+    (numbers, strings, signatures) to use verbatim:
+
+    [BRIEF_PATH — from scripts/task-brief PLAN_FILE N]
+
+    Do not read the rest of the plan file — the brief is your complete spec.
 
     ## Context
 
-    [Scene-setting: where this fits, dependencies, architectural context]
+    [Scene-setting: ONE line on where this task fits, plus interfaces and
+    decisions from earlier tasks the brief cannot know. Not the session's
+    history.]
 
     ## Before You Begin
 
@@ -98,13 +105,21 @@ Task tool (general-purpose):
 
     ## Report Format
 
-    When done, report:
+    Write your FULL report to this file (create it; on a fix round, append
+    a "## Fix round R" section instead of overwriting):
+
+    [REPORT_PATH — brief path with -brief.md replaced by -report.md]
+
+    The full report contains: what you implemented (or attempted, if
+    blocked), what you tested and the results (commands + output summary),
+    files changed, self-review findings, issues or concerns.
+
+    Then reply with ONLY:
     - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
-    - What you implemented (or what you attempted, if blocked)
-    - What you tested and test results
-    - Files changed
-    - Self-review findings (if any)
-    - Any issues or concerns
+    - One line on what you did
+    - Concerns, one line each (if any)
+
+    The report file carries the detail — do not repeat it in your reply.
 
     Use DONE_WITH_CONCERNS if you completed the work but have doubts about correctness.
     Use BLOCKED if you cannot complete the task. Use NEEDS_CONTEXT if you need

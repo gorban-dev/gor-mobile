@@ -241,7 +241,8 @@ this pass is `$CODEX_COMPANION` being empty (plugin absent).
 
 A completed review whose outcome is durable — findings applied and re-verified,
 or recorded — is a safe point to compact: nothing is in flight. If a checkpoint
-exists (`.gor-mobile/state/*.progress.md`), append the review outcome to it
+exists (`.gor-mobile/state/*/progress.md`, or legacy
+`.gor-mobile/state/*.progress.md`), append the review outcome to it
 before compacting. Do NOT compact while findings are still being triaged or
 fixes are half-applied.
 

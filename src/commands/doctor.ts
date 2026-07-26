@@ -19,6 +19,7 @@ import { androidCliPath, which } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
 import { runAstIndexUpdate } from "../helpers/ast-index-freshness.js";
 import { findProjectRoot, readProjectMarker } from "../helpers/project.js";
+import { artifactInventory } from "../helpers/state-artifacts.js";
 import { readManifest } from "../helpers/rules-pack.js";
 import {
   TARGETS,
@@ -319,6 +320,20 @@ function checkProject(root: string): TargetSpec {
   log.ok(`.gor-mobile.json → platform=${marker.platform ?? "?"}, v${marker.version ?? "?"} (${root})`);
   if (marker.version && marker.version !== GOR_MOBILE_VERSION) {
     log.warn(`installed v${marker.version} ≠ CLI v${GOR_MOBILE_VERSION} — run 'gor-mobile init' to refresh`);
+  }
+  const inv = artifactInventory(root);
+  const ttl = typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30;
+  if (inv.legacyCheckpoints > 0) {
+    log.warn(
+      `${inv.legacyCheckpoints} legacy flat checkpoint(s) in .gor-mobile/state — run 'gor-mobile repair' to migrate`
+    );
+  }
+  if (inv.plans + inv.specs + inv.workspaces > 0) {
+    const oldest = inv.oldestDays !== null ? `, oldest ${inv.oldestDays}d` : "";
+    const sweep = ttl === 0 ? "retention off" : `retention ${ttl}d, swept at session start`;
+    log.ok(
+      `plan artifacts: ${inv.plans} plan(s), ${inv.specs} spec(s), ${inv.workspaces} workspace(s)${oldest} (${sweep})`
+    );
   }
   const spec = projectClaudeSpec(root);
   checkTarget(spec);

@@ -116,8 +116,9 @@ complete ground truth; the planning transcript is dead weight — so **every**
 plan exits through a handoff that offers clearing.
 
 1. **Write the initial checkpoint** — unconditionally, first — to
-   `.gor-mobile/state/<plan-basename>.progress.md` (basename of the plan file,
-   `.md` → `.progress.md`). Seed it with:
+   `.gor-mobile/state/<plan-basename>/progress.md` (a directory named after
+   the plan file's basename; `mkdir -p` it — execution skills use the same
+   directory for task briefs, reports, and review packages). Seed it with:
    - `Spec:` and `Plan:` — the two file paths.
    - A task table with every task `pending`.
    - `Next action:` — Task 1, plus the execution mode (Subagent-Driven per

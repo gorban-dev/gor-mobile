@@ -20,7 +20,8 @@ Subagent:
 
     ## The Task
 
-    [TASK_TEXT — the same task text the implementer worked from]
+    Read the task brief — the same requirements the implementer worked
+    from: [BRIEF_PATH]
 
     ## The Findings Under Verification
 
@@ -29,10 +30,12 @@ Subagent:
 
     ## The Fix
 
-    [FIX_SUMMARY — the implementer's fix report verbatim: what it changed
-    and which files it touched this round]
+    The implementer's report file — its latest "Fix round" section
+    describes this round's changes: [REPORT_PATH]
 
-    Files touched by the fix: [FIX_FILES]
+    Review package over the fix range ONLY (stat + full diff of what this
+    fix round changed): [PACKAGE_PATH — from scripts/review-package
+    PLAN_FILE FIX_BASE HEAD]
 
     ## Reference Files
 
@@ -50,9 +53,10 @@ Subagent:
 
     ## Scope
 
-    Your scope is the findings list and the files the fix touched. Verdict
-    every finding by reading the current code at its location. Inspect
-    [FIX_FILES] for new problems the fix itself introduced. Do NOT
+    Your scope is the findings list and the fix diff in the review
+    package. Verdict every finding by reading the current code at its
+    location. Inspect the fix diff for new problems the fix itself
+    introduced. Do NOT
     re-review code the fix did not touch: if you notice an issue entirely
     outside the fix, report it under Out-of-Scope Observations — it does
     not block this task and does not extend the loop. A full-implementation
@@ -93,10 +97,11 @@ Subagent:
 **Placeholders:**
 - `[MODEL]` — reviewer tier per the skill's Model Selection; scoped
   re-reviews of small fixes take the cheap tier
-- `[TASK_TEXT]` — the task's full text (same as the implementer received)
+- `[BRIEF_PATH]` — the task's brief file (same as the implementer received)
 - `[FINDINGS]` — the open findings, copied verbatim, one per bullet
-- `[FIX_SUMMARY]` — the implementer's fix report for this round, verbatim
-- `[FIX_FILES]` — the files the implementer touched this round
+- `[REPORT_PATH]` — the implementer's report file; fix rounds append to it
+- `[PACKAGE_PATH]` — `scripts/review-package` output over the fix range
+  only (FIX_BASE = the snapshot the previous review saw)
 - `[REFERENCE_FILES]` — the task's `Conforms to:` reference files when the
   fix touches a layer, else the `Canonical examples: none for this diff`
   line

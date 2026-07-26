@@ -21,6 +21,9 @@ export interface ProjectMarker {
   managed_plugins?: string[];
   /** top-level settings.local.json keys that init turned on (for uninstall). */
   managed_settings?: string[];
+  /** Session-start retention sweep threshold for .gor-mobile plan artifacts
+   *  (plans/specs/state), in days. 0 disables the sweep. Default 30. */
+  artifact_ttl_days?: number;
   [key: string]: unknown;
 }
 

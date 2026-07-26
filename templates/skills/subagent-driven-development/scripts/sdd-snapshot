@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Snapshot the working tree as a git tree object: no commit, no ref change,
+# and the real index is untouched (a scratch index inside the plan workspace
+# is used instead). Prints the tree SHA.
+#
+# gor-mobile plans keep every task's diff uncommitted in the working tree,
+# so per-task review ranges are snapshot..snapshot, never commit..commit —
+# and a task touching a file an earlier task also touched still gets an
+# exact diff of its own changes. Take one snapshot before dispatching an
+# implementer (BASE) and one when it reports DONE (HEAD); review-package
+# diffs the two. Untracked files are included; gitignored files are not.
+#
+# Usage: sdd-snapshot PLAN_FILE
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "usage: sdd-snapshot PLAN_FILE" >&2
+  exit 2
+fi
+
+plan=$1
+[ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+
+dir=$("$(cd "$(dirname "$0")" && pwd)/sdd-workspace" "$plan")
+root=$(git rev-parse --show-toplevel)
+
+cd "$root"
+export GIT_INDEX_FILE="$dir/snap-index"
+rm -f "$GIT_INDEX_FILE"
+git add -A .
+git write-tree

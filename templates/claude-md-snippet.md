@@ -29,9 +29,14 @@
 
 - Long sessions get compacted — by you at a safe boundary, or by Claude Code
   automatically when the window fills. Keep state rehydratable: the gor-mobile
-  process skills write a checkpoint to `.gor-mobile/state/<plan>.progress.md`
+  process skills write a checkpoint to `.gor-mobile/state/<plan>/progress.md`
   at every safe boundary (plan written, each verified task, review outcome).
-- After a compaction, if a `.gor-mobile/state/*.progress.md` file exists, read
-  it and the plan/spec it references BEFORE continuing; take task state from the
-  checkpoint and the plan, not from the summary. The SessionStart hook re-injects
-  this pointer on `compact`.
+- After a compaction, if a `.gor-mobile/state/*/progress.md` file exists (or a
+  legacy `.gor-mobile/state/*.progress.md`), read it and the plan/spec it
+  references BEFORE continuing; take task state from the checkpoint and the
+  plan, not from the summary. The SessionStart hook re-injects this pointer on
+  `compact`.
+- Plan artifacts are working files with a retention TTL, not documentation: a
+  session-start sweep deletes plans/specs/state entries untouched for
+  `artifact_ttl_days` (`.gor-mobile.json`, default 30; 0 disables). No manual
+  cleanup after a finished plan — completed artifacts age out on their own.
