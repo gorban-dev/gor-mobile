@@ -66,8 +66,9 @@ The `<implementer-prompt>` must contain:
   specifies it). Restating code from a paraphrase is where standard widths,
   paddings, and named arguments silently vanish.
 
-> **Red Flag — STOP.** Dispatching an implementer or combined-review prompt for
-> a layer-touching task without its `Conforms to:` reference files attached.
+> **Red Flag — STOP.** Dispatching an implementer, combined-review, or scoped
+> re-review prompt for a layer-touching task without its `Conforms to:`
+> reference files attached.
 > This mandate has already been skipped silently in the field once — the
 > code-quality reviewer agents now independently check diff shape against
 > canonical examples, so a defect from a skipped dispatch still surfaces
@@ -150,6 +151,40 @@ load-bearing for the Codex second opinion:
     security/auth/payments/crypto/IPC, explicit deep-review ask) →
     `Agent(gor-mobile-code-reviewer-deep)`, which runs on the session model.
 
+**Fix-loop routing (the skill body's The Fix Loop, mapped to gor-mobile):**
+
+- **Scoped re-review** = `Agent(gor-mobile-code-reviewer)` with the
+  `./re-review-prompt.md` contents — never a second combined review and
+  never Codex mid-loop. Tier: `model = "haiku"` when the fix round touched
+  only non-behavioral code (Codex: effort `low`), otherwise the reviewer's
+  own Sonnet (Codex: `medium`). Fill the template's `[REFERENCE_FILES]`
+  slot with the same `Conforms to:` files the combined review received
+  when the fix touches a layer — or the explicit
+  `Canonical examples: none for this diff` line when none match. The
+  reviewer's examples tripwire is deliberately dispatch-proof: an empty
+  slot produces a spurious Important review-context defect every round.
+- **Before dispatching the re-review**, re-run the task's Gradle
+  verification step yourself on the amended code — the template tells the
+  re-reviewer it already passed, so dispatching without a green run is a
+  dispatch defect.
+- **Rounds 4-5 implementer escalation**, one tier up per the review-tier
+  ladder: a `haiku` implementer redispatches on `sonnet`; a `sonnet`
+  implementer redispatches with `model` omitted (inherits the session
+  model). On Codex bump `model_reasoning_effort` one step
+  (`low → medium → high`).
+- **Resume vs fresh:** rounds 1-3 resume the original implementer when the
+  harness supports messaging a finished subagent; Codex cannot — there,
+  every round is a fresh dispatch carrying the task text, the open
+  findings, and the fix history (the skill body's fallback).
+- **Bookkeeping** lands in the existing checkpoint file
+  `.gor-mobile/state/<plan-basename>.progress.md` (see Context compaction
+  below): the per-round `Task <N>: fix round <R>/5 (…)` line, deferred
+  minors, parked rulings, and `Task <N>: BLOCKED — <reason>`. There is no
+  separate ledger.
+- **No commits between rounds** (the override above stands): fix diffs
+  accumulate uncommitted like task diffs, so the re-review scopes by the
+  findings list and the files the fix touched — never by commit ranges.
+
 **Final full-implementation review (after ALL tasks) — the one Codex gate.**
 When every plan task is implemented and verified, run a single final review over
 the complete diff through `Skill(gor-mobile-requesting-code-review)`. That skill
@@ -162,8 +197,12 @@ This final gate is mandatory: skipping it is the only way Codex would never run,
 which is a review failure.
 
 **Definition of done:** a per-task review is done when the combined gor-mobile
-review approves both sections. The plan is done when the final review (deep
-reviewer + Codex) has returned and its findings are addressed.
+review approves both sections — or, after a tripped breaker at round 5/5,
+when every open finding is parked with a recorded ruling (a BLOCKED finding
+stops the plan instead). The plan is done when the final review (deep
+reviewer + Codex) has returned and its findings are addressed; point that
+final review at the checkpoint's deferred-minor and parked lines so it can
+triage which must be fixed before merge.
 
 **Tool disambiguation** (upstream bug obra/superpowers#1077): `requesting-code-review`
 and `writing-plans` are **Skills** (invoke via the `Skill` tool);

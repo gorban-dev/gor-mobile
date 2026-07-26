@@ -51,10 +51,10 @@ digraph process {
         "Implementer subagent implements, tests, commits, self-reviews" [shape=box];
         "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)" [shape=box];
         "Spec reviewer subagent confirms code matches spec?" [shape=diamond];
-        "Implementer subagent fixes spec gaps" [shape=box];
+        "Fix loop: implementer fixes spec gaps (round R of 5)" [shape=box];
         "Dispatch code quality reviewer subagent (./code-quality-reviewer-prompt.md)" [shape=box];
         "Code quality reviewer subagent approves?" [shape=diamond];
-        "Implementer subagent fixes quality issues" [shape=box];
+        "Fix loop: implementer fixes quality issues (round R of 5)" [shape=box];
         "Mark task complete in TodoWrite" [shape=box];
     }
 
@@ -70,12 +70,12 @@ digraph process {
     "Implementer subagent asks questions?" -> "Implementer subagent implements, tests, commits, self-reviews" [label="no"];
     "Implementer subagent implements, tests, commits, self-reviews" -> "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)";
     "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)" -> "Spec reviewer subagent confirms code matches spec?";
-    "Spec reviewer subagent confirms code matches spec?" -> "Implementer subagent fixes spec gaps" [label="no"];
-    "Implementer subagent fixes spec gaps" -> "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)" [label="re-review"];
+    "Spec reviewer subagent confirms code matches spec?" -> "Fix loop: implementer fixes spec gaps (round R of 5)" [label="no"];
+    "Fix loop: implementer fixes spec gaps (round R of 5)" -> "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)" [label="scoped re-review (./re-review-prompt.md)"];
     "Spec reviewer subagent confirms code matches spec?" -> "Dispatch code quality reviewer subagent (./code-quality-reviewer-prompt.md)" [label="yes"];
     "Dispatch code quality reviewer subagent (./code-quality-reviewer-prompt.md)" -> "Code quality reviewer subagent approves?";
-    "Code quality reviewer subagent approves?" -> "Implementer subagent fixes quality issues" [label="no"];
-    "Implementer subagent fixes quality issues" -> "Dispatch code quality reviewer subagent (./code-quality-reviewer-prompt.md)" [label="re-review"];
+    "Code quality reviewer subagent approves?" -> "Fix loop: implementer fixes quality issues (round R of 5)" [label="no"];
+    "Fix loop: implementer fixes quality issues (round R of 5)" -> "Dispatch code quality reviewer subagent (./code-quality-reviewer-prompt.md)" [label="scoped re-review (./re-review-prompt.md)"];
     "Code quality reviewer subagent approves?" -> "Mark task complete in TodoWrite" [label="yes"];
     "Mark task complete in TodoWrite" -> "More tasks remain?";
     "More tasks remain?" -> "Dispatch implementer subagent (./implementer-prompt.md)" [label="yes"];
@@ -117,11 +117,82 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 
 **Never** ignore an escalation or force the same model to retry without changes. If the implementer said it's stuck, something needs to change.
 
+## The Fix Loop
+
+The loop triggers when a review reports spec gaps or any Critical/Important
+finding. Two kinds of findings leave it before it starts:
+
+- **Minor findings never enter the loop.** Record each one as it appears
+  (`Task <N>: minor (deferred): <one-liner>`) and hand the list to the final
+  full-implementation review to triage what must be fixed before merge. A
+  roll-up nobody reads is a silent discard.
+- **A finding that conflicts with what the plan's text mandates is the
+  human's decision.** Present the finding and the plan text side by side and
+  ask which governs. Do not dismiss the finding because the plan mandates
+  it, and do not dispatch a fix that contradicts the plan without asking.
+
+Everything else enters the loop. A fix round is one fix dispatch plus one
+scoped re-review. **Five rounds maximum per task.**
+
+**Rounds 1-3 — resume the original implementer.** Send it the open findings
+verbatim. Its context is intact: it knows the task, the code, and its own
+choices. If your harness cannot send another message to a finished
+subagent, dispatch a fresh implementer carrying the task text, the fix
+history so far, and the findings.
+
+**Rounds 4-5 — dispatch a fresh implementer on a more capable model**, with
+the task text, the open findings, the fix history, and this framing: "A
+prior implementer attempted this task [N] times; you own it now. Here is
+what was tried." A loop that survives three resumes usually means the
+implementer cannot see its own problem — fresh eyes and a capability bump
+in one move.
+
+**Every round ends with a scoped re-review** — dispatch
+[re-review-prompt.md](re-review-prompt.md) with the findings list. The
+re-reviewer verdicts each finding ADDRESSED or NOT ADDRESSED ("attempted"
+is not addressed) and inspects only what the fix touched for new breakage.
+New Critical/Important breakage introduced by the fix joins the open
+findings. Out-of-scope observations are recorded as deferred minors — they
+never extend the loop. Never dispatch a fresh full review mid-loop.
+
+**After each round,** record:
+`Task <N>: fix round <R>/5 (<X> addressed, <Y> open — <finding one-liners>)`
+
+Never fix findings yourself in the controller session — your context stays
+clean for coordination, and controller fixes skip review.
+
+**The breaker.** When round 5's re-review still leaves findings open, stop
+dispatching. Adjudicate each open finding yourself — you hold the plan and
+the cross-task context the reviewer lacks:
+
+- **The reviewer is wrong, or the point is contestable:** park it —
+  `Task <N>: parked — <finding> — ruling: <why the code stands>`. The final
+  review sees both sides.
+- **Real, but nothing downstream builds on it:** park it the same way, with
+  a ruling that says it's real and deferred.
+- **Real and load-bearing** — a later task builds on it, or it reveals a
+  plan defect: STOP. Record `Task <N>: BLOCKED — <reason>` and report to
+  the human with the finding, the plan text it collides with, and the fix
+  history. Parking a structural failure lets every dependent task build on
+  it and hands the final review a problem it cannot fix either.
+
+Adjudicate only at the cap. Adjudicating earlier to end a loop is
+pre-judging with a different name. Every adjudication is a recorded ruling —
+a silent discard is forbidden.
+
+| Excuse | Reality |
+|--------|---------|
+| "One more round will converge" | Past the cap, rounds don't converge — the failure is structural. Adjudicate and route. |
+| "This finding is obviously wrong, I'll drop it" | You adjudicate only at the cap, and every ruling is recorded. Silent discards are forbidden. |
+| "The fix was small, skip the re-review" | Unreviewed fixes are how regressions land. Every round ends with a scoped re-review. |
+| "The reviewer will just find something new anyway" | Scoped re-reviews verify fixes; they cannot wander. New findings on untouched code are deferred, not looped. |
+
 ## Prompt Templates
 
 - `./implementer-prompt.md` - Dispatch implementer subagent
 - `./spec-reviewer-prompt.md` - Dispatch spec compliance reviewer subagent
 - `./code-quality-reviewer-prompt.md` - Dispatch code quality reviewer subagent
+- `./re-review-prompt.md` - Dispatch scoped re-review after a fix round
 
 ## Example Workflow
 
@@ -173,20 +244,23 @@ Spec reviewer: ❌ Issues:
   - Missing: Progress reporting (spec says "report every 100 items")
   - Extra: Added --json flag (not requested)
 
-[Implementer fixes issues]
+[Fix round 1/5: resume implementer with both findings]
 Implementer: Removed --json flag, added progress reporting
 
-[Spec reviewer reviews again]
-Spec reviewer: ✅ Spec compliant now
+[Dispatch scoped re-review (./re-review-prompt.md)]
+Re-reviewer: Missing progress reporting — ADDRESSED (src/recovery.js:41).
+  Extra --json flag — ADDRESSED (removed). New breakage: none.
+  Verdict: all findings addressed.
 
 [Dispatch code quality reviewer]
 Code reviewer: Strengths: Solid. Issues (Important): Magic number (100)
 
-[Implementer fixes]
+[Fix round 1/5: resume implementer]
 Implementer: Extracted PROGRESS_INTERVAL constant
 
-[Code reviewer reviews again]
-Code reviewer: ✅ Approved
+[Dispatch scoped re-review (./re-review-prompt.md)]
+Re-reviewer: Magic number — ADDRESSED (src/recovery.js:7). Verdict: all
+  findings addressed.
 
 [Mark Task 2 complete]
 
@@ -241,7 +315,7 @@ Done!
 - Skip scene-setting context (subagent needs to understand where task fits)
 - Ignore subagent questions (answer before letting them proceed)
 - Accept "close enough" on spec compliance (spec reviewer found issues = not done)
-- Skip review loops (reviewer found issues = implementer fixes = review again)
+- Skip review loops (reviewer found issues = fix round + scoped re-review)
 - Let implementer self-review replace actual review (both are needed)
 - **Start code quality review before spec compliance is ✅** (wrong order)
 - Move to next task while either review has open issues
@@ -252,10 +326,11 @@ Done!
 - Don't rush them into implementation
 
 **If reviewer finds issues:**
-- Implementer (same subagent) fixes them
-- Reviewer reviews again
-- Repeat until approved
-- Don't skip the re-review
+- Enter The Fix Loop (above): fix round + scoped re-review, five rounds max
+- Rounds 1-3 resume the implementer; rounds 4-5 fresh implementer, tier up
+- At the cap the breaker adjudicates: park with ruling or BLOCKED to human
+- Never loop past the cap, never adjudicate before it, never skip the
+  scoped re-review
 
 **If subagent fails task:**
 - Dispatch fix subagent with specific instructions

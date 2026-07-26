@@ -4,6 +4,29 @@
 
 Requires `gor-mobile repair` — templates changed.
 
+- **SDD fix loop gets a breaker: 5 rounds max, scoped re-review.** The
+  skill body's fix cycle was unbounded — "repeat until approved", no
+  counter, no exit when reviewer and implementer disagree. Ported from
+  upstream superpowers v6.2.0 (ebdd4ec): rounds 1-3 resume the same
+  implementer (context intact), rounds 4-5 dispatch a fresh one a tier up
+  with "a prior implementer attempted this N times" framing; every round
+  ends with a scoped re-review (new `re-review-prompt.md` — per-finding
+  ADDRESSED/NOT ADDRESSED verdicts, "attempted is not addressed",
+  out-of-scope observations deferred instead of extending the loop); at
+  round 5 the controller adjudicates each open finding — parked with a
+  recorded ruling or BLOCKED to the human. The overlay maps it to
+  gor-mobile: re-review = `gor-mobile-code-reviewer` (haiku for
+  non-behavioral fixes, Codex `low`/`medium`), escalation follows the
+  review-tier ladder (haiku → sonnet → session model; Codex effort
+  low → medium → high), bookkeeping lands in the existing
+  `.gor-mobile/state/<plan>.progress.md` checkpoint, and scoping is by
+  fix-touched files, not commit ranges (no-commit override stands). Every
+  re-review dispatch carries the task's `Conforms to:` reference files —
+  the reviewer's examples tripwire is dispatch-proof and would otherwise
+  flag a spurious review-context defect each round. The template's test
+  demands are replaced by the orchestrator-run Gradle verification, which
+  must be green before the re-review dispatches.
+
 - **`find-polluter.sh` actually finds tests now.** The old script fed the
   documented pattern (`src/**/*.test.ts`) straight to `find . -path`, which
   emits `./`-prefixed paths — nothing matched, `echo "" | wc -l` reported
