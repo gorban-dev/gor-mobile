@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+Requires `gor-mobile repair` — templates changed.
+
+- **`using-superpowers` synced with upstream superpowers 6.2.0.** The skill
+  body picks up the upstream rewrite: the dot-digraph, "Skill Types",
+  "Instruction Priority" ladder and per-platform "How to Access Skills"
+  sections are gone; "before entering plan mode → brainstorm first" is now
+  stated in prose. Kept gor-mobile edits: "skip this skill" for subagents,
+  "This is not optional", and a Platform Adaptation section naming both
+  install targets (Claude Code + Codex CLI) instead of the upstream
+  `references/*.md` pointers (those reference skills gor-mobile does not
+  ship). Fixes the stale "gor-mobile targets Claude Code only" claim.
+
 ## 0.3.3 — 2026-07-24
 
 Requires `gor-mobile repair` — templates changed: the TDD skill is removed,
