@@ -55,7 +55,7 @@ export function installStatusLine(
   }
   settings.statusLine = {
     type: "command",
-    command: `bash ${GOR_MOBILE_HOME}/templates/${SCRIPT_FILE[variant]}`,
+    command: `bash "${GOR_MOBILE_HOME}/templates/${SCRIPT_FILE[variant]}"`,
     _managed_by: MANAGED_TAG
   };
   writeJson(CLAUDE_SETTINGS, settings);

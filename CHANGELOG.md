@@ -4,6 +4,25 @@
 
 Requires `gor-mobile repair` — templates changed.
 
+- **`find-polluter.sh` actually finds tests now.** The old script fed the
+  documented pattern (`src/**/*.test.ts`) straight to `find . -path`, which
+  emits `./`-prefixed paths — nothing matched, `echo "" | wc -l` reported
+  "Found 1", and the bisection walked an empty set. Synced with upstream
+  superpowers HEAD, which fixes all three at once: strips a leading `./` from
+  the pattern, adds an `-o` branch with `**/` collapsed (so `src/top.test.ts`
+  at zero depth matches too), and computes `TOTAL=0` for an empty list.
+
+- **Hook commands survive paths with spaces; Windows gets `shell: "bash"`.**
+  All four command builders (`SessionStart`, `UserPromptSubmit`, `PreToolUse`
+  in `settings-merge.ts`, plus the statusLine one in
+  `settings-statusline.ts`) now quote the script path and the Codex
+  `GORM_SKILLS_DIR` value — a `$HOME` like `/Users/Sergey Gorban` used to
+  split the command. Claude hook entries additionally carry `shell: "bash"`
+  (documented hook-schema field): on Windows Claude Code resolves the command
+  in Git Bash instead of PowerShell/cmd.exe, which both mangle the quoting;
+  older Claude Code versions ignore the key. Run `repair` to rewrite the
+  installed entries.
+
 - **`using-superpowers` synced with upstream superpowers 6.2.0.** The skill
   body picks up the upstream rewrite: the dot-digraph, "Skill Types",
   "Instruction Priority" ladder and per-platform "How to Access Skills"

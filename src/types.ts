@@ -1,6 +1,7 @@
 export interface HookCommand {
   type: "command";
   command: string;
+  shell?: "bash" | "powershell";
 }
 
 export interface HookEntry {

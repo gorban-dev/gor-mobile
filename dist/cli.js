@@ -100,7 +100,7 @@ function ensureSettingsFile(hooksFile) {
   }
   return readJsonSafe(hooksFile, {});
 }
-function upsertHook(hooksFile, hookType, matcher, command) {
+function upsertHook(hooksFile, hookType, matcher, command, shell) {
   const settings = ensureSettingsFile(hooksFile);
   settings.hooks = settings.hooks ?? {};
   const existing = settings.hooks[hookType] ?? [];
@@ -108,7 +108,7 @@ function upsertHook(hooksFile, hookType, matcher, command) {
   const next = {
     _managed_by: MANAGED_TAG,
     matcher,
-    hooks: [{ type: "command", command }]
+    hooks: [shell ? { type: "command", command, shell } : { type: "command", command }]
   };
   settings.hooks[hookType] = [...previous, next];
   writeJson(hooksFile, settings);
@@ -129,31 +129,35 @@ function removeHook(hooksFile, hookType) {
   writeJson(hooksFile, settings);
 }
 function sessionStartCommand(target) {
-  const base = `bash ${GOR_MOBILE_HOME}/templates/session-start-hook.sh`;
-  return target.id === "claude" ? base : `GORM_SKILLS_DIR=${target.skillsDir} ${base}`;
+  const base = `bash "${GOR_MOBILE_HOME}/templates/session-start-hook.sh"`;
+  return target.id === "claude" ? base : `GORM_SKILLS_DIR="${target.skillsDir}" ${base}`;
+}
+function hookShell(target) {
+  return target.id === "claude" ? "bash" : void 0;
 }
 function installSessionStartHook(target) {
   return upsertHook(
     target.hooksFile,
     "SessionStart",
     "startup|clear|compact|resume",
-    sessionStartCommand(target)
+    sessionStartCommand(target),
+    hookShell(target)
   );
 }
 function removeSessionStartHook(target) {
   removeHook(target.hooksFile, "SessionStart");
 }
 function installUserPromptSubmitHook(target) {
-  const cmd = `bash ${GOR_MOBILE_HOME}/templates/user-prompt-submit-hook.sh`;
-  return upsertHook(target.hooksFile, "UserPromptSubmit", "", cmd);
+  const cmd = `bash "${GOR_MOBILE_HOME}/templates/user-prompt-submit-hook.sh"`;
+  return upsertHook(target.hooksFile, "UserPromptSubmit", "", cmd, hookShell(target));
 }
 function removeUserPromptSubmitHook(target) {
   removeHook(target.hooksFile, "UserPromptSubmit");
 }
 function installAstIndexGuardHook(target) {
-  const cmd = `bash ${GOR_MOBILE_HOME}/templates/ast-index-guard-hook.sh`;
+  const cmd = `bash "${GOR_MOBILE_HOME}/templates/ast-index-guard-hook.sh"`;
   const matcher = target.id === "claude" ? "Grep|Bash" : "Bash";
-  return upsertHook(target.hooksFile, "PreToolUse", matcher, cmd);
+  return upsertHook(target.hooksFile, "PreToolUse", matcher, cmd, hookShell(target));
 }
 function removeAstIndexGuardHook(target) {
   removeHook(target.hooksFile, "PreToolUse");
@@ -1145,7 +1149,7 @@ function installStatusLine(variant, opts = {}) {
   }
   settings.statusLine = {
     type: "command",
-    command: `bash ${GOR_MOBILE_HOME}/templates/${SCRIPT_FILE[variant]}`,
+    command: `bash "${GOR_MOBILE_HOME}/templates/${SCRIPT_FILE[variant]}"`,
     _managed_by: MANAGED_TAG
   };
   writeJson(CLAUDE_SETTINGS, settings);

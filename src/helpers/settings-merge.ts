@@ -46,7 +46,8 @@ function upsertHook(
   hooksFile: string,
   hookType: HookType,
   matcher: string,
-  command: string
+  command: string,
+  shell?: "bash"
 ): { collapsed: number } {
   const settings = ensureSettingsFile(hooksFile);
   settings.hooks = settings.hooks ?? {};
@@ -55,7 +56,7 @@ function upsertHook(
   const next: HookEntry = {
     _managed_by: MANAGED_TAG,
     matcher,
-    hooks: [{ type: "command", command }]
+    hooks: [shell ? { type: "command", command, shell } : { type: "command", command }]
   };
   settings.hooks[hookType] = [...previous, next];
   writeJson(hooksFile, settings);
@@ -82,10 +83,18 @@ function removeHook(hooksFile: string, hookType: HookType): void {
 // <root>/.claude/skills); set → Codex user-level, always inject from that folder.
 // So the bare command is exactly the project-mode signal.
 function sessionStartCommand(target: TargetSpec): string {
-  const base = `bash ${GOR_MOBILE_HOME}/templates/session-start-hook.sh`;
+  const base = `bash "${GOR_MOBILE_HOME}/templates/session-start-hook.sh"`;
   return target.id === "claude"
     ? base
-    : `GORM_SKILLS_DIR=${target.skillsDir} ${base}`;
+    : `GORM_SKILLS_DIR="${target.skillsDir}" ${base}`;
+}
+
+// On Windows Claude Code otherwise hands the command line to PowerShell or
+// cmd.exe, and both mangle it (quoted path parsed as an expression / quote
+// stripping splits on metacharacters). `shell: "bash"` pins Git Bash; Codex
+// hooks.json has its own schema, so the key is Claude-only.
+function hookShell(target: TargetSpec): "bash" | undefined {
+  return target.id === "claude" ? "bash" : undefined;
 }
 
 export function installSessionStartHook(target: TargetSpec): { collapsed: number } {
@@ -93,7 +102,8 @@ export function installSessionStartHook(target: TargetSpec): { collapsed: number
     target.hooksFile,
     "SessionStart",
     "startup|clear|compact|resume",
-    sessionStartCommand(target)
+    sessionStartCommand(target),
+    hookShell(target)
   );
 }
 
@@ -102,8 +112,8 @@ export function removeSessionStartHook(target: TargetSpec): void {
 }
 
 export function installUserPromptSubmitHook(target: TargetSpec): { collapsed: number } {
-  const cmd = `bash ${GOR_MOBILE_HOME}/templates/user-prompt-submit-hook.sh`;
-  return upsertHook(target.hooksFile, "UserPromptSubmit", "", cmd);
+  const cmd = `bash "${GOR_MOBILE_HOME}/templates/user-prompt-submit-hook.sh"`;
+  return upsertHook(target.hooksFile, "UserPromptSubmit", "", cmd, hookShell(target));
 }
 
 export function removeUserPromptSubmitHook(target: TargetSpec): void {
@@ -116,9 +126,9 @@ export function removeUserPromptSubmitHook(target: TargetSpec): void {
 // commands, so its matcher is Bash-only and the prose contour stays as the
 // backstop for the partial coverage.
 export function installAstIndexGuardHook(target: TargetSpec): { collapsed: number } {
-  const cmd = `bash ${GOR_MOBILE_HOME}/templates/ast-index-guard-hook.sh`;
+  const cmd = `bash "${GOR_MOBILE_HOME}/templates/ast-index-guard-hook.sh"`;
   const matcher = target.id === "claude" ? "Grep|Bash" : "Bash";
-  return upsertHook(target.hooksFile, "PreToolUse", matcher, cmd);
+  return upsertHook(target.hooksFile, "PreToolUse", matcher, cmd, hookShell(target));
 }
 
 export function removeAstIndexGuardHook(target: TargetSpec): void {
