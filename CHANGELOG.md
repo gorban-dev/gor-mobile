@@ -14,6 +14,24 @@ Requires `gor-mobile repair` — templates changed.
   `references/*.md` pointers (those reference skills gor-mobile does not
   ship). Fixes the stale "gor-mobile targets Claude Code only" claim.
 
+- **Reviewer agents no longer demand test coverage.** The unconditional
+  "Assess test coverage and quality of test implementations" bullet — a TDD
+  leftover the 0.3.3 scrub missed — becomes "if the change includes tests
+  (written only on explicit user request in this workflow), assess their
+  quality; do not flag missing test coverage". Applied to all four carriers:
+  `templates/agents/gor-mobile-code-reviewer{,-deep}.md` and their Codex TOML
+  mirrors.
+
+- **`writing-plans` body is test-free, not overlay-overridden.** The upstream
+  TDD scaffolding is removed from the body itself: "DRY. YAGNI. TDD." loses
+  TDD (twice), the 5-step failing-test granularity example and the Task
+  Structure template collapse to Implement → Verify → Commit (no `Test:` file
+  line). The overlay's "No test steps by default" section drops the now-false
+  "the body hardcodes Step 1: Write the failing test — overrides this"
+  framing; the explicit-user-request exception and the Red Flag stay. The
+  `executing-plans` overlay guard now attributes stray failing-test steps to
+  pre-TDD-removal or external plans instead of "the upstream body's template".
+
 ## 0.3.3 — 2026-07-24
 
 Requires `gor-mobile repair` — templates changed: the TDD skill is removed,

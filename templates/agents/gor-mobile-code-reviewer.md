@@ -46,7 +46,7 @@ When reviewing completed work, you will:
    - Review code for adherence to established patterns and conventions
    - Check for proper error handling, type safety, and defensive programming
    - Evaluate code organization, naming conventions, and maintainability
-   - Assess test coverage and quality of test implementations
+   - If the change includes tests (written only on explicit user request in this workflow), assess their quality; do not flag missing test coverage
    - Look for potential security vulnerabilities or performance issues
 
 3. **Architecture and Design Review**:

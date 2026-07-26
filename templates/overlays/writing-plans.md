@@ -7,12 +7,10 @@ is an Android/Kotlin codebase.
 
 ### No test steps by default (run this FIRST)
 
-The body's task template hardcodes "**Step 1: Write the failing test**" and
-lists `TDD` under Remember. The gor-mobile overlay **overrides this**: do NOT
-emit test steps. Plan each task around the implementation plus its verification
-step (`[[gor-mobile-verification-before-completion]]`, on-device per
-`[[gor-mobile-using-android-cli]]` where relevant) — never a "write the failing
-test" step.
+Do NOT emit test steps. Plan each task around the implementation plus its
+verification step (`[[gor-mobile-verification-before-completion]]`, on-device
+per `[[gor-mobile-using-android-cli]]` where relevant) — never a "write the
+failing test" step.
 
 The one exception is an **explicit user request** for tests. If the user asked
 for tests (for a specific task or the whole feature), plan a normal test step

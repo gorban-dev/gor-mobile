@@ -28,8 +28,8 @@ For every task in the plan, in order:
 4. Mark TodoWrite `completed`, advance.
 
 **Skip baked-in test steps unless the user asked for tests.** If a task
-prescribes writing a failing test (a leftover from the upstream body's
-template), do NOT execute it — implement the change and run the task's
+prescribes writing a failing test (a plan written before the TDD removal, or
+by a planner outside gor-mobile), do NOT execute it — implement the change and run the task's
 verification step instead. The only exception is an explicit user request for
 tests; if the user asked, write the test the task describes. Never write a test
 merely because the plan listed one, and never fabricate a new seam to test.
