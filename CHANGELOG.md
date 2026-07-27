@@ -124,6 +124,10 @@ Requires `gor-mobile repair` — templates changed.
   `executing-plans` overlay guard now attributes stray failing-test steps to
   pre-TDD-removal or external plans instead of "the upstream body's template".
 
+### Added
+- `gor-mobile-compose-internals` skill skeleton (rules digest + references, content lands with the book-distillation stage) installed into both targets.
+- Compose anchors across the flow: session-start addendum, `Compose rules:` plan gate in the writing-plans overlay, implementer/quality-reviewer mandates, Compose checklist in both reviewer agents (`.md` + Codex `.toml`).
+
 ## 0.3.3 — 2026-07-24
 
 Requires `gor-mobile repair` — templates changed: the TDD skill is removed,

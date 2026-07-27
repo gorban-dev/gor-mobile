@@ -87,6 +87,29 @@ layer-touching task with none is a plan defect.
 > anchored on an external instruction, not the conventions — move the
 > behavior where the conventions put it, or escalate.
 
+### Compose gate (plan phase) — every @Composable task carries its rules reference
+
+The Examples-first gate above owns layer placement and shape; this gate owns
+**Compose correctness**. Every task that creates or modifies a `@Composable`
+function must be authored **after reading** the rules digest of
+`[[gor-mobile-compose-internals]]` (the SKILL.md body) plus the reference
+files matching the task's surface, and must carry an artifact line:
+
+    Compose rules: references/<file>.md[, references/<file>.md...]
+
+Topics: `recomposition.md` (skipping/restart), `side-effects.md`
+(LaunchedEffect / DisposableEffect / rememberCoroutineScope / SideEffect /
+produceState / snapshotFlow), `stability.md` (@Stable / @Immutable,
+collection parameters), `state-hoisting.md` (UDF, state down / events up),
+`modifiers-phases.md`. The paths are relative to the installed
+`gor-mobile-compose-internals` skill directory. A `@Composable`-touching task
+with no `Compose rules:` line is a plan defect — the plan-document reviewer
+verifies this exactly like the `Conforms to:` lines above.
+
+> **Red Flag — STOP.** Authoring a `@Composable` task step from memory of
+> Compose patterns. The digest and the cited reference files are the ground
+> truth — read them before writing the step's code, and cite what you read.
+
 ### Decomposition: sealed / enum + exhaustive `when` is compile-coupled
 
 Adding a variant to a `sealed` type or `enum` that is read by an **exhaustive

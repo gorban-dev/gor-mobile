@@ -61,6 +61,17 @@ Task tool (general-purpose):
     - In existing codebases, follow established patterns. Improve code you're touching
       the way a good developer would, but don't restructure things outside your task.
 
+    ## Compose rules (Android/Kotlin)
+
+    If your task creates or modifies any `@Composable`: BEFORE writing code,
+    read the rules digest of the `gor-mobile-compose-internals` skill
+    (SKILL.md) and every reference file listed in the brief's
+    `Compose rules:` line. Code that violates the digest — a side effect in
+    the composable body outside an effect handler, state without `remember`,
+    a dynamic list without `key(...)`, unstable collection parameters,
+    `ViewModel` / `MutableState` passed down the tree — is a defect even
+    when it compiles.
+
     ## When You're in Over Your Head
 
     It is always OK to stop and say "this is too hard for me." Bad work is worse than

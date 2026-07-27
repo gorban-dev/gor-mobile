@@ -44,6 +44,18 @@ whenever a touched layer's plan or review context carries a
 Never reconstruct a "canonical shape" from memory of a
 default pack.
 
+**Compose checklist (diffs touching `@Composable`).** Verify the diff against
+the nine composable-function properties (calling context, idempotent, free of
+uncontrolled side effects, any order, parallel, restartable/reactive, fast
+execution, skippable, positional memoization) and the rules digest of the
+`gor-mobile-compose-internals` skill. At least **Important**: a side effect in
+a composable body outside an effect handler; state without `remember`; a
+dynamic list without `key(...)`; writes to shared/global state during
+composition; heavy computation in the body; unstable collection parameters;
+`ViewModel` / `MutableState` passed down the tree. Grounding: before assessing
+an unfamiliar Compose API, verify its signature against KDoc / androidx
+sources — never against a remembered signature.
+
 When reviewing completed work, you will:
 
 1. **Plan Alignment Analysis**:

@@ -34,5 +34,6 @@ Task tool (superpowers:code-reviewer):
 - Are units decomposed so they can be understood and tested independently?
 - Is the implementation following the file structure from the plan?
 - Did this implementation create new files that are already large, or significantly grow existing files? (Don't flag pre-existing file sizes — focus on what this change contributed.)
+- Compose diffs (any `@Composable` touched): check the implementation against the `gor-mobile-compose-internals` rules digest and the reference files named in the brief's `Compose rules:` line; before judging an unfamiliar Compose API, verify its signature against KDoc / androidx sources — never from memory.
 
 **Code reviewer returns:** Strengths, Issues (Critical/Important/Minor), Assessment

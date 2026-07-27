@@ -173,7 +173,12 @@ inside each SKILL.md for how to use them.
 
 On Android-target sessions, invoke [[gor-mobile-using-android-cli]] before
 research/exec/verify phases — it owns the phase→CLI-command mapping and
-is authoritative for Android device ops."
+is authoritative for Android device ops.
+
+Compose code: before writing or modifying any @Composable, invoke
+[[gor-mobile-compose-internals]] — its rules digest (9 composable
+properties, state, side effects) is mandatory, including for ad-hoc
+edits outside a planned workflow."
 fi
 
 # Retention sweep: .gor-mobile plan artifacts are working files, not
