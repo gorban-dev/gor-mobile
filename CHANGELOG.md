@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.4 — 2026-07-27
 
 Requires `gor-mobile repair` — templates changed.
 
@@ -125,7 +125,7 @@ Requires `gor-mobile repair` — templates changed.
   pre-TDD-removal or external plans instead of "the upstream body's template".
 
 ### Added
-- `gor-mobile-compose-internals` skill skeleton (rules digest + references, content lands with the book-distillation stage) installed into both targets.
+- `gor-mobile-compose-internals` skill content: distilled digest (`SKILL.md`), 7 references (recomposition, stability, snapshot state, side effects, modifiers/phases, layout/semantics, state hoisting), 6 Kotlin example files — installed into both targets. The source book is not shipped: `book/` is gitignored and nothing from it is redistributed verbatim.
 - Compose anchors across the flow: session-start addendum, `Compose rules:` plan gate in the writing-plans overlay, implementer/quality-reviewer mandates, Compose checklist in both reviewer agents (`.md` + Codex `.toml`).
 
 ## 0.3.3 — 2026-07-24

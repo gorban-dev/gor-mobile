@@ -25,7 +25,7 @@ Task tool (general-purpose):
     | Buildability | Could an engineer follow this plan without getting stuck? Does every task still compile on its own? |
     | Docs grounding | Every step coding against an SDK/library/vendor API cites the verified signature source (docs excerpt, `javap`, or source ref) — not a remembered signature. Flag API signatures pasted without a source. |
     | Examples grounding | Every task creating/modifying a file in a layer declared in the rules pack's `examples/index.json` carries one artifact line per touched layer (`Conforms to: <pack path verbatim from index.json>`, `Conforms to (project precedent): <repo paths>`, or `Shape per user: <...>`), the cited files exist, and the task's code does not contradict the cited shape. Flag layer-touching tasks with no artifact line. |
-    | Compose grounding | Every task creating or modifying a `@Composable` carries a `Compose rules: references/<file>.md` line naming files from the compose-internals skill's references set (`recomposition.md`, `side-effects.md`, `stability.md`, `state-hoisting.md`, `modifiers-phases.md`). Flag `@Composable`-touching tasks with no such line. |
+    | Compose grounding | Every task creating or modifying a `@Composable` carries a `Compose rules: references/<file>.md` line naming files from the compose-internals skill's references set (`recomposition.md`, `side-effects.md`, `stability.md`, `state-hoisting.md`, `snapshot-state.md`, `modifiers-phases.md`, `layout-semantics.md`). Flag `@Composable`-touching tasks with no such line. |
 
     ## Calibration
 

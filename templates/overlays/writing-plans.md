@@ -101,7 +101,9 @@ Topics: `recomposition.md` (skipping/restart), `side-effects.md`
 (LaunchedEffect / DisposableEffect / rememberCoroutineScope / SideEffect /
 produceState / snapshotFlow), `stability.md` (@Stable / @Immutable,
 collection parameters), `state-hoisting.md` (UDF, state down / events up),
-`modifiers-phases.md`. The paths are relative to the installed
+`snapshot-state.md` (snapshot threading, atomic writes),
+`modifiers-phases.md`, `layout-semantics.md` (measure contract, custom
+Layout, semantics tree). The paths are relative to the installed
 `gor-mobile-compose-internals` skill directory. A `@Composable`-touching task
 with no `Compose rules:` line is a plan defect — the plan-document reviewer
 verifies this exactly like the `Conforms to:` lines above.
