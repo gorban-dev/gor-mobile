@@ -33,15 +33,19 @@ export function resolveDevKnowledgeKey(): ResolvedKey {
     return { key: fromEnv.trim(), source: "environment" };
   }
   const fromClaude = claudeEnvValue(DEV_KNOWLEDGE_API_KEY_ENV);
-  if (fromClaude) return { key: fromClaude, source: "claude-settings" };
+  if (fromClaude && fromClaude.trim().length > 0) {
+    return { key: fromClaude.trim(), source: "claude-settings" };
+  }
   return { key: null, source: "none" };
 }
 
 /** Write the key into every harness config gor-mobile manages. */
 export function persistDevKnowledgeKey(key: string): void {
-  setClaudeEnv(DEV_KNOWLEDGE_API_KEY_ENV, key);
+  const trimmed = key.trim();
+  if (trimmed.length === 0) return;
+  setClaudeEnv(DEV_KNOWLEDGE_API_KEY_ENV, trimmed);
   if (agentHomeExists("codex")) {
-    installCodexDevKnowledgeMcp(key, { force: codexMcpState().managed });
+    installCodexDevKnowledgeMcp(trimmed, { force: codexMcpState().managed });
   }
 }
 
