@@ -1913,8 +1913,8 @@ async function cmdSetup(opts = {}) {
 }
 
 // src/commands/init.ts
-import { existsSync as existsSync17 } from "fs";
-import { join as join11 } from "path";
+import { existsSync as existsSync18 } from "fs";
+import { join as join12 } from "path";
 import pc8 from "picocolors";
 import { cancel as cancel4, isCancel as isCancel4, select as select2 } from "@clack/prompts";
 
@@ -1958,21 +1958,67 @@ function removeEnabledPlugins(file, keys) {
   writeJson(file, settings);
 }
 
+// src/helpers/mcp-register.ts
+import { existsSync as existsSync15, rmSync as rmSync4 } from "fs";
+import { join as join9 } from "path";
+function unregisterManaged() {
+  if (!existsSync15(CLAUDE_MCP)) return;
+  const cfg = readJsonSafe(CLAUDE_MCP, {});
+  if (!cfg.mcpServers) return;
+  const filtered = {};
+  for (const [name, server] of Object.entries(cfg.mcpServers)) {
+    if ((server._managed_by ?? "") !== MANAGED_TAG) {
+      filtered[name] = server;
+    }
+  }
+  cfg.mcpServers = filtered;
+  writeJson(CLAUDE_MCP, cfg);
+}
+var PROJECT_MCP_FILE = ".mcp.json";
+function projectMcpPath(root) {
+  return join9(root, PROJECT_MCP_FILE);
+}
+function devKnowledgeEntry() {
+  return {
+    type: "http",
+    url: DEV_KNOWLEDGE_MCP_URL,
+    headers: { "X-Goog-Api-Key": `\${${DEV_KNOWLEDGE_API_KEY_ENV}}` }
+  };
+}
+function registerProjectMcp(root, owned = []) {
+  const path = projectMcpPath(root);
+  const cfg = readJsonSafe(path, {});
+  const servers = cfg.mcpServers ?? {};
+  if (servers[DEV_KNOWLEDGE_MCP_NAME] && !owned.includes(DEV_KNOWLEDGE_MCP_NAME)) {
+    return { written: false, path };
+  }
+  servers[DEV_KNOWLEDGE_MCP_NAME] = devKnowledgeEntry();
+  cfg.mcpServers = servers;
+  writeJson(path, cfg);
+  return { written: true, path };
+}
+function approveProjectMcpServers(hooksFile, names) {
+  const settings = readJsonSafe(hooksFile, {});
+  const current = Array.isArray(settings.enabledMcpjsonServers) ? settings.enabledMcpjsonServers : [];
+  settings.enabledMcpjsonServers = [.../* @__PURE__ */ new Set([...current, ...names])];
+  writeJson(hooksFile, settings);
+}
+
 // src/helpers/project.ts
 import {
   appendFileSync,
-  existsSync as existsSync15,
+  existsSync as existsSync16,
   readdirSync as readdirSync5,
   readFileSync as readFileSync7,
   statSync as statSync2,
   writeFileSync as writeFileSync6
 } from "fs";
-import { dirname as dirname4, join as join9 } from "path";
+import { dirname as dirname4, join as join10 } from "path";
 import { execa as execa6 } from "execa";
 function findProjectRoot(from = process.cwd()) {
   let dir = from;
   while (true) {
-    if (existsSync15(join9(dir, PROJECT_MARKER_NAME))) return dir;
+    if (existsSync16(join10(dir, PROJECT_MARKER_NAME))) return dir;
     if (dir === HOME) return null;
     const parent = dirname4(dir);
     if (parent === dir) return null;
@@ -1980,10 +2026,10 @@ function findProjectRoot(from = process.cwd()) {
   }
 }
 function readProjectMarker(root) {
-  return readJsonSafe(join9(root, PROJECT_MARKER_NAME), {});
+  return readJsonSafe(join10(root, PROJECT_MARKER_NAME), {});
 }
 function writeProjectMarker(root, marker) {
-  writeJson(join9(root, PROJECT_MARKER_NAME), marker);
+  writeJson(join10(root, PROJECT_MARKER_NAME), marker);
 }
 function detectPlatform(root) {
   const androidMarkers = [
@@ -1993,7 +2039,7 @@ function detectPlatform(root) {
     "settings.gradle.kts",
     "gradlew"
   ];
-  if (androidMarkers.some((m) => existsSync15(join9(root, m)))) return "android";
+  if (androidMarkers.some((m) => existsSync16(join10(root, m)))) return "android";
   try {
     const entries = readdirSync5(root);
     if (entries.some((e) => e.endsWith(".xcodeproj") || e.endsWith(".xcworkspace")) || entries.includes("Podfile") || entries.includes("Package.swift")) {
@@ -2042,7 +2088,7 @@ function classifyDir(root) {
 function findGitRoot(from) {
   let dir = from;
   while (true) {
-    if (existsSync15(join9(dir, ".git"))) return dir;
+    if (existsSync16(join10(dir, ".git"))) return dir;
     const parent = dirname4(dir);
     if (parent === dir) return null;
     dir = parent;
@@ -2053,8 +2099,8 @@ async function gitInit(root) {
   return res.exitCode === 0;
 }
 async function gitInfoExcludePath(root) {
-  let gitDir = join9(root, ".git");
-  if (!existsSync15(gitDir)) return null;
+  let gitDir = join10(root, ".git");
+  if (!existsSync16(gitDir)) return null;
   if (!statSync2(gitDir).isDirectory()) {
     const res = await execa6(
       "git",
@@ -2064,13 +2110,13 @@ async function gitInfoExcludePath(root) {
     if (res.exitCode !== 0) return null;
     gitDir = res.stdout.trim();
   }
-  return join9(gitDir, "info", "exclude");
+  return join10(gitDir, "info", "exclude");
 }
 async function ensureLocalExclude(root, entries) {
   const file = await gitInfoExcludePath(root);
   if (!file) return null;
   ensureParentDir(file);
-  const current = existsSync15(file) ? readFileSync7(file, "utf8") : "";
+  const current = existsSync16(file) ? readFileSync7(file, "utf8") : "";
   const lines = new Set(current.split("\n").map((l) => l.trim()));
   const added = entries.filter((e) => !lines.has(e));
   if (added.length > 0) {
@@ -2082,7 +2128,7 @@ async function ensureLocalExclude(root, entries) {
 }
 async function removeLocalExclude(root, entries) {
   const file = await gitInfoExcludePath(root);
-  if (!file || !existsSync15(file)) return null;
+  if (!file || !existsSync16(file)) return null;
   const drop = new Set(entries);
   const kept = [];
   const removed = [];
@@ -2096,8 +2142,8 @@ async function removeLocalExclude(root, entries) {
   return { file, added: removed };
 }
 function ensureGitignoreFallback(root, entries) {
-  const file = join9(root, ".gitignore");
-  const current = existsSync15(file) ? readFileSync7(file, "utf8") : "";
+  const file = join10(root, ".gitignore");
+  const current = existsSync16(file) ? readFileSync7(file, "utf8") : "";
   const lines = new Set(current.split("\n").map((l) => l.trim()));
   const added = entries.filter((e) => !lines.has(e));
   if (added.length > 0) {
@@ -2110,52 +2156,52 @@ function ensureGitignoreFallback(root, entries) {
 
 // src/helpers/state-artifacts.ts
 import {
-  existsSync as existsSync16,
+  existsSync as existsSync17,
   mkdirSync as mkdirSync2,
   readdirSync as readdirSync6,
   renameSync,
   statSync as statSync3,
   writeFileSync as writeFileSync7
 } from "fs";
-import { join as join10 } from "path";
+import { join as join11 } from "path";
 var LEGACY_SUFFIX = ".progress.md";
 function migrateStateLayout(root) {
-  const stateDir = join10(root, ".gor-mobile", "state");
+  const stateDir = join11(root, ".gor-mobile", "state");
   const res = { migrated: [], skipped: [] };
-  if (!existsSync16(stateDir)) return res;
-  writeFileSync7(join10(stateDir, ".gitignore"), "*\n");
+  if (!existsSync17(stateDir)) return res;
+  writeFileSync7(join11(stateDir, ".gitignore"), "*\n");
   for (const name of readdirSync6(stateDir)) {
     if (!name.endsWith(LEGACY_SUFFIX)) continue;
     const slug = name.slice(0, -LEGACY_SUFFIX.length);
     if (!slug) continue;
-    const target = join10(stateDir, slug, "progress.md");
-    if (existsSync16(target)) {
+    const target = join11(stateDir, slug, "progress.md");
+    if (existsSync17(target)) {
       res.skipped.push(name);
       continue;
     }
-    mkdirSync2(join10(stateDir, slug), { recursive: true });
-    renameSync(join10(stateDir, name), target);
+    mkdirSync2(join11(stateDir, slug), { recursive: true });
+    renameSync(join11(stateDir, name), target);
     res.migrated.push(name);
   }
   return res;
 }
 function listMd(dir) {
-  if (!existsSync16(dir)) return [];
-  return readdirSync6(dir).filter((f) => f.endsWith(".md")).map((f) => join10(dir, f));
+  if (!existsSync17(dir)) return [];
+  return readdirSync6(dir).filter((f) => f.endsWith(".md")).map((f) => join11(dir, f));
 }
 function artifactInventory(root) {
-  const gm = join10(root, ".gor-mobile");
-  const plans = listMd(join10(gm, "plans"));
-  const specs = listMd(join10(gm, "specs"));
-  const stateDir = join10(gm, "state");
+  const gm = join11(root, ".gor-mobile");
+  const plans = listMd(join11(gm, "plans"));
+  const specs = listMd(join11(gm, "specs"));
+  const stateDir = join11(gm, "state");
   const workspaces = [];
   const legacy = [];
-  if (existsSync16(stateDir)) {
+  if (existsSync17(stateDir)) {
     for (const name of readdirSync6(stateDir)) {
-      const p = join10(stateDir, name);
+      const p = join11(stateDir, name);
       if (statSync3(p).isDirectory()) {
-        const cp = join10(p, "progress.md");
-        workspaces.push(existsSync16(cp) ? cp : p);
+        const cp = join11(p, "progress.md");
+        workspaces.push(existsSync17(cp) ? cp : p);
       } else if (name.endsWith(LEGACY_SUFFIX)) {
         legacy.push(p);
       }
@@ -2176,9 +2222,9 @@ function artifactInventory(root) {
 }
 
 // src/commands/init.ts
-var EXCLUDE_ENTRIES = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME];
+var EXCLUDE_ENTRIES = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME, PROJECT_MCP_FILE];
 function machineReady() {
-  if (!existsSync17(join11(GOR_MOBILE_TEMPLATES_DIR, "session-start-hook.sh"))) {
+  if (!existsSync18(join12(GOR_MOBILE_TEMPLATES_DIR, "session-start-hook.sh"))) {
     return { ok: false, reason: "hook scripts not found in ~/.gor-mobile/templates" };
   }
   if (!readManifest()) {
@@ -2250,7 +2296,7 @@ async function cmdInit(opts = {}) {
   const root = process.cwd();
   const spec = projectClaudeSpec(root);
   const marker = readProjectMarker(root);
-  const reinit = existsSync17(join11(root, PROJECT_MARKER_NAME));
+  const reinit = existsSync18(join12(root, PROJECT_MARKER_NAME));
   console.log("");
   console.log(pc8.bold(pc8.magenta(`gor-mobile init`)) + pc8.dim(`  \xB7  ${root}`));
   if (reinit) log.info("Existing install found \u2014 refreshing (idempotent re-init).");
@@ -2302,6 +2348,8 @@ async function cmdInit(opts = {}) {
       `merge SessionStart + UserPromptSubmit + PreToolUse \u2192 ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` + (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
       `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
+      `register ${DEV_KNOWLEDGE_MCP_NAME} \u2192 ${join12(root, PROJECT_MCP_FILE)}`,
+      `approve it via enabledMcpjsonServers in ${spec.hooksFile}`,
       "android init \u2192 copy stock skill into .claude/skills, drop Claude-home copy",
       `write ${PROJECT_MARKER_NAME} (platform=${platform})`,
       `git exclude += ${EXCLUDE_ENTRIES.join(", ")}`
@@ -2327,6 +2375,17 @@ async function cmdInit(opts = {}) {
   log.ok(
     extraPlugins.length > 0 ? `Plugins: disabled superpowers, enabled ${extraPlugins.join(", ")}` : "Disabled duplicate superpowers plugin for this repo"
   );
+  const mcp = registerProjectMcp(root, marker.managed_mcp ?? []);
+  if (mcp.written) {
+    approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} \u2192 ${mcp.path} (approved in settings.local.json)`);
+  } else {
+    log.info(`${DEV_KNOWLEDGE_MCP_NAME} already configured by hand \u2014 left as is`);
+  }
+  const managedMcp = mcp.written ? [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])] : marker.managed_mcp ?? [];
+  if (resolveDevKnowledgeKey().key === null) {
+    log.warn("Developer Knowledge API key not set \u2014 run 'gor-mobile mcp' to add it");
+  }
   const clearContextEnabled = enableClearContextOnPlanAccept(spec.hooksFile);
   const managedSettings = clearContextEnabled ? [.../* @__PURE__ */ new Set([...marker.managed_settings ?? [], CLEAR_CONTEXT_ON_PLAN_ACCEPT])] : marker.managed_settings ?? [];
   if (clearContextEnabled) {
@@ -2348,6 +2407,7 @@ async function cmdInit(opts = {}) {
     installed_at: opts.now ?? marker.installed_at ?? (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
     managed_plugins: managedPlugins,
     managed_settings: managedSettings,
+    managed_mcp: managedMcp,
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };
   writeProjectMarker(root, nextMarker);
@@ -2357,7 +2417,7 @@ async function cmdInit(opts = {}) {
 }
 function noteAstIndex(root) {
   if (!astIndexPath()) return;
-  if (existsSync17(join11(root, ".claude", "rules", "ast-index.md"))) return;
+  if (existsSync18(join12(root, ".claude", "rules", "ast-index.md"))) return;
   note(
     [
       "ast-index CLI detected but this repo is not indexed yet. To enable the",
@@ -2391,25 +2451,6 @@ import { confirm as confirm2, isCancel as isCancel5 } from "@clack/prompts";
 // src/helpers/teardown.ts
 import { existsSync as existsSync19, readdirSync as readdirSync7, readFileSync as readFileSync8, rmSync as rmSync5 } from "fs";
 import { join as join13 } from "path";
-
-// src/helpers/mcp-register.ts
-import { existsSync as existsSync18, rmSync as rmSync4 } from "fs";
-import { join as join12 } from "path";
-function unregisterManaged() {
-  if (!existsSync18(CLAUDE_MCP)) return;
-  const cfg = readJsonSafe(CLAUDE_MCP, {});
-  if (!cfg.mcpServers) return;
-  const filtered = {};
-  for (const [name, server] of Object.entries(cfg.mcpServers)) {
-    if ((server._managed_by ?? "") !== MANAGED_TAG) {
-      filtered[name] = server;
-    }
-  }
-  cfg.mcpServers = filtered;
-  writeJson(CLAUDE_MCP, cfg);
-}
-
-// src/helpers/teardown.ts
 function teardownUserTarget(target, opts = {}) {
   log.step(`Removing gor-mobile from ${target.label} (${target.home})`);
   removeSessionStartHook(target);

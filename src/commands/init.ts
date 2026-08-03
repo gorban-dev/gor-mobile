@@ -3,6 +3,7 @@ import { join } from "node:path";
 import pc from "picocolors";
 import { cancel, isCancel, select } from "@clack/prompts";
 import {
+  DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_TEMPLATES_DIR,
   GOR_MOBILE_VERSION,
   PROJECT_MARKER_NAME
@@ -10,8 +11,14 @@ import {
 import { provisionProjectAndroidSkill } from "../helpers/android-cli.js";
 import { androidCliPath } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
+import { resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
 import { applyEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
 import { installAgents, installSkills } from "../helpers/install-assets.js";
+import {
+  approveProjectMcpServers,
+  PROJECT_MCP_FILE,
+  registerProjectMcp
+} from "../helpers/mcp-register.js";
 import {
   classifyDir,
   detectPlatform,
@@ -52,7 +59,7 @@ export interface InitOptions {
 }
 
 // Local-ignore entries so nothing gor-mobile writes shows up in git.
-const EXCLUDE_ENTRIES = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME];
+const EXCLUDE_ENTRIES = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME, PROJECT_MCP_FILE];
 
 function machineReady(): { ok: boolean; reason?: string } {
   if (!existsSync(join(GOR_MOBILE_TEMPLATES_DIR, "session-start-hook.sh"))) {
@@ -204,6 +211,8 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` +
         (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
       `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
+      `register ${DEV_KNOWLEDGE_MCP_NAME} → ${join(root, PROJECT_MCP_FILE)}`,
+      `approve it via enabledMcpjsonServers in ${spec.hooksFile}`,
       "android init → copy stock skill into .claude/skills, drop Claude-home copy",
       `write ${PROJECT_MARKER_NAME} (platform=${platform})`,
       `git exclude += ${EXCLUDE_ENTRIES.join(", ")}`
@@ -241,6 +250,23 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       : "Disabled duplicate superpowers plugin for this repo"
   );
 
+  // Ownership comes from the marker: a same-named entry we did not write is a
+  // hand-configured server and must survive an idempotent re-init.
+  const mcp = registerProjectMcp(root, marker.managed_mcp ?? []);
+  if (mcp.written) {
+    approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} → ${mcp.path} (approved in settings.local.json)`);
+  } else {
+    log.info(`${DEV_KNOWLEDGE_MCP_NAME} already configured by hand — left as is`);
+  }
+  const managedMcp = mcp.written
+    ? [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
+    : (marker.managed_mcp ?? []);
+
+  if (resolveDevKnowledgeKey().key === null) {
+    log.warn("Developer Knowledge API key not set — run 'gor-mobile mcp' to add it");
+  }
+
   const clearContextEnabled = enableClearContextOnPlanAccept(spec.hooksFile);
   const managedSettings = clearContextEnabled
     ? [...new Set([...(marker.managed_settings ?? []), CLEAR_CONTEXT_ON_PLAN_ACCEPT])]
@@ -268,6 +294,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     installed_at: opts.now ?? marker.installed_at ?? new Date().toISOString().slice(0, 10),
     managed_plugins: managedPlugins,
     managed_settings: managedSettings,
+    managed_mcp: managedMcp,
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };
   writeProjectMarker(root, nextMarker);
