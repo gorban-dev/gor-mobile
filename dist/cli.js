@@ -846,6 +846,16 @@ function installCodexDevKnowledgeMcp(key, opts = {}) {
   writeFileSync3(CODEX_CONFIG_TOML, lines.join("\n").replace(/\n*$/, "") + "\n");
   return true;
 }
+function removeCodexDevKnowledgeMcp() {
+  const content = readConfig();
+  if (!content) return;
+  const lines = content.split("\n");
+  const table = findTable(lines);
+  if (!table || !lines[table.header].includes(MANAGED_TAG)) return;
+  lines.splice(table.header, table.end - table.header);
+  const remaining = lines.join("\n").replace(/\n*$/, "");
+  writeFileSync3(CODEX_CONFIG_TOML, remaining.length > 0 ? remaining + "\n" : "");
+}
 
 // src/helpers/ast-index.ts
 var AST_INDEX_REPO_URL = "https://github.com/defendend/Claude-ast-index-search";
@@ -928,6 +938,14 @@ function claudeEnvValue(name) {
 function setClaudeEnv(name, value) {
   const settings = readJsonSafe(CLAUDE_SETTINGS, {});
   settings.env = { ...settings.env ?? {}, [name]: value };
+  writeJson(CLAUDE_SETTINGS, settings);
+}
+function deleteClaudeEnv(name) {
+  if (!existsSync7(CLAUDE_SETTINGS)) return;
+  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
+  if (!settings.env || !(name in settings.env)) return;
+  delete settings.env[name];
+  if (Object.keys(settings.env).length === 0) delete settings.env;
   writeJson(CLAUDE_SETTINGS, settings);
 }
 
@@ -1997,6 +2015,19 @@ function registerProjectMcp(root, owned = []) {
   writeJson(path, cfg);
   return { written: true, path };
 }
+function unregisterProjectMcp(root, names) {
+  const path = projectMcpPath(root);
+  if (!existsSync15(path)) return;
+  const cfg = readJsonSafe(path, {});
+  if (!cfg.mcpServers) return;
+  for (const name of names) delete cfg.mcpServers[name];
+  const nothingLeft = Object.keys(cfg.mcpServers).length === 0 && Object.keys(cfg).filter((k) => k !== "mcpServers").length === 0;
+  if (nothingLeft) {
+    rmSync4(path, { force: true });
+    return;
+  }
+  writeJson(path, cfg);
+}
 function projectMcpState(root, hooksFile) {
   const cfg = readJsonSafe(projectMcpPath(root), {});
   const settings = readJsonSafe(hooksFile, {});
@@ -2009,6 +2040,16 @@ function approveProjectMcpServers(hooksFile, names) {
   const settings = readJsonSafe(hooksFile, {});
   const current = Array.isArray(settings.enabledMcpjsonServers) ? settings.enabledMcpjsonServers : [];
   settings.enabledMcpjsonServers = [.../* @__PURE__ */ new Set([...current, ...names])];
+  writeJson(hooksFile, settings);
+}
+function removeApprovedMcpServers(hooksFile, names) {
+  const settings = readJsonSafe(hooksFile, {});
+  if (!Array.isArray(settings.enabledMcpjsonServers)) return;
+  const kept = settings.enabledMcpjsonServers.filter(
+    (n) => !names.includes(n)
+  );
+  if (kept.length === 0) delete settings.enabledMcpjsonServers;
+  else settings.enabledMcpjsonServers = kept;
   writeJson(hooksFile, settings);
 }
 
@@ -2506,6 +2547,14 @@ function teardownUserTarget(target, opts = {}) {
   if (target.supportsMcpPrune) {
     unregisterManaged();
     log.ok("Managed MCP entries removed");
+  }
+  if (target.id === "codex") {
+    removeCodexDevKnowledgeMcp();
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} removed from config.toml`);
+  }
+  if (target.id === "claude" && target.scope === "user") {
+    deleteClaudeEnv(DEV_KNOWLEDGE_API_KEY_ENV);
+    log.ok("Developer Knowledge API key removed from settings.json env");
   }
   if (target.instructionsFile) {
     removeManagedSection(target.instructionsFile);
@@ -3129,7 +3178,7 @@ async function cmdMcp(opts = {}) {
 import { existsSync as existsSync22, readdirSync as readdirSync9, rmdirSync, rmSync as rmSync7 } from "fs";
 import { join as join17 } from "path";
 import { confirm as confirm3, isCancel as isCancel6, select as select3 } from "@clack/prompts";
-var EXCLUDE_ENTRIES2 = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME];
+var EXCLUDE_ENTRIES2 = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME, PROJECT_MCP_FILE];
 async function resolveMode(opts) {
   if (opts.machine) return "machine";
   if (opts.project) return "project";
@@ -3176,6 +3225,10 @@ async function uninstallProject(opts) {
     removeClearContextOnPlanAccept(spec.hooksFile);
   }
   log.ok(`Hooks + plugin overrides removed (${spec.hooksFile})`);
+  const ownedMcp = marker.managed_mcp ?? [DEV_KNOWLEDGE_MCP_NAME];
+  unregisterProjectMcp(root, ownedMcp);
+  removeApprovedMcpServers(spec.hooksFile, ownedMcp);
+  log.ok(`MCP servers removed (${ownedMcp.join(", ")})`);
   if (existsSync22(spec.skillsDir)) {
     for (const entry of readdirSync9(spec.skillsDir)) {
       if (entry.startsWith("gor-mobile-") || entry === "android-cli") {

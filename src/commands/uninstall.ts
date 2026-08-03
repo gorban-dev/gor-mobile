@@ -2,6 +2,7 @@ import { existsSync, readdirSync, rmdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { confirm, isCancel, select } from "@clack/prompts";
 import {
+  DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_CONFIG,
   GOR_MOBILE_CONFIG_DIR,
   GOR_MOBILE_HOME,
@@ -10,6 +11,11 @@ import {
 import { uninstallAndroidCli } from "../helpers/android-cli.js";
 import { androidCliPath } from "../helpers/deps.js";
 import { removeEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
+import {
+  PROJECT_MCP_FILE,
+  removeApprovedMcpServers,
+  unregisterProjectMcp
+} from "../helpers/mcp-register.js";
 import { findProjectRoot, readProjectMarker, removeLocalExclude } from "../helpers/project.js";
 import {
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
@@ -35,7 +41,7 @@ interface UninstallOptions {
 
 type UninstallMode = "project" | "machine";
 
-const EXCLUDE_ENTRIES = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME];
+const EXCLUDE_ENTRIES = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME, PROJECT_MCP_FILE];
 
 async function resolveMode(opts: UninstallOptions): Promise<UninstallMode | null> {
   if (opts.machine) return "machine";
@@ -90,6 +96,11 @@ async function uninstallProject(opts: UninstallOptions): Promise<void> {
     removeClearContextOnPlanAccept(spec.hooksFile);
   }
   log.ok(`Hooks + plugin overrides removed (${spec.hooksFile})`);
+
+  const ownedMcp = marker.managed_mcp ?? [DEV_KNOWLEDGE_MCP_NAME];
+  unregisterProjectMcp(root, ownedMcp);
+  removeApprovedMcpServers(spec.hooksFile, ownedMcp);
+  log.ok(`MCP servers removed (${ownedMcp.join(", ")})`);
 
   if (existsSync(spec.skillsDir)) {
     for (const entry of readdirSync(spec.skillsDir)) {
