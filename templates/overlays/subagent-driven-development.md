@@ -223,7 +223,7 @@ triage which must be fixed before merge.
 (`all tasks complete, final review clean`) and leave every artifact in
 place — no manual cleanup. The SessionStart retention sweep deletes plan
 artifacts (plan, spec, workspace) once nothing in the group has been
-touched for `artifact_ttl_days` (`.gor-mobile.json`, default 30 days).
+touched for `artifact_ttl_days` (`.gor-mobile/marker.json`, default 30 days).
 
 **Tool disambiguation** (upstream bug obra/superpowers#1077): `requesting-code-review`
 and `writing-plans` are **Skills** (invoke via the `Skill` tool);

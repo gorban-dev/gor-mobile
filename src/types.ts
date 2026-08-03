@@ -24,9 +24,13 @@ export interface ManagedSettings {
 
 export interface McpServer {
   _managed_by?: string;
-  command: string;
+  /** stdio servers only — an http entry carries url/headers instead. */
+  command?: string;
   args?: string[];
   env?: Record<string, string>;
+  type?: string;
+  url?: string;
+  headers?: Record<string, string>;
   [key: string]: unknown;
 }
 

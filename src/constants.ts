@@ -39,8 +39,14 @@ export const CODEX_AGENTS_MD = join(CODEX_DIR, "AGENTS.md");
 export const CODEX_HOOKS_JSON = join(CODEX_DIR, "hooks.json");
 export const CODEX_CONFIG_TOML = join(CODEX_DIR, "config.toml");
 
-// Project-level install marker, written by `gor-mobile init` at the repo root.
-export const PROJECT_MARKER_NAME = ".gor-mobile.json";
+// Project-level install marker, written by `gor-mobile init` into the repo's
+// .gor-mobile/ workspace. Installs made before v0.3.5 kept it at the repo root;
+// that name is still recognized (hooks, findProjectRoot) and moved across by
+// `init` / `repair`.
+export const PROJECT_STATE_DIR = ".gor-mobile";
+export const PROJECT_MARKER_FILE = "marker.json";
+export const PROJECT_MARKER_NAME = `${PROJECT_STATE_DIR}/${PROJECT_MARKER_FILE}`;
+export const LEGACY_PROJECT_MARKER_NAME = ".gor-mobile.json";
 
 export const MANAGED_TAG = "gor-mobile";
 export const SECTION_BEGIN = "<!-- BEGIN gor-mobile managed section -->";
@@ -49,6 +55,24 @@ export const SECTION_END = "<!-- END gor-mobile managed section -->";
 export const DEFAULT_RULES_URL =
   "https://github.com/gorban-dev/gor-mobile-rules-default.git";
 export const DEFAULT_RULES_REF = "main";
+
+// Google Developer Knowledge MCP — the non-Android half of the docs ladder.
+// Names and URLs come from https://developers.google.com/knowledge/mcp. The
+// server name matches Google's own snippets for every client; their single
+// `claude mcp add google-dev-knowledge` line is the outlier.
+export const DEV_KNOWLEDGE_MCP_NAME = "google-developer-knowledge";
+export const DEV_KNOWLEDGE_MCP_URL =
+  "https://developerknowledge.googleapis.com/mcp";
+export const DEV_KNOWLEDGE_API_KEY_ENV = "GOOGLE_DEVELOPER_KNOWLEDGE_API_KEY";
+export const DEV_KNOWLEDGE_DOCS_URL = "https://developers.google.com/knowledge/mcp";
+export const DEV_KNOWLEDGE_ENABLE_API_URL =
+  "https://console.cloud.google.com/start/api?id=developerknowledge.googleapis.com";
+export const DEV_KNOWLEDGE_CREDENTIALS_URL =
+  "https://console.cloud.google.com/apis/credentials";
+// Google API keys are [A-Za-z0-9_-]+. Anything else is rejected on capture: a
+// quote in the value would produce invalid TOML and take down the whole
+// ~/.codex/config.toml (status line, hooks, model settings included).
+export const DEV_KNOWLEDGE_KEY_SHAPE = /^[A-Za-z0-9_-]+$/;
 
 /**
  * Resolve install root — location of the checked-out/installed gor-mobile

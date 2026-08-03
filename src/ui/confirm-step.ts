@@ -25,3 +25,18 @@ export async function textPrompt(
   }
   return String(res);
 }
+
+/**
+ * Masked single-line input. Returns "" when the user submits nothing or when
+ * the TUI is off — callers treat that as "skipped", never as a key.
+ */
+export async function passwordPrompt(message: string): Promise<string> {
+  if (!isTuiOn()) return "";
+  const { password } = await import("@clack/prompts");
+  const res = await password({ message });
+  if (isCancel(res)) {
+    cancel("Cancelled");
+    process.exit(0);
+  }
+  return String(res ?? "").trim();
+}

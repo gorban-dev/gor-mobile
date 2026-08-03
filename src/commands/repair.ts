@@ -1,7 +1,10 @@
 import { join } from "node:path";
 import {
   CLAUDE_COMMANDS_DIR,
+  DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_VERSION,
+  LEGACY_PROJECT_MARKER_NAME,
+  PROJECT_MARKER_NAME,
   gorMobileRoot
 } from "../constants.js";
 import {
@@ -10,6 +13,8 @@ import {
   runAndroidInit
 } from "../helpers/android-cli.js";
 import { writeManagedSection } from "../helpers/claude-md-section.js";
+import { codexMcpState, installCodexDevKnowledgeMcp } from "../helpers/codex-mcp.js";
+import { resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
 import { applyEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
 import {
   cleanupLegacyAgents,
@@ -18,7 +23,20 @@ import {
   installAgents,
   installSkills
 } from "../helpers/install-assets.js";
-import { findProjectRoot, readProjectMarker, writeProjectMarker } from "../helpers/project.js";
+import {
+  approveProjectMcpServers,
+  malformedMcpMessage,
+  PROJECT_MCP_FILE,
+  registerProjectMcp
+} from "../helpers/mcp-register.js";
+import {
+  ensureLocalExclude,
+  findProjectRoot,
+  migrateProjectMarker,
+  readProjectMarker,
+  removeLocalExclude,
+  writeProjectMarker
+} from "../helpers/project.js";
 import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
@@ -87,6 +105,19 @@ async function repairProject(root: string): Promise<void> {
   applyEnabledPlugins(spec.hooksFile, [], [SUPERPOWERS_KEY]);
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
 
+  const marker = readProjectMarker(root);
+  const mcpRes = registerProjectMcp(root, marker.managed_mcp ?? []);
+  if (mcpRes.written) {
+    approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed → ${mcpRes.path}`);
+    // A repo initialized before .mcp.json existed has no exclude line for it —
+    // without this the refresh puts an untracked file in `git status`.
+    const excl = await ensureLocalExclude(root, [PROJECT_MCP_FILE]);
+    if (excl && excl.added.length > 0) log.ok(`Local ignore updated (${excl.file})`);
+  } else if (mcpRes.malformed) {
+    log.warn(malformedMcpMessage(mcpRes.path));
+  }
+
   const stateMigration = migrateStateLayout(root);
   if (stateMigration.migrated.length > 0) {
     log.ok(`Migrated ${stateMigration.migrated.length} checkpoint(s) → .gor-mobile/state/<plan>/progress.md`);
@@ -95,7 +126,6 @@ async function repairProject(root: string): Promise<void> {
     log.warn(`Left legacy ${s} in place — a workspace checkpoint already exists for that plan`);
   }
 
-  const marker = readProjectMarker(root);
   const enabledNow = enableClearContextOnPlanAccept(spec.hooksFile);
   const managedSettings = enabledNow
     ? [...new Set([...(marker.managed_settings ?? []), CLEAR_CONTEXT_ON_PLAN_ACCEPT])]
@@ -105,9 +135,19 @@ async function repairProject(root: string): Promise<void> {
     ...marker,
     version: GOR_MOBILE_VERSION,
     managed_settings: managedSettings,
+    managed_mcp: mcpRes.written
+      ? [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
+      : (marker.managed_mcp ?? []),
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   });
   log.ok(`Marker refreshed (v${GOR_MOBILE_VERSION})`);
+
+  // Pre-0.3.5 layout: marker at the repo root. The refreshed one is already
+  // under .gor-mobile/, so this drops the stray file and its ignore line.
+  if (migrateProjectMarker(root)) {
+    log.ok(`Moved ${LEGACY_PROJECT_MARKER_NAME} → ${PROJECT_MARKER_NAME}`);
+    await removeLocalExclude(root, [LEGACY_PROJECT_MARKER_NAME]);
+  }
 }
 
 async function repairCodex(target: TargetSpec): Promise<void> {
@@ -118,6 +158,15 @@ async function repairCodex(target: TargetSpec): Promise<void> {
   if (target.statusLineKind === "codex-config" && codexStatusLineState().managed) {
     installCodexStatusLine({ force: true });
     log.ok("Codex status line refreshed (tui.status_line)");
+  }
+
+  const cx = codexMcpState();
+  if (!cx.foreign) {
+    // A literal key already in the managed table is one of the sources
+    // resolveDevKnowledgeKey reads, so re-writing the block keeps it: the
+    // http_headers shape survives because the key is found, not by accident.
+    installCodexDevKnowledgeMcp(resolveDevKnowledgeKey().key, { force: cx.managed });
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed in config.toml`);
   }
 
   const skills = installSkills(target);

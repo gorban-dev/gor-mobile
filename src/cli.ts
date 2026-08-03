@@ -5,6 +5,7 @@ import { cmdInit } from "./commands/init.js";
 import { cmdMigrate } from "./commands/migrate.js";
 import { cmdDoctor } from "./commands/doctor.js";
 import { cmdRepair } from "./commands/repair.js";
+import { cmdMcp } from "./commands/mcp.js";
 import { cmdUninstall } from "./commands/uninstall.js";
 import {
   rulesDiff,
@@ -98,6 +99,14 @@ program
   });
 
 program
+  .command("mcp")
+  .description("Connect Google's Developer Knowledge docs MCP server (and rotate its API key)")
+  .option("--no-tui", "force plain-text prompts")
+  .action(async (opts) => {
+    await cmdMcp(opts);
+  });
+
+program
   .command("android-skills")
   .description("Browse + install/remove optional Google Android CLI skills")
   .action(async () => {
@@ -122,7 +131,7 @@ program
   .command("uninstall")
   .description("Remove gor-mobile — from this repo (--project) or the whole machine (--machine)")
   .option("-y, --yes", "skip confirmation")
-  .option("--project", "remove only this repo's .claude footprint + .gor-mobile.json")
+  .option("--project", "remove only this repo's .claude footprint + .gor-mobile/marker.json")
   .option("--machine", "remove user agent homes + ~/.gor-mobile (templates, rules)")
   .action(async (opts) => {
     await cmdUninstall(opts);

@@ -4,8 +4,10 @@ import { execa } from "execa";
 import pc from "picocolors";
 import { cancel, isCancel } from "@clack/prompts";
 import {
+  CODEX_CONFIG_TOML,
   DEFAULT_RULES_REF,
   DEFAULT_RULES_URL,
+  DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_RULES_DIR,
   gorMobileRoot
 } from "../constants.js";
@@ -18,12 +20,20 @@ import {
   runAndroidInit
 } from "../helpers/android-cli.js";
 import { writeManagedSection } from "../helpers/claude-md-section.js";
+import { codexMcpState, installCodexDevKnowledgeMcp } from "../helpers/codex-mcp.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import {
   AST_INDEX_INSTALL_SNIPPET,
   AST_INDEX_REPO_URL,
   astIndexPath
 } from "../helpers/ast-index.js";
+import {
+  captureDevKnowledgeKey,
+  offerDevKnowledgeLinks,
+  persistDevKnowledgeKey,
+  printDevKnowledgeGuide,
+  resolveDevKnowledgeKey
+} from "../helpers/dev-knowledge.js";
 import { copyHookTemplates, installAgents, installSkills } from "../helpers/install-assets.js";
 import { legacyClaudeFootprint } from "../helpers/legacy.js";
 import {
@@ -97,7 +107,7 @@ function warnLegacy(): void {
 }
 
 async function stepDeps(): Promise<void> {
-  sectionHeader(1, 5, "Base dependencies");
+  sectionHeader(1, 6, "Base dependencies");
   const required: Array<[string, string | null]> = [
     ["git", which("git")],
     ["curl", which("curl")],
@@ -122,7 +132,7 @@ async function stepDeps(): Promise<void> {
 }
 
 async function stepAndroidBinary(ctx: SetupCtx): Promise<void> {
-  sectionHeader(2, 5, "Google Android CLI");
+  sectionHeader(2, 6, "Google Android CLI");
   const existing = androidCliPath();
   if (existing) {
     progressItem(1, 1, "android CLI", "ok", existing);
@@ -185,7 +195,7 @@ async function stepAndroidBinary(ctx: SetupCtx): Promise<void> {
 }
 
 function stepAstIndex(ctx: SetupCtx): void {
-  sectionHeader(3, 5, "ast-index CLI (code search)");
+  sectionHeader(3, 6, "ast-index CLI (code search)");
   if (ctx.opts.dryRun) {
     progressItem(1, 1, "ast-index CLI", "skip", "dry-run: which ast-index");
     return;
@@ -211,7 +221,7 @@ function stepAstIndex(ctx: SetupCtx): void {
 }
 
 async function stepRules(ctx: SetupCtx): Promise<void> {
-  sectionHeader(4, 5, "Rules pack + shared hook scripts");
+  sectionHeader(4, 6, "Rules pack + shared hook scripts");
 
   if (ctx.opts.advanced && !ctx.opts.rules) {
     ctx.rulesUrl = await textPrompt("Rules pack URL", ctx.rulesUrl, (v) => {
@@ -269,13 +279,57 @@ async function stepClaudeStatusLine(ctx: SetupCtx): Promise<void> {
   log.ok(`Claude status line installed (${choice === "cat" ? "Cat" : "Classic"})`);
 }
 
+// The key lives in each harness's own config — the process that opens the
+// connection is `claude` or `codex`, never gor-mobile. Nothing is written to a
+// shell profile, so a GUI-launched agent sees the key too.
+async function stepDocSources(ctx: SetupCtx): Promise<void> {
+  sectionHeader(5, 6, "Documentation sources (MCP)");
+
+  if (ctx.opts.dryRun) {
+    dryLog(`register ${DEV_KNOWLEDGE_MCP_NAME} → ~/.codex/config.toml`);
+    dryLog(`store the API key → ~/.claude/settings.json env (prompted, never logged)`);
+    return;
+  }
+
+  let key = resolveDevKnowledgeKey().key;
+  if (!key) {
+    printDevKnowledgeGuide();
+    // captureDevKnowledgeKey self-silences when the TUI is off; --yes must not
+    // stall on a masked prompt either.
+    if (!ctx.opts.yes) key = await captureDevKnowledgeKey();
+  }
+
+  if (key) {
+    persistDevKnowledgeKey(key);
+    progressItem(1, 2, "API key", "ok", "~/.claude/settings.json env");
+  } else {
+    progressItem(1, 2, "API key", "warn", "not set — run 'gor-mobile mcp' later");
+  }
+
+  if (ctx.installCodex) {
+    const st = codexMcpState();
+    if (st.foreign) {
+      progressItem(2, 2, DEV_KNOWLEDGE_MCP_NAME, "skip", "existing unmanaged entry kept");
+    } else {
+      installCodexDevKnowledgeMcp(key, { force: st.managed });
+      progressItem(2, 2, DEV_KNOWLEDGE_MCP_NAME, "ok", CODEX_CONFIG_TOML);
+    }
+  } else {
+    progressItem(2, 2, DEV_KNOWLEDGE_MCP_NAME, "skip", "Claude side lands with 'gor-mobile init'");
+  }
+
+  // Under --yes the link offers would themselves be prompts; the guide above
+  // already carries both URLs as text.
+  if (!key && !ctx.opts.yes) await offerDevKnowledgeLinks();
+}
+
 // Full user-level install for Codex — hooks, skills, agents, AGENTS.md section,
 // stock android-cli skill, status line. This layout is unchanged from < v0.3.0
 // because Codex has no project-scoped config to migrate into.
 async function stepCodex(ctx: SetupCtx): Promise<void> {
   if (!ctx.installCodex) return;
   const target = TARGETS.codex;
-  sectionHeader(5, 5, "Codex integration (user-level)");
+  sectionHeader(6, 6, "Codex integration (user-level)");
 
   if (ctx.opts.dryRun) {
     dryLog(`merge SessionStart + UserPromptSubmit + PreToolUse → ${target.hooksFile}`);
@@ -337,6 +391,7 @@ export async function cmdSetup(opts: SetupOptions = {}): Promise<void> {
     "Soft-check the ast-index CLI.",
     "Clone the rules pack + hook scripts into ~/.gor-mobile/.",
     "Optionally install a Claude status line.",
+    "Connect Google's Developer Knowledge MCP docs source.",
     "Install the Codex workflow (user-level) if Codex is present."
   ]) {
     console.log(`    ${pc.dim("•")} ${b}`);
@@ -360,6 +415,7 @@ export async function cmdSetup(opts: SetupOptions = {}): Promise<void> {
     stepAstIndex(ctx);
     await stepRules(ctx);
     await stepClaudeStatusLine(ctx);
+    await stepDocSources(ctx);
     await stepCodex(ctx);
   } catch (err) {
     if (isCancel(err as unknown)) {

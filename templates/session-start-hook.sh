@@ -6,8 +6,9 @@
 #   - Codex (user-level, always-on): GORM_SKILLS_DIR is set by the hook command;
 #     inject unconditionally from that folder.
 #   - Claude (per-project): GORM_SKILLS_DIR is unset; find the repo root by
-#     walking up from cwd to a .gor-mobile.json marker. No marker → stay silent
-#     (this repo did not run `gor-mobile init`).
+#     walking up from cwd to a .gor-mobile/marker.json marker (pre-0.3.5
+#     installs kept it at .gor-mobile.json). No marker → stay silent (this repo
+#     did not run `gor-mobile init`).
 #
 # The injection is two blocks so the <EXTREMELY_IMPORTANT> envelope closes on the
 # skill-discipline rules — the signal the model anchors on.
@@ -21,12 +22,17 @@ cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null || true)"
 [[ -n "$cwd" ]] || cwd="$PWD"
 src="$(printf '%s' "$input" | jq -r '.source // empty' 2>/dev/null || true)"
 
-# Repo root via the .gor-mobile.json marker walk. Claude mode gates injection
-# on it; both modes use it to locate the .gor-mobile/state checkpoint.
+# Repo root via the marker walk. Claude mode gates injection on it; both modes
+# use it to locate the .gor-mobile/state checkpoint.
 root=""
+marker=""
 dir="$cwd"
 while [[ -n "$dir" && "$dir" != "/" ]]; do
-    if [[ -f "$dir/.gor-mobile.json" ]]; then root="$dir"; break; fi
+    for candidate in "$dir/.gor-mobile/marker.json" "$dir/.gor-mobile.json"; do
+        [[ -f "$candidate" ]] || continue
+        root="$dir"; marker="$candidate"; break
+    done
+    [[ -n "$root" ]] && break
     [[ "$dir" == "$HOME" ]] && break
     nd="$(dirname "$dir")"
     [[ "$nd" == "$dir" ]] && break
@@ -34,7 +40,7 @@ while [[ -n "$dir" && "$dir" != "/" ]]; do
 done
 
 platform=""
-[[ -n "$root" ]] && platform="$(jq -r '.platform // empty' "$root/.gor-mobile.json" 2>/dev/null || true)"
+[[ -n "$marker" ]] && platform="$(jq -r '.platform // empty' "$marker" 2>/dev/null || true)"
 if [[ -n "${GORM_SKILLS_DIR:-}" ]]; then
     # Codex user-level: always inject.
     skills_dir="$GORM_SKILLS_DIR"
@@ -190,7 +196,7 @@ fi
 # checkpoint block so a just-pruned checkpoint is never advertised.
 retention_note=""
 if [[ -n "$root" ]]; then
-    ttl_days="$(jq -r '.artifact_ttl_days // empty' "$root/.gor-mobile.json" 2>/dev/null || true)"
+    ttl_days="$(jq -r '.artifact_ttl_days // empty' "$marker" 2>/dev/null || true)"
     [[ "$ttl_days" =~ ^[0-9]+$ ]] || ttl_days=30
     gm="$root/.gor-mobile"
     if [[ "$ttl_days" -gt 0 && -d "$gm" ]]; then
@@ -257,7 +263,7 @@ if [[ -n "$root" ]]; then
             retention_note="<gor-mobile-retention>
 Session-start retention sweep removed ${pruned} stale plan artifact(s) —
 plans/specs/state under .gor-mobile/ untouched for ${ttl_days}+ days. Configure
-via \"artifact_ttl_days\" in .gor-mobile.json (0 disables the sweep).
+via \"artifact_ttl_days\" in .gor-mobile/marker.json (0 disables the sweep).
 </gor-mobile-retention>"
         fi
     fi

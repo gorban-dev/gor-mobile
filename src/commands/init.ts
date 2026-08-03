@@ -3,15 +3,25 @@ import { join } from "node:path";
 import pc from "picocolors";
 import { cancel, isCancel, select } from "@clack/prompts";
 import {
+  DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_TEMPLATES_DIR,
   GOR_MOBILE_VERSION,
-  PROJECT_MARKER_NAME
+  LEGACY_PROJECT_MARKER_NAME,
+  PROJECT_MARKER_NAME,
+  PROJECT_STATE_DIR
 } from "../constants.js";
 import { provisionProjectAndroidSkill } from "../helpers/android-cli.js";
 import { androidCliPath } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
+import { resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
 import { applyEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
 import { installAgents, installSkills } from "../helpers/install-assets.js";
+import {
+  approveProjectMcpServers,
+  malformedMcpMessage,
+  PROJECT_MCP_FILE,
+  registerProjectMcp
+} from "../helpers/mcp-register.js";
 import {
   classifyDir,
   detectPlatform,
@@ -19,7 +29,11 @@ import {
   ensureLocalExclude,
   findGitRoot,
   gitInit,
+  hasProjectMarker,
+  legacyProjectMarkerPath,
+  migrateProjectMarker,
   readProjectMarker,
+  removeLocalExclude,
   writeProjectMarker,
   type ProjectMarker,
   type ProjectPlatform
@@ -51,8 +65,9 @@ export interface InitOptions {
   now?: string;
 }
 
-// Local-ignore entries so nothing gor-mobile writes shows up in git.
-const EXCLUDE_ENTRIES = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME];
+// Local-ignore entries so nothing gor-mobile writes shows up in git. The
+// marker lives under .gor-mobile/, so that one directory line covers it.
+const EXCLUDE_ENTRIES = [".claude/", `${PROJECT_STATE_DIR}/`, PROJECT_MCP_FILE];
 
 function machineReady(): { ok: boolean; reason?: string } {
   if (!existsSync(join(GOR_MOBILE_TEMPLATES_DIR, "session-start-hook.sh"))) {
@@ -145,7 +160,8 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   const root = process.cwd();
   const spec = projectClaudeSpec(root);
   const marker = readProjectMarker(root);
-  const reinit = existsSync(join(root, PROJECT_MARKER_NAME));
+  const reinit = hasProjectMarker(root);
+  const legacyMarker = existsSync(legacyProjectMarkerPath(root));
 
   console.log("");
   console.log(pc.bold(pc.magenta(`gor-mobile init`)) + pc.dim(`  ·  ${root}`));
@@ -204,8 +220,13 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` +
         (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
       `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
+      `register ${DEV_KNOWLEDGE_MCP_NAME} → ${join(root, PROJECT_MCP_FILE)}`,
+      `approve it via enabledMcpjsonServers in ${spec.hooksFile}`,
       "android init → copy stock skill into .claude/skills, drop Claude-home copy",
       `write ${PROJECT_MARKER_NAME} (platform=${platform})`,
+      ...(legacyMarker
+        ? [`move ${LEGACY_PROJECT_MARKER_NAME} → ${PROJECT_MARKER_NAME}, drop its exclude line`]
+        : []),
       `git exclude += ${EXCLUDE_ENTRIES.join(", ")}`
     ]) {
       console.log(`    ${pc.dim("[dry-run]")} ${line}`);
@@ -241,6 +262,25 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       : "Disabled duplicate superpowers plugin for this repo"
   );
 
+  // Ownership comes from the marker: a same-named entry we did not write is a
+  // hand-configured server and must survive an idempotent re-init.
+  const mcp = registerProjectMcp(root, marker.managed_mcp ?? []);
+  if (mcp.written) {
+    approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} → ${mcp.path} (approved in settings.local.json)`);
+  } else if (mcp.malformed) {
+    log.warn(malformedMcpMessage(mcp.path));
+  } else {
+    log.info(`${DEV_KNOWLEDGE_MCP_NAME} already configured by hand — left as is`);
+  }
+  const managedMcp = mcp.written
+    ? [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
+    : (marker.managed_mcp ?? []);
+
+  if (resolveDevKnowledgeKey().key === null) {
+    log.warn("Developer Knowledge API key not set — run 'gor-mobile mcp' to add it");
+  }
+
   const clearContextEnabled = enableClearContextOnPlanAccept(spec.hooksFile);
   const managedSettings = clearContextEnabled
     ? [...new Set([...(marker.managed_settings ?? []), CLEAR_CONTEXT_ON_PLAN_ACCEPT])]
@@ -268,10 +308,18 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     installed_at: opts.now ?? marker.installed_at ?? new Date().toISOString().slice(0, 10),
     managed_plugins: managedPlugins,
     managed_settings: managedSettings,
+    managed_mcp: managedMcp,
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };
   writeProjectMarker(root, nextMarker);
   log.ok(`Wrote ${PROJECT_MARKER_NAME}`);
+
+  // Pre-0.3.5 installs kept the marker at the repo root; the fresh one is
+  // already written, so this only clears the stray file and its ignore line.
+  if (migrateProjectMarker(root)) {
+    log.ok(`Moved ${LEGACY_PROJECT_MARKER_NAME} → ${PROJECT_MARKER_NAME}`);
+    if (gitMode === "git") await removeLocalExclude(root, [LEGACY_PROJECT_MARKER_NAME]);
+  }
 
   await writeExcludes(root, gitMode);
 

@@ -26,12 +26,22 @@ var CODEX_AGENTS_DIR = join(CODEX_DIR, "agents");
 var CODEX_AGENTS_MD = join(CODEX_DIR, "AGENTS.md");
 var CODEX_HOOKS_JSON = join(CODEX_DIR, "hooks.json");
 var CODEX_CONFIG_TOML = join(CODEX_DIR, "config.toml");
-var PROJECT_MARKER_NAME = ".gor-mobile.json";
+var PROJECT_STATE_DIR = ".gor-mobile";
+var PROJECT_MARKER_FILE = "marker.json";
+var PROJECT_MARKER_NAME = `${PROJECT_STATE_DIR}/${PROJECT_MARKER_FILE}`;
+var LEGACY_PROJECT_MARKER_NAME = ".gor-mobile.json";
 var MANAGED_TAG = "gor-mobile";
 var SECTION_BEGIN = "<!-- BEGIN gor-mobile managed section -->";
 var SECTION_END = "<!-- END gor-mobile managed section -->";
 var DEFAULT_RULES_URL = "https://github.com/gorban-dev/gor-mobile-rules-default.git";
 var DEFAULT_RULES_REF = "main";
+var DEV_KNOWLEDGE_MCP_NAME = "google-developer-knowledge";
+var DEV_KNOWLEDGE_MCP_URL = "https://developerknowledge.googleapis.com/mcp";
+var DEV_KNOWLEDGE_API_KEY_ENV = "GOOGLE_DEVELOPER_KNOWLEDGE_API_KEY";
+var DEV_KNOWLEDGE_DOCS_URL = "https://developers.google.com/knowledge/mcp";
+var DEV_KNOWLEDGE_ENABLE_API_URL = "https://console.cloud.google.com/start/api?id=developerknowledge.googleapis.com";
+var DEV_KNOWLEDGE_CREDENTIALS_URL = "https://console.cloud.google.com/apis/credentials";
+var DEV_KNOWLEDGE_KEY_SHAPE = /^[A-Za-z0-9_-]+$/;
 function gorMobileRoot() {
   if (process.env.GOR_MOBILE_ROOT) return process.env.GOR_MOBILE_ROOT;
   const here = dirname(fileURLToPath(import.meta.url));
@@ -39,9 +49,9 @@ function gorMobileRoot() {
 }
 
 // src/commands/setup.ts
-import { existsSync as existsSync12, readdirSync as readdirSync4 } from "fs";
+import { existsSync as existsSync14, readdirSync as readdirSync4 } from "fs";
 import { join as join8 } from "path";
-import { execa as execa4 } from "execa";
+import { execa as execa5 } from "execa";
 import pc7 from "picocolors";
 import { cancel as cancel3, isCancel as isCancel3 } from "@clack/prompts";
 
@@ -780,414 +790,18 @@ function hasManagedSection(file) {
   return readFileSync2(file, "utf8").includes(SECTION_BEGIN);
 }
 
-// src/helpers/ast-index.ts
-var AST_INDEX_REPO_URL = "https://github.com/defendend/Claude-ast-index-search";
-var AST_INDEX_INSTALL_SNIPPET = "brew tap defendend/ast-index && brew install ast-index";
-function astIndexPath() {
-  return which("ast-index");
-}
-
-// src/helpers/install-assets.ts
-import {
-  cpSync as cpSync2,
-  chmodSync,
-  copyFileSync,
-  existsSync as existsSync6,
-  readdirSync as readdirSync2,
-  readFileSync as readFileSync3,
-  rmSync as rmSync2,
-  statSync,
-  writeFileSync as writeFileSync3
-} from "fs";
-import { basename, join as join5 } from "path";
-function copyHookTemplates() {
-  ensureDir(GOR_MOBILE_TEMPLATES_DIR);
-  const scripts = [
-    "session-start-hook.sh",
-    "user-prompt-submit-hook.sh",
-    "ast-index-guard-hook.sh",
-    "statusline-command.sh",
-    "statusline-cat.sh"
-  ];
-  for (const name of scripts) {
-    const src = join5(gorMobileRoot(), "templates", name);
-    const dst = join5(GOR_MOBILE_TEMPLATES_DIR, name);
-    copyFileSync(src, dst);
-    chmodSync(dst, 493);
-  }
-  const snippet = "claude-md-snippet.md";
-  copyFileSync(join5(gorMobileRoot(), "templates", snippet), join5(GOR_MOBILE_TEMPLATES_DIR, snippet));
-  for (const stale of ["session-start-snippet.md", "detect-mobile-context.sh"]) {
-    const p = join5(GOR_MOBILE_TEMPLATES_DIR, stale);
-    if (existsSync6(p)) rmSync2(p);
-  }
-}
-function transformSkillBody(content) {
-  return content.replace(/superpowers:/g, "gor-mobile-").replace(/^name: /gm, "name: gor-mobile-").replace(
-    /"Invoke brainstorming skill"/g,
-    '"Invoke gor-mobile-brainstorming skill"'
-  ).replace(
-    /"Invoke writing-plans skill"/g,
-    '"Invoke gor-mobile-writing-plans skill"'
-  ).replace(
-    /~\/\.config\/superpowers\/worktrees/g,
-    "~/.config/gor-mobile/worktrees"
-  ).replace(/all 5 tasks/g, "all tasks").replace(/docs\/superpowers\/specs\//g, ".gor-mobile/specs/").replace(/docs\/superpowers\/plans\//g, ".gor-mobile/plans/").replace(
-    /^[ \t]*-[^\n]*(using-git-worktrees|finishing-a-development-branch)[^\n]*\n/gm,
-    ""
-  ).replace(
-    /"Use gor-mobile-finishing-a-development-branch"/g,
-    '"User decides next step"'
-  ).replace(
-    /Use gor-mobile-finishing-a-development-branch/g,
-    "User decides next step"
-  );
-}
-function installSkills(target) {
-  ensureDir(target.skillsDir);
-  for (const entry of readdirSync2(target.skillsDir)) {
-    if (entry.startsWith("gor-mobile-")) {
-      rmSync2(join5(target.skillsDir, entry), { recursive: true, force: true });
-    }
-  }
-  const root = gorMobileRoot();
-  const skillsDir = join5(root, "templates", "skills");
-  const overlaysDir = join5(root, "templates", "overlays");
-  const installed = [];
-  const missingPrefix = [];
-  if (!existsSync6(skillsDir)) return { installed, missingPrefix };
-  for (const name of readdirSync2(skillsDir)) {
-    const srcDir = join5(skillsDir, name);
-    if (!statSync(srcDir).isDirectory()) continue;
-    const dstDir = join5(target.skillsDir, `gor-mobile-${name}`);
-    cpSync2(srcDir, dstDir, { recursive: true });
-    const skillMd = join5(dstDir, "SKILL.md");
-    if (existsSync6(skillMd)) {
-      let body = transformSkillBody(readFileSync3(skillMd, "utf8"));
-      const overlayPath = join5(overlaysDir, `${name}.md`);
-      if (existsSync6(overlayPath)) {
-        body += "\n" + readFileSync3(overlayPath, "utf8");
-      }
-      writeFileSync3(skillMd, body);
-      if (!/^name: gor-mobile-/m.test(body)) {
-        missingPrefix.push(skillMd);
-      }
-      if (/using-git-worktrees|finishing-a-development-branch/.test(body)) {
-        console.warn(
-          `[gor-mobile] warning: stale skill reference in ${skillMd}`
-        );
-      }
-    }
-    installed.push(name);
-  }
-  return { installed, missingPrefix };
-}
-function installAgents(target) {
-  ensureDir(target.agentsDir);
-  const srcSub = target.agentFormat === "toml" ? "agents-codex" : "agents";
-  const ext = `.${target.agentFormat}`;
-  const src = join5(gorMobileRoot(), "templates", srcSub);
-  const copied = [];
-  if (!existsSync6(src)) return copied;
-  for (const name of readdirSync2(src)) {
-    if (!name.endsWith(ext)) continue;
-    const from = join5(src, name);
-    const to = join5(target.agentsDir, name);
-    copyFileSync(from, to);
-    chmodSync(to, 420);
-    copied.push(name);
-  }
-  return copied;
-}
-function cleanupLegacyCommands(commandsDir) {
-  if (!existsSync6(commandsDir)) return [];
-  const legacy = [
-    "brainstorm",
-    "plan",
-    "worktree",
-    "implement",
-    "execute",
-    "parallel",
-    "tdd",
-    "review",
-    "verify",
-    "debug",
-    "finishing-branch"
-  ];
-  const removed = [];
-  for (const cmd of legacy) {
-    const file = join5(commandsDir, `${cmd}.md`);
-    if (!existsSync6(file)) continue;
-    const head = readFileSync3(file, "utf8").split("\n").slice(0, 10).join("\n");
-    if (head.includes("Task from user: **$ARGUMENTS**")) {
-      rmSync2(file);
-      removed.push(basename(file));
-    }
-  }
-  return removed;
-}
-function cleanupLegacyAgents() {
-  const removed = [];
-  const advisor = join5(CLAUDE_AGENTS_DIR, "gor-mobile-advisor.md");
-  if (existsSync6(advisor)) {
-    rmSync2(advisor);
-    removed.push(basename(advisor));
-  }
-  const legacyCr = join5(CLAUDE_AGENTS_DIR, "code-reviewer.md");
-  if (existsSync6(legacyCr)) {
-    const head = readFileSync3(legacyCr, "utf8").split("\n").slice(0, 20).join("\n");
-    if (/^name: code-reviewer/m.test(head)) {
-      rmSync2(legacyCr);
-      removed.push(basename(legacyCr));
-    }
-  }
-  return removed;
-}
-
-// src/helpers/legacy.ts
-import { existsSync as existsSync7, readdirSync as readdirSync3 } from "fs";
-import pc2 from "picocolors";
-function legacyClaudeFootprint() {
-  const findings = [];
-  if (existsSync7(CLAUDE_SKILLS_DIR)) {
-    const skills = readdirSync3(CLAUDE_SKILLS_DIR).filter(
-      (e) => e.startsWith("gor-mobile-")
-    );
-    if (skills.length > 0) {
-      findings.push({
-        label: `${skills.length} gor-mobile-* skills`,
-        path: CLAUDE_SKILLS_DIR
-      });
-    }
-  }
-  if (existsSync7(CLAUDE_AGENTS_DIR)) {
-    const agents = readdirSync3(CLAUDE_AGENTS_DIR).filter(
-      (e) => e.startsWith("gor-mobile-") && e.endsWith(".md")
-    );
-    if (agents.length > 0) {
-      findings.push({
-        label: `${agents.length} gor-mobile-* agents`,
-        path: CLAUDE_AGENTS_DIR
-      });
-    }
-  }
-  if (hasManagedHooksInFile(CLAUDE_SETTINGS)) {
-    findings.push({ label: "managed hooks", path: CLAUDE_SETTINGS });
-  }
-  if (hasManagedSection(CLAUDE_CLAUDE_MD)) {
-    findings.push({ label: "managed CLAUDE.md section", path: CLAUDE_CLAUDE_MD });
-  }
-  return findings;
-}
-function printBanner(findings) {
-  console.error("");
-  console.error(pc2.yellow("\u250C\u2500 gor-mobile: legacy v0.2.x install detected \u2500\u2510"));
-  for (const f of findings) {
-    console.error(pc2.yellow(`\u2502 ${f.label} \u2192 ${f.path}`));
-  }
-  console.error(
-    pc2.yellow(
-      "\u2502 Since v0.3.0 the Claude workflow installs per-project. Run 'gor-mobile migrate',"
-    )
-  );
-  console.error(
-    pc2.yellow(
-      "\u2502 then 'gor-mobile setup' once and 'gor-mobile init' in each mobile repo."
-    )
-  );
-  console.error(pc2.yellow("\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518"));
-  console.error("");
-}
-function legacyGate(opts) {
-  const findings = legacyClaudeFootprint();
-  if (findings.length === 0) return false;
-  printBanner(findings);
-  if (opts.block) {
-    log.err("blocked: migrate the legacy install first (gor-mobile migrate)");
-    return true;
-  }
-  return false;
-}
-
-// src/helpers/rules-pack.ts
-import { existsSync as existsSync8, cpSync as cpSync3, rmSync as rmSync3 } from "fs";
-import { join as join6 } from "path";
-import { execa as execa3 } from "execa";
-function manifestPath() {
-  return join6(GOR_MOBILE_RULES_DIR, "manifest.json");
-}
-function readManifest() {
-  if (!existsSync8(manifestPath())) return null;
-  try {
-    return readJsonSafe(manifestPath(), {});
-  } catch {
-    return null;
-  }
-}
-function readConfig() {
-  return readJsonSafe(GOR_MOBILE_CONFIG, {});
-}
-function saveConfig(source, ref = DEFAULT_RULES_REF) {
-  ensureDir(GOR_MOBILE_CONFIG_DIR);
-  const current = readConfig();
-  writeJson(GOR_MOBILE_CONFIG, {
-    ...current,
-    rules_source: source,
-    rules_ref: ref,
-    preset: current.preset ?? "balanced"
-  });
-}
-async function cloneOrPull(url, ref = DEFAULT_RULES_REF) {
-  if (existsSync8(join6(GOR_MOBILE_RULES_DIR, ".git"))) {
-    await execa3("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], {
-      reject: false
-    });
-    return;
-  }
-  if (existsSync8(GOR_MOBILE_RULES_DIR)) {
-    rmSync3(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
-  }
-  ensureDir(join6(GOR_MOBILE_RULES_DIR, ".."));
-  await execa3("git", [
-    "clone",
-    "--depth",
-    "1",
-    "--branch",
-    ref,
-    url,
-    GOR_MOBILE_RULES_DIR
-  ]);
-}
-function copyFromLocal(source) {
-  if (existsSync8(GOR_MOBILE_RULES_DIR)) {
-    rmSync3(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
-  }
-  cpSync3(source, GOR_MOBILE_RULES_DIR, { recursive: true });
-}
-function fallbackToBundled(bundledRoot) {
-  if (existsSync8(GOR_MOBILE_RULES_DIR)) {
-    rmSync3(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
-  }
-  cpSync3(bundledRoot, GOR_MOBILE_RULES_DIR, { recursive: true });
-}
-async function pullCurrent() {
-  if (!existsSync8(join6(GOR_MOBILE_RULES_DIR, ".git"))) {
-    throw new Error("Current pack is not a git checkout \u2014 cannot pull");
-  }
-  await execa3("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], {
-    stdio: "inherit"
-  });
-}
-async function diffAgainstUpstream() {
-  if (!existsSync8(join6(GOR_MOBILE_RULES_DIR, ".git"))) {
-    throw new Error("Current pack is not a git checkout");
-  }
-  await execa3("git", ["-C", GOR_MOBILE_RULES_DIR, "fetch", "origin"], {
-    reject: false
-  });
-  const { stdout } = await execa3(
-    "git",
-    ["-C", GOR_MOBILE_RULES_DIR, "diff", "HEAD", "origin/HEAD", "--stat"],
-    { reject: false }
-  );
-  return stdout;
-}
-function validateManifest() {
-  const errors = [];
-  const m = readManifest();
-  if (!m) {
-    errors.push("manifest.json missing or unreadable");
-    return { ok: false, errors };
-  }
-  if (!m.version) errors.push("manifest.version missing");
-  if (!m.stack) errors.push("manifest.stack missing");
-  if (m.sections) {
-    for (const rel of Object.values(m.sections)) {
-      if (!existsSync8(join6(GOR_MOBILE_RULES_DIR, rel))) {
-        errors.push(`missing rule file: ${rel}`);
-      }
-    }
-  }
-  return { ok: errors.length === 0, errors, manifest: m };
-}
-async function gitBranchAndRev() {
-  if (!existsSync8(join6(GOR_MOBILE_RULES_DIR, ".git"))) return {};
-  const branch = await execa3("git", ["-C", GOR_MOBILE_RULES_DIR, "rev-parse", "--abbrev-ref", "HEAD"], { reject: false });
-  const rev = await execa3("git", ["-C", GOR_MOBILE_RULES_DIR, "rev-parse", "--short", "HEAD"], { reject: false });
-  return { branch: branch.stdout.trim(), rev: rev.stdout.trim() };
-}
-
-// src/helpers/settings-statusline.ts
-import { existsSync as existsSync9 } from "fs";
-var SCRIPT_FILE = {
-  command: "statusline-command.sh",
-  cat: "statusline-cat.sh"
-};
-var STATUSLINE_MARKER = "templates/statusline-";
-function isManaged(sl) {
-  if (!sl) return false;
-  if ((sl._managed_by ?? "") === MANAGED_TAG) return true;
-  return typeof sl.command === "string" && sl.command.includes(STATUSLINE_MARKER);
-}
-function variantOf(sl) {
-  if (!sl || typeof sl.command !== "string") return null;
-  if (sl.command.includes(SCRIPT_FILE.cat)) return "cat";
-  if (sl.command.includes(SCRIPT_FILE.command)) return "command";
-  return null;
-}
-function statusLineState() {
-  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
-  const sl = settings.statusLine;
-  const present = Boolean(sl);
-  const managed = isManaged(sl);
-  return { present, managed, foreign: present && !managed, variant: managed ? variantOf(sl) : null };
-}
-function installStatusLine(variant, opts = {}) {
-  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
-  if (settings.statusLine && !isManaged(settings.statusLine) && !opts.force) {
-    return false;
-  }
-  settings.statusLine = {
-    type: "command",
-    command: `bash "${GOR_MOBILE_HOME}/templates/${SCRIPT_FILE[variant]}"`,
-    _managed_by: MANAGED_TAG
-  };
-  writeJson(CLAUDE_SETTINGS, settings);
-  return true;
-}
-function removeStatusLine() {
-  if (!existsSync9(CLAUDE_SETTINGS)) return;
-  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
-  if (isManaged(settings.statusLine)) {
-    delete settings.statusLine;
-    writeJson(CLAUDE_SETTINGS, settings);
-  }
-}
-
-// src/helpers/codex-statusline.ts
-import { existsSync as existsSync10, readFileSync as readFileSync4, writeFileSync as writeFileSync4 } from "fs";
-var CODEX_STATUS_LINE_ITEMS = [
-  "model-with-reasoning",
-  "context-used",
-  "five-hour-limit",
-  "weekly-limit",
-  "task-progress"
-];
+// src/helpers/codex-mcp.ts
+import { existsSync as existsSync6, readFileSync as readFileSync3, writeFileSync as writeFileSync3 } from "fs";
 var MARKER = `# ${MANAGED_TAG}`;
-var TUI_HEADER_RE = /^\s*\[tui\]\s*$/;
+var HEADER = `[mcp_servers.${DEV_KNOWLEDGE_MCP_NAME}]`;
 var TABLE_RE = /^\s*\[/;
-var SL_RE = /^\s*status_line\s*=/;
-var COLORS_RE = /^\s*status_line_use_colors\s*=/;
-function statusLineLine() {
-  const arr = CODEX_STATUS_LINE_ITEMS.map((i) => `"${i}"`).join(", ");
-  return `status_line = [${arr}] ${MARKER}`;
+var LITERAL_RE = /^\s*http_headers\s*=/;
+var LITERAL_KEY_RE = /^\s*http_headers\s*=\s*\{\s*"X-Goog-Api-Key"\s*=\s*"([^"]*)"\s*\}\s*$/;
+function readConfig() {
+  return existsSync6(CODEX_CONFIG_TOML) ? readFileSync3(CODEX_CONFIG_TOML, "utf8") : "";
 }
-var COLORS_LINE = `status_line_use_colors = true ${MARKER}`;
-function readConfig2() {
-  return existsSync10(CODEX_CONFIG_TOML) ? readFileSync4(CODEX_CONFIG_TOML, "utf8") : "";
-}
-function findTuiBody(lines) {
-  const header = lines.findIndex((l) => TUI_HEADER_RE.test(l));
+function findTable(lines) {
+  const header = lines.findIndex((l) => l.trim().startsWith(HEADER));
   if (header === -1) return null;
   let end = lines.length;
   for (let i = header + 1; i < lines.length; i++) {
@@ -1198,97 +812,74 @@ function findTuiBody(lines) {
   }
   return { header, end };
 }
-function codexStatusLineState() {
-  const content = readConfig2();
-  if (!content) return { present: false, managed: false, foreign: false };
+function codexMcpState() {
+  const absent = { present: false, managed: false, foreign: false, hasLiteralKey: false };
+  const content = readConfig();
+  if (!content) return absent;
   const lines = content.split("\n");
-  const body = findTuiBody(lines);
-  if (!body) return { present: false, managed: false, foreign: false };
-  for (let i = body.header + 1; i < body.end; i++) {
-    if (SL_RE.test(lines[i])) {
-      const managed = lines[i].includes(MANAGED_TAG);
-      return { present: true, managed, foreign: !managed };
-    }
+  const table = findTable(lines);
+  if (!table) return absent;
+  const managed = lines[table.header].includes(MANAGED_TAG);
+  let hasLiteralKey = false;
+  for (let i = table.header + 1; i < table.end; i++) {
+    if (LITERAL_RE.test(lines[i])) hasLiteralKey = true;
   }
-  return { present: false, managed: false, foreign: false };
+  return { present: true, managed, foreign: !managed, hasLiteralKey };
 }
-function installCodexStatusLine(opts = {}) {
-  const content = readConfig2();
-  const sl = statusLineLine();
+function codexDevKnowledgeKey() {
+  const content = readConfig();
+  if (!content) return null;
+  const lines = content.split("\n");
+  const table = findTable(lines);
+  if (!table || !lines[table.header].includes(MANAGED_TAG)) return null;
+  for (let i = table.header + 1; i < table.end; i++) {
+    const found = LITERAL_KEY_RE.exec(lines[i]);
+    if (found) return found[1] ?? null;
+  }
+  return null;
+}
+function blockLines(key) {
+  const literal = key !== null && DEV_KNOWLEDGE_KEY_SHAPE.test(key) ? key : null;
+  return [
+    `${HEADER} ${MARKER}`,
+    `url = "${DEV_KNOWLEDGE_MCP_URL}"`,
+    literal ? `http_headers = { "X-Goog-Api-Key" = "${literal}" }` : `env_http_headers = { "X-Goog-Api-Key" = "${DEV_KNOWLEDGE_API_KEY_ENV}" }`
+  ];
+}
+function installCodexDevKnowledgeMcp(key, opts = {}) {
+  const content = readConfig();
   const lines = content.length ? content.split("\n") : [];
-  const body = findTuiBody(lines);
-  if (!body) {
+  const table = findTable(lines);
+  if (!table) {
     const base = content.replace(/\n*$/, "");
     const sep = base.length ? "\n\n" : "";
-    const next = `${base}${sep}[tui]
-${sl}
-${COLORS_LINE}
-`;
     ensureParentDir(CODEX_CONFIG_TOML);
-    writeFileSync4(CODEX_CONFIG_TOML, next);
+    writeFileSync3(CODEX_CONFIG_TOML, `${base}${sep}${blockLines(key).join("\n")}
+`);
     return true;
   }
-  let slIdx = -1;
-  let colorsIdx = -1;
-  let lastBareKey = body.header;
-  for (let i = body.header + 1; i < body.end; i++) {
-    const line = lines[i];
-    if (SL_RE.test(line)) slIdx = i;
-    else if (COLORS_RE.test(line)) colorsIdx = i;
-    if (line.trim() && !TABLE_RE.test(line)) lastBareKey = i;
-  }
-  const slForeign = slIdx !== -1 && !lines[slIdx].includes(MANAGED_TAG);
-  if (slForeign && !opts.force) return false;
-  const colorsForeign = colorsIdx !== -1 && !lines[colorsIdx].includes(MANAGED_TAG);
-  const del = [];
-  if (slIdx !== -1 && (!slForeign || opts.force)) del.push(slIdx);
-  if (colorsIdx !== -1 && (!colorsForeign || opts.force)) del.push(colorsIdx);
-  del.sort((a, b) => b - a).forEach((i) => {
-    lines.splice(i, 1);
-    if (i <= lastBareKey) lastBareKey--;
-  });
-  const insert = [sl];
-  if (!(colorsForeign && !opts.force)) insert.push(COLORS_LINE);
-  lines.splice(lastBareKey + 1, 0, ...insert);
+  if (!lines[table.header].includes(MANAGED_TAG) && !opts.force) return false;
+  lines.splice(table.header, table.end - table.header, ...blockLines(key));
   ensureParentDir(CODEX_CONFIG_TOML);
-  writeFileSync4(CODEX_CONFIG_TOML, lines.join("\n"));
+  writeFileSync3(CODEX_CONFIG_TOML, lines.join("\n").replace(/\n*$/, "") + "\n");
   return true;
 }
-function removeCodexStatusLine() {
-  const content = readConfig2();
+function removeCodexDevKnowledgeMcp() {
+  const content = readConfig();
   if (!content) return;
   const lines = content.split("\n");
-  const body = findTuiBody(lines);
-  if (!body) return;
-  const kept = [];
-  for (let i = 0; i < lines.length; i++) {
-    const inBody = i > body.header && i < body.end;
-    const isOurs = inBody && (SL_RE.test(lines[i]) || COLORS_RE.test(lines[i])) && lines[i].includes(MANAGED_TAG);
-    if (isOurs) continue;
-    kept.push(lines[i]);
-  }
-  writeFileSync4(CODEX_CONFIG_TOML, kept.join("\n"));
+  const table = findTable(lines);
+  if (!table || !lines[table.header].includes(MANAGED_TAG)) return;
+  lines.splice(table.header, table.end - table.header);
+  const remaining = lines.join("\n").replace(/\n*$/, "");
+  writeFileSync3(CODEX_CONFIG_TOML, remaining.length > 0 ? remaining + "\n" : "");
 }
 
-// src/ui/banner.ts
-import { existsSync as existsSync11, readFileSync as readFileSync5 } from "fs";
-import { join as join7 } from "path";
-import pc3 from "picocolors";
-function renderBanner() {
-  const path = join7(gorMobileRoot(), "templates", "banner.txt");
-  if (existsSync11(path)) {
-    const raw = readFileSync5(path, "utf8");
-    const trimmed = raw.replace(/\n+$/, "");
-    const colored = trimmed.split("\n").map((line) => pc3.magenta(line)).join("\n");
-    console.log("");
-    console.log(colored);
-  } else {
-    console.log("");
-    console.log(pc3.bold(pc3.magenta("GOR-MOBILE")));
-  }
-  const subtitle = `Android-aware overlay installer for Claude Code  \xB7  v${GOR_MOBILE_VERSION}`;
-  console.log(pc3.dim(subtitle));
-  console.log("");
+// src/helpers/ast-index.ts
+var AST_INDEX_REPO_URL = "https://github.com/defendend/Claude-ast-index-search";
+var AST_INDEX_INSTALL_SNIPPET = "brew tap defendend/ast-index && brew install ast-index";
+function astIndexPath() {
+  return which("ast-index");
 }
 
 // src/ui/confirm-step.ts
@@ -1326,10 +917,20 @@ async function textPrompt(message, initial, validate) {
   }
   return String(res);
 }
+async function passwordPrompt(message) {
+  if (!isTuiOn()) return "";
+  const { password } = await import("@clack/prompts");
+  const res = await password({ message });
+  if (isCancel(res)) {
+    cancel("Cancelled");
+    process.exit(0);
+  }
+  return String(res ?? "").trim();
+}
 
 // src/ui/note.ts
 import { note as clackNote } from "@clack/prompts";
-import pc4 from "picocolors";
+import pc2 from "picocolors";
 function note(body, title) {
   if (isTuiOn()) {
     clackNote(body, title);
@@ -1337,11 +938,649 @@ function note(body, title) {
   }
   if (title) {
     console.log("");
-    console.log(pc4.bold(title));
+    console.log(pc2.bold(title));
   }
   for (const line of body.split("\n")) {
     console.log(`  ${line}`);
   }
+  console.log("");
+}
+
+// src/helpers/claude-env.ts
+import { existsSync as existsSync7 } from "fs";
+function claudeEnvValue(name) {
+  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
+  const value = settings.env?.[name];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+function setClaudeEnv(name, value) {
+  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
+  settings.env = { ...settings.env ?? {}, [name]: value };
+  writeJson(CLAUDE_SETTINGS, settings);
+}
+function deleteClaudeEnv(name) {
+  if (!existsSync7(CLAUDE_SETTINGS)) return;
+  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
+  if (!settings.env || !(name in settings.env)) return;
+  delete settings.env[name];
+  if (Object.keys(settings.env).length === 0) delete settings.env;
+  writeJson(CLAUDE_SETTINGS, settings);
+}
+
+// src/helpers/open-url.ts
+import { execa as execa3 } from "execa";
+function openUrl(url) {
+  let cmd;
+  let args;
+  if (process.platform === "darwin") {
+    cmd = "open";
+    args = [url];
+  } else if (process.platform === "win32") {
+    cmd = "cmd";
+    args = ["/c", "start", "", url];
+  } else {
+    cmd = "xdg-open";
+    args = [url];
+  }
+  if (process.platform !== "win32" && !which(cmd)) return false;
+  try {
+    const child = execa3(cmd, args, {
+      detached: true,
+      stdio: "ignore",
+      reject: false
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// src/helpers/dev-knowledge.ts
+var KEY_SOURCE_LABEL = {
+  environment: `$${DEV_KNOWLEDGE_API_KEY_ENV}`,
+  "claude-settings": "~/.claude/settings.json env",
+  "codex-config": "~/.codex/config.toml",
+  none: "not set"
+};
+var KEY_SHAPE_HINT = "Google API keys are letters, digits, '-' and '_' only";
+function resolveDevKnowledgeKey() {
+  const fromEnv = process.env[DEV_KNOWLEDGE_API_KEY_ENV];
+  if (fromEnv && fromEnv.trim().length > 0) {
+    return { key: fromEnv.trim(), source: "environment" };
+  }
+  const fromClaude = claudeEnvValue(DEV_KNOWLEDGE_API_KEY_ENV);
+  if (fromClaude && fromClaude.trim().length > 0) {
+    return { key: fromClaude.trim(), source: "claude-settings" };
+  }
+  const fromCodex = codexDevKnowledgeKey();
+  if (fromCodex && fromCodex.trim().length > 0) {
+    return { key: fromCodex.trim(), source: "codex-config" };
+  }
+  return { key: null, source: "none" };
+}
+function persistDevKnowledgeKey(key) {
+  const trimmed = key.trim();
+  if (trimmed.length === 0) return;
+  if (!DEV_KNOWLEDGE_KEY_SHAPE.test(trimmed)) {
+    log.warn(`Not storing that API key \u2014 ${KEY_SHAPE_HINT}`);
+    return;
+  }
+  setClaudeEnv(DEV_KNOWLEDGE_API_KEY_ENV, trimmed);
+  if (agentHomeExists("codex")) {
+    installCodexDevKnowledgeMcp(trimmed, { force: codexMcpState().managed });
+  }
+}
+async function captureDevKnowledgeKey() {
+  if (!isTuiOn()) return null;
+  const entered = (await passwordPrompt("Developer Knowledge API key (Enter to skip)")).trim();
+  if (entered.length === 0) return null;
+  if (!DEV_KNOWLEDGE_KEY_SHAPE.test(entered)) {
+    log.warn(`That does not look like an API key \u2014 ${KEY_SHAPE_HINT}. Ignored.`);
+    return null;
+  }
+  return entered;
+}
+var GUIDE_LINES = [
+  "Firebase / Google Cloud / Maps / Play docs come from Google's Developer",
+  "Knowledge MCP server. It needs an API key:",
+  "",
+  "  1. Enable the Developer Knowledge API \u2014 click Enable:",
+  `     ${DEV_KNOWLEDGE_ENABLE_API_URL}`,
+  "",
+  "  2. Create credentials \u2192 API key, then Select API restrictions \u2192",
+  '     "Developer Knowledge API":',
+  `     ${DEV_KNOWLEDGE_CREDENTIALS_URL}`,
+  "",
+  "  3. Paste it into this wizard, or re-run later: gor-mobile mcp",
+  "",
+  "Via gcloud instead:",
+  "  gcloud services enable developerknowledge.googleapis.com --project=PROJECT_ID",
+  '  gcloud services api-keys create --project=PROJECT_ID --display-name="DK API Key"',
+  "  gcloud services api-keys update KEY_NAME \\",
+  "    --api-target=service=developerknowledge.googleapis.com",
+  "",
+  "Reusing this key for model calls (GEMINI_API_KEY) also requires allowing",
+  "the Generative Language API, or those calls get blocked.",
+  "",
+  `Docs: ${DEV_KNOWLEDGE_DOCS_URL}`
+];
+function printDevKnowledgeGuide() {
+  note(GUIDE_LINES.join("\n"), "Google Developer Knowledge \u2014 API key needed");
+}
+async function offerDevKnowledgeLinks() {
+  if (!isTuiOn()) return;
+  const pages = [
+    ["Open the Developer Knowledge API page in your browser?", DEV_KNOWLEDGE_ENABLE_API_URL],
+    ["Open the API-key creation page?", DEV_KNOWLEDGE_CREDENTIALS_URL]
+  ];
+  for (const [question, url] of pages) {
+    if (!await confirmStep(question, true)) continue;
+    if (!openUrl(url)) log.warn(`No browser opener found \u2014 visit ${url}`);
+  }
+}
+
+// src/helpers/install-assets.ts
+import {
+  cpSync as cpSync2,
+  chmodSync,
+  copyFileSync,
+  existsSync as existsSync8,
+  readdirSync as readdirSync2,
+  readFileSync as readFileSync4,
+  rmSync as rmSync2,
+  statSync,
+  writeFileSync as writeFileSync4
+} from "fs";
+import { basename, join as join5 } from "path";
+function copyHookTemplates() {
+  ensureDir(GOR_MOBILE_TEMPLATES_DIR);
+  const scripts = [
+    "session-start-hook.sh",
+    "user-prompt-submit-hook.sh",
+    "ast-index-guard-hook.sh",
+    "statusline-command.sh",
+    "statusline-cat.sh"
+  ];
+  for (const name of scripts) {
+    const src = join5(gorMobileRoot(), "templates", name);
+    const dst = join5(GOR_MOBILE_TEMPLATES_DIR, name);
+    copyFileSync(src, dst);
+    chmodSync(dst, 493);
+  }
+  const snippet = "claude-md-snippet.md";
+  copyFileSync(join5(gorMobileRoot(), "templates", snippet), join5(GOR_MOBILE_TEMPLATES_DIR, snippet));
+  for (const stale of ["session-start-snippet.md", "detect-mobile-context.sh"]) {
+    const p = join5(GOR_MOBILE_TEMPLATES_DIR, stale);
+    if (existsSync8(p)) rmSync2(p);
+  }
+}
+function transformSkillBody(content) {
+  return content.replace(/superpowers:/g, "gor-mobile-").replace(/^name: /gm, "name: gor-mobile-").replace(
+    /"Invoke brainstorming skill"/g,
+    '"Invoke gor-mobile-brainstorming skill"'
+  ).replace(
+    /"Invoke writing-plans skill"/g,
+    '"Invoke gor-mobile-writing-plans skill"'
+  ).replace(
+    /~\/\.config\/superpowers\/worktrees/g,
+    "~/.config/gor-mobile/worktrees"
+  ).replace(/all 5 tasks/g, "all tasks").replace(/docs\/superpowers\/specs\//g, ".gor-mobile/specs/").replace(/docs\/superpowers\/plans\//g, ".gor-mobile/plans/").replace(
+    /^[ \t]*-[^\n]*(using-git-worktrees|finishing-a-development-branch)[^\n]*\n/gm,
+    ""
+  ).replace(
+    /"Use gor-mobile-finishing-a-development-branch"/g,
+    '"User decides next step"'
+  ).replace(
+    /Use gor-mobile-finishing-a-development-branch/g,
+    "User decides next step"
+  );
+}
+function installSkills(target) {
+  ensureDir(target.skillsDir);
+  for (const entry of readdirSync2(target.skillsDir)) {
+    if (entry.startsWith("gor-mobile-")) {
+      rmSync2(join5(target.skillsDir, entry), { recursive: true, force: true });
+    }
+  }
+  const root = gorMobileRoot();
+  const skillsDir = join5(root, "templates", "skills");
+  const overlaysDir = join5(root, "templates", "overlays");
+  const installed = [];
+  const missingPrefix = [];
+  if (!existsSync8(skillsDir)) return { installed, missingPrefix };
+  for (const name of readdirSync2(skillsDir)) {
+    const srcDir = join5(skillsDir, name);
+    if (!statSync(srcDir).isDirectory()) continue;
+    const dstDir = join5(target.skillsDir, `gor-mobile-${name}`);
+    cpSync2(srcDir, dstDir, { recursive: true });
+    const skillMd = join5(dstDir, "SKILL.md");
+    if (existsSync8(skillMd)) {
+      let body = transformSkillBody(readFileSync4(skillMd, "utf8"));
+      const overlayPath = join5(overlaysDir, `${name}.md`);
+      if (existsSync8(overlayPath)) {
+        body += "\n" + readFileSync4(overlayPath, "utf8");
+      }
+      writeFileSync4(skillMd, body);
+      if (!/^name: gor-mobile-/m.test(body)) {
+        missingPrefix.push(skillMd);
+      }
+      if (/using-git-worktrees|finishing-a-development-branch/.test(body)) {
+        console.warn(
+          `[gor-mobile] warning: stale skill reference in ${skillMd}`
+        );
+      }
+    }
+    installed.push(name);
+  }
+  return { installed, missingPrefix };
+}
+function installAgents(target) {
+  ensureDir(target.agentsDir);
+  const srcSub = target.agentFormat === "toml" ? "agents-codex" : "agents";
+  const ext = `.${target.agentFormat}`;
+  const src = join5(gorMobileRoot(), "templates", srcSub);
+  const copied = [];
+  if (!existsSync8(src)) return copied;
+  for (const name of readdirSync2(src)) {
+    if (!name.endsWith(ext)) continue;
+    const from = join5(src, name);
+    const to = join5(target.agentsDir, name);
+    copyFileSync(from, to);
+    chmodSync(to, 420);
+    copied.push(name);
+  }
+  return copied;
+}
+function cleanupLegacyCommands(commandsDir) {
+  if (!existsSync8(commandsDir)) return [];
+  const legacy = [
+    "brainstorm",
+    "plan",
+    "worktree",
+    "implement",
+    "execute",
+    "parallel",
+    "tdd",
+    "review",
+    "verify",
+    "debug",
+    "finishing-branch"
+  ];
+  const removed = [];
+  for (const cmd of legacy) {
+    const file = join5(commandsDir, `${cmd}.md`);
+    if (!existsSync8(file)) continue;
+    const head = readFileSync4(file, "utf8").split("\n").slice(0, 10).join("\n");
+    if (head.includes("Task from user: **$ARGUMENTS**")) {
+      rmSync2(file);
+      removed.push(basename(file));
+    }
+  }
+  return removed;
+}
+function cleanupLegacyAgents() {
+  const removed = [];
+  const advisor = join5(CLAUDE_AGENTS_DIR, "gor-mobile-advisor.md");
+  if (existsSync8(advisor)) {
+    rmSync2(advisor);
+    removed.push(basename(advisor));
+  }
+  const legacyCr = join5(CLAUDE_AGENTS_DIR, "code-reviewer.md");
+  if (existsSync8(legacyCr)) {
+    const head = readFileSync4(legacyCr, "utf8").split("\n").slice(0, 20).join("\n");
+    if (/^name: code-reviewer/m.test(head)) {
+      rmSync2(legacyCr);
+      removed.push(basename(legacyCr));
+    }
+  }
+  return removed;
+}
+
+// src/helpers/legacy.ts
+import { existsSync as existsSync9, readdirSync as readdirSync3 } from "fs";
+import pc3 from "picocolors";
+function legacyClaudeFootprint() {
+  const findings = [];
+  if (existsSync9(CLAUDE_SKILLS_DIR)) {
+    const skills = readdirSync3(CLAUDE_SKILLS_DIR).filter(
+      (e) => e.startsWith("gor-mobile-")
+    );
+    if (skills.length > 0) {
+      findings.push({
+        label: `${skills.length} gor-mobile-* skills`,
+        path: CLAUDE_SKILLS_DIR
+      });
+    }
+  }
+  if (existsSync9(CLAUDE_AGENTS_DIR)) {
+    const agents = readdirSync3(CLAUDE_AGENTS_DIR).filter(
+      (e) => e.startsWith("gor-mobile-") && e.endsWith(".md")
+    );
+    if (agents.length > 0) {
+      findings.push({
+        label: `${agents.length} gor-mobile-* agents`,
+        path: CLAUDE_AGENTS_DIR
+      });
+    }
+  }
+  if (hasManagedHooksInFile(CLAUDE_SETTINGS)) {
+    findings.push({ label: "managed hooks", path: CLAUDE_SETTINGS });
+  }
+  if (hasManagedSection(CLAUDE_CLAUDE_MD)) {
+    findings.push({ label: "managed CLAUDE.md section", path: CLAUDE_CLAUDE_MD });
+  }
+  return findings;
+}
+function printBanner(findings) {
+  console.error("");
+  console.error(pc3.yellow("\u250C\u2500 gor-mobile: legacy v0.2.x install detected \u2500\u2510"));
+  for (const f of findings) {
+    console.error(pc3.yellow(`\u2502 ${f.label} \u2192 ${f.path}`));
+  }
+  console.error(
+    pc3.yellow(
+      "\u2502 Since v0.3.0 the Claude workflow installs per-project. Run 'gor-mobile migrate',"
+    )
+  );
+  console.error(
+    pc3.yellow(
+      "\u2502 then 'gor-mobile setup' once and 'gor-mobile init' in each mobile repo."
+    )
+  );
+  console.error(pc3.yellow("\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518"));
+  console.error("");
+}
+function legacyGate(opts) {
+  const findings = legacyClaudeFootprint();
+  if (findings.length === 0) return false;
+  printBanner(findings);
+  if (opts.block) {
+    log.err("blocked: migrate the legacy install first (gor-mobile migrate)");
+    return true;
+  }
+  return false;
+}
+
+// src/helpers/rules-pack.ts
+import { existsSync as existsSync10, cpSync as cpSync3, rmSync as rmSync3 } from "fs";
+import { join as join6 } from "path";
+import { execa as execa4 } from "execa";
+function manifestPath() {
+  return join6(GOR_MOBILE_RULES_DIR, "manifest.json");
+}
+function readManifest() {
+  if (!existsSync10(manifestPath())) return null;
+  try {
+    return readJsonSafe(manifestPath(), {});
+  } catch {
+    return null;
+  }
+}
+function readConfig2() {
+  return readJsonSafe(GOR_MOBILE_CONFIG, {});
+}
+function saveConfig(source, ref = DEFAULT_RULES_REF) {
+  ensureDir(GOR_MOBILE_CONFIG_DIR);
+  const current = readConfig2();
+  writeJson(GOR_MOBILE_CONFIG, {
+    ...current,
+    rules_source: source,
+    rules_ref: ref,
+    preset: current.preset ?? "balanced"
+  });
+}
+async function cloneOrPull(url, ref = DEFAULT_RULES_REF) {
+  if (existsSync10(join6(GOR_MOBILE_RULES_DIR, ".git"))) {
+    await execa4("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], {
+      reject: false
+    });
+    return;
+  }
+  if (existsSync10(GOR_MOBILE_RULES_DIR)) {
+    rmSync3(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
+  }
+  ensureDir(join6(GOR_MOBILE_RULES_DIR, ".."));
+  await execa4("git", [
+    "clone",
+    "--depth",
+    "1",
+    "--branch",
+    ref,
+    url,
+    GOR_MOBILE_RULES_DIR
+  ]);
+}
+function copyFromLocal(source) {
+  if (existsSync10(GOR_MOBILE_RULES_DIR)) {
+    rmSync3(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
+  }
+  cpSync3(source, GOR_MOBILE_RULES_DIR, { recursive: true });
+}
+function fallbackToBundled(bundledRoot) {
+  if (existsSync10(GOR_MOBILE_RULES_DIR)) {
+    rmSync3(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
+  }
+  cpSync3(bundledRoot, GOR_MOBILE_RULES_DIR, { recursive: true });
+}
+async function pullCurrent() {
+  if (!existsSync10(join6(GOR_MOBILE_RULES_DIR, ".git"))) {
+    throw new Error("Current pack is not a git checkout \u2014 cannot pull");
+  }
+  await execa4("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], {
+    stdio: "inherit"
+  });
+}
+async function diffAgainstUpstream() {
+  if (!existsSync10(join6(GOR_MOBILE_RULES_DIR, ".git"))) {
+    throw new Error("Current pack is not a git checkout");
+  }
+  await execa4("git", ["-C", GOR_MOBILE_RULES_DIR, "fetch", "origin"], {
+    reject: false
+  });
+  const { stdout } = await execa4(
+    "git",
+    ["-C", GOR_MOBILE_RULES_DIR, "diff", "HEAD", "origin/HEAD", "--stat"],
+    { reject: false }
+  );
+  return stdout;
+}
+function validateManifest() {
+  const errors = [];
+  const m = readManifest();
+  if (!m) {
+    errors.push("manifest.json missing or unreadable");
+    return { ok: false, errors };
+  }
+  if (!m.version) errors.push("manifest.version missing");
+  if (!m.stack) errors.push("manifest.stack missing");
+  if (m.sections) {
+    for (const rel of Object.values(m.sections)) {
+      if (!existsSync10(join6(GOR_MOBILE_RULES_DIR, rel))) {
+        errors.push(`missing rule file: ${rel}`);
+      }
+    }
+  }
+  return { ok: errors.length === 0, errors, manifest: m };
+}
+async function gitBranchAndRev() {
+  if (!existsSync10(join6(GOR_MOBILE_RULES_DIR, ".git"))) return {};
+  const branch = await execa4("git", ["-C", GOR_MOBILE_RULES_DIR, "rev-parse", "--abbrev-ref", "HEAD"], { reject: false });
+  const rev = await execa4("git", ["-C", GOR_MOBILE_RULES_DIR, "rev-parse", "--short", "HEAD"], { reject: false });
+  return { branch: branch.stdout.trim(), rev: rev.stdout.trim() };
+}
+
+// src/helpers/settings-statusline.ts
+import { existsSync as existsSync11 } from "fs";
+var SCRIPT_FILE = {
+  command: "statusline-command.sh",
+  cat: "statusline-cat.sh"
+};
+var STATUSLINE_MARKER = "templates/statusline-";
+function isManaged(sl) {
+  if (!sl) return false;
+  if ((sl._managed_by ?? "") === MANAGED_TAG) return true;
+  return typeof sl.command === "string" && sl.command.includes(STATUSLINE_MARKER);
+}
+function variantOf(sl) {
+  if (!sl || typeof sl.command !== "string") return null;
+  if (sl.command.includes(SCRIPT_FILE.cat)) return "cat";
+  if (sl.command.includes(SCRIPT_FILE.command)) return "command";
+  return null;
+}
+function statusLineState() {
+  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
+  const sl = settings.statusLine;
+  const present = Boolean(sl);
+  const managed = isManaged(sl);
+  return { present, managed, foreign: present && !managed, variant: managed ? variantOf(sl) : null };
+}
+function installStatusLine(variant, opts = {}) {
+  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
+  if (settings.statusLine && !isManaged(settings.statusLine) && !opts.force) {
+    return false;
+  }
+  settings.statusLine = {
+    type: "command",
+    command: `bash "${GOR_MOBILE_HOME}/templates/${SCRIPT_FILE[variant]}"`,
+    _managed_by: MANAGED_TAG
+  };
+  writeJson(CLAUDE_SETTINGS, settings);
+  return true;
+}
+function removeStatusLine() {
+  if (!existsSync11(CLAUDE_SETTINGS)) return;
+  const settings = readJsonSafe(CLAUDE_SETTINGS, {});
+  if (isManaged(settings.statusLine)) {
+    delete settings.statusLine;
+    writeJson(CLAUDE_SETTINGS, settings);
+  }
+}
+
+// src/helpers/codex-statusline.ts
+import { existsSync as existsSync12, readFileSync as readFileSync5, writeFileSync as writeFileSync5 } from "fs";
+var CODEX_STATUS_LINE_ITEMS = [
+  "model-with-reasoning",
+  "context-used",
+  "five-hour-limit",
+  "weekly-limit",
+  "task-progress"
+];
+var MARKER2 = `# ${MANAGED_TAG}`;
+var TUI_HEADER_RE = /^\s*\[tui\]\s*$/;
+var TABLE_RE2 = /^\s*\[/;
+var SL_RE = /^\s*status_line\s*=/;
+var COLORS_RE = /^\s*status_line_use_colors\s*=/;
+function statusLineLine() {
+  const arr = CODEX_STATUS_LINE_ITEMS.map((i) => `"${i}"`).join(", ");
+  return `status_line = [${arr}] ${MARKER2}`;
+}
+var COLORS_LINE = `status_line_use_colors = true ${MARKER2}`;
+function readConfig3() {
+  return existsSync12(CODEX_CONFIG_TOML) ? readFileSync5(CODEX_CONFIG_TOML, "utf8") : "";
+}
+function findTuiBody(lines) {
+  const header = lines.findIndex((l) => TUI_HEADER_RE.test(l));
+  if (header === -1) return null;
+  let end = lines.length;
+  for (let i = header + 1; i < lines.length; i++) {
+    if (TABLE_RE2.test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+  return { header, end };
+}
+function codexStatusLineState() {
+  const content = readConfig3();
+  if (!content) return { present: false, managed: false, foreign: false };
+  const lines = content.split("\n");
+  const body = findTuiBody(lines);
+  if (!body) return { present: false, managed: false, foreign: false };
+  for (let i = body.header + 1; i < body.end; i++) {
+    if (SL_RE.test(lines[i])) {
+      const managed = lines[i].includes(MANAGED_TAG);
+      return { present: true, managed, foreign: !managed };
+    }
+  }
+  return { present: false, managed: false, foreign: false };
+}
+function installCodexStatusLine(opts = {}) {
+  const content = readConfig3();
+  const sl = statusLineLine();
+  const lines = content.length ? content.split("\n") : [];
+  const body = findTuiBody(lines);
+  if (!body) {
+    const base = content.replace(/\n*$/, "");
+    const sep = base.length ? "\n\n" : "";
+    const next = `${base}${sep}[tui]
+${sl}
+${COLORS_LINE}
+`;
+    ensureParentDir(CODEX_CONFIG_TOML);
+    writeFileSync5(CODEX_CONFIG_TOML, next);
+    return true;
+  }
+  let slIdx = -1;
+  let colorsIdx = -1;
+  let lastBareKey = body.header;
+  for (let i = body.header + 1; i < body.end; i++) {
+    const line = lines[i];
+    if (SL_RE.test(line)) slIdx = i;
+    else if (COLORS_RE.test(line)) colorsIdx = i;
+    if (line.trim() && !TABLE_RE2.test(line)) lastBareKey = i;
+  }
+  const slForeign = slIdx !== -1 && !lines[slIdx].includes(MANAGED_TAG);
+  if (slForeign && !opts.force) return false;
+  const colorsForeign = colorsIdx !== -1 && !lines[colorsIdx].includes(MANAGED_TAG);
+  const del = [];
+  if (slIdx !== -1 && (!slForeign || opts.force)) del.push(slIdx);
+  if (colorsIdx !== -1 && (!colorsForeign || opts.force)) del.push(colorsIdx);
+  del.sort((a, b) => b - a).forEach((i) => {
+    lines.splice(i, 1);
+    if (i <= lastBareKey) lastBareKey--;
+  });
+  const insert = [sl];
+  if (!(colorsForeign && !opts.force)) insert.push(COLORS_LINE);
+  lines.splice(lastBareKey + 1, 0, ...insert);
+  ensureParentDir(CODEX_CONFIG_TOML);
+  writeFileSync5(CODEX_CONFIG_TOML, lines.join("\n"));
+  return true;
+}
+function removeCodexStatusLine() {
+  const content = readConfig3();
+  if (!content) return;
+  const lines = content.split("\n");
+  const body = findTuiBody(lines);
+  if (!body) return;
+  const kept = [];
+  for (let i = 0; i < lines.length; i++) {
+    const inBody = i > body.header && i < body.end;
+    const isOurs = inBody && (SL_RE.test(lines[i]) || COLORS_RE.test(lines[i])) && lines[i].includes(MANAGED_TAG);
+    if (isOurs) continue;
+    kept.push(lines[i]);
+  }
+  writeFileSync5(CODEX_CONFIG_TOML, kept.join("\n"));
+}
+
+// src/ui/banner.ts
+import { existsSync as existsSync13, readFileSync as readFileSync6 } from "fs";
+import { join as join7 } from "path";
+import pc4 from "picocolors";
+function renderBanner() {
+  const path = join7(gorMobileRoot(), "templates", "banner.txt");
+  if (existsSync13(path)) {
+    const raw = readFileSync6(path, "utf8");
+    const trimmed = raw.replace(/\n+$/, "");
+    const colored = trimmed.split("\n").map((line) => pc4.magenta(line)).join("\n");
+    console.log("");
+    console.log(colored);
+  } else {
+    console.log("");
+    console.log(pc4.bold(pc4.magenta("GOR-MOBILE")));
+  }
+  const subtitle = `Android-aware overlay installer for Claude Code  \xB7  v${GOR_MOBILE_VERSION}`;
+  console.log(pc4.dim(subtitle));
   console.log("");
 }
 
@@ -1453,7 +1692,7 @@ function warnLegacy() {
   note(body, "Legacy install detected");
 }
 async function stepDeps() {
-  sectionHeader(1, 5, "Base dependencies");
+  sectionHeader(1, 6, "Base dependencies");
   const required = [
     ["git", which("git")],
     ["curl", which("curl")],
@@ -1477,7 +1716,7 @@ async function stepDeps() {
   }
 }
 async function stepAndroidBinary(ctx) {
-  sectionHeader(2, 5, "Google Android CLI");
+  sectionHeader(2, 6, "Google Android CLI");
   const existing = androidCliPath();
   if (existing) {
     progressItem(1, 1, "android CLI", "ok", existing);
@@ -1524,7 +1763,7 @@ async function stepAndroidBinary(ctx) {
   await ensureAndroidCliCurrent({ skip: ctx.opts.skipAndroidUpdate, dryRun: ctx.opts.dryRun });
 }
 function stepAstIndex(ctx) {
-  sectionHeader(3, 5, "ast-index CLI (code search)");
+  sectionHeader(3, 6, "ast-index CLI (code search)");
   if (ctx.opts.dryRun) {
     progressItem(1, 1, "ast-index CLI", "skip", "dry-run: which ast-index");
     return;
@@ -1549,7 +1788,7 @@ function stepAstIndex(ctx) {
   );
 }
 async function stepRules(ctx) {
-  sectionHeader(4, 5, "Rules pack + shared hook scripts");
+  sectionHeader(4, 6, "Rules pack + shared hook scripts");
   if (ctx.opts.advanced && !ctx.opts.rules) {
     ctx.rulesUrl = await textPrompt("Rules pack URL", ctx.rulesUrl, (v) => {
       if (!v.trim()) return "URL cannot be empty";
@@ -1563,9 +1802,9 @@ async function stepRules(ctx) {
     progressItem(3, 3, "hook scripts \u2192 ~/.gor-mobile/templates", "skip", "dry-run");
     return;
   }
-  const alreadyCloned = existsSync12(join8(GOR_MOBILE_RULES_DIR, ".git"));
+  const alreadyCloned = existsSync14(join8(GOR_MOBILE_RULES_DIR, ".git"));
   if (alreadyCloned) {
-    await execa4("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], { reject: false });
+    await execa5("git", ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"], { reject: false });
     ctx.rulesVersion = readManifest()?.version ?? "?";
     progressItem(1, 3, "pull existing pack", "ok", `v${ctx.rulesVersion} @ ${GOR_MOBILE_RULES_DIR}`);
   } else {
@@ -1601,10 +1840,41 @@ async function stepClaudeStatusLine(ctx) {
   installStatusLine(choice, { force });
   log.ok(`Claude status line installed (${choice === "cat" ? "Cat" : "Classic"})`);
 }
+async function stepDocSources(ctx) {
+  sectionHeader(5, 6, "Documentation sources (MCP)");
+  if (ctx.opts.dryRun) {
+    dryLog(`register ${DEV_KNOWLEDGE_MCP_NAME} \u2192 ~/.codex/config.toml`);
+    dryLog(`store the API key \u2192 ~/.claude/settings.json env (prompted, never logged)`);
+    return;
+  }
+  let key = resolveDevKnowledgeKey().key;
+  if (!key) {
+    printDevKnowledgeGuide();
+    if (!ctx.opts.yes) key = await captureDevKnowledgeKey();
+  }
+  if (key) {
+    persistDevKnowledgeKey(key);
+    progressItem(1, 2, "API key", "ok", "~/.claude/settings.json env");
+  } else {
+    progressItem(1, 2, "API key", "warn", "not set \u2014 run 'gor-mobile mcp' later");
+  }
+  if (ctx.installCodex) {
+    const st = codexMcpState();
+    if (st.foreign) {
+      progressItem(2, 2, DEV_KNOWLEDGE_MCP_NAME, "skip", "existing unmanaged entry kept");
+    } else {
+      installCodexDevKnowledgeMcp(key, { force: st.managed });
+      progressItem(2, 2, DEV_KNOWLEDGE_MCP_NAME, "ok", CODEX_CONFIG_TOML);
+    }
+  } else {
+    progressItem(2, 2, DEV_KNOWLEDGE_MCP_NAME, "skip", "Claude side lands with 'gor-mobile init'");
+  }
+  if (!key && !ctx.opts.yes) await offerDevKnowledgeLinks();
+}
 async function stepCodex(ctx) {
   if (!ctx.installCodex) return;
   const target = TARGETS.codex;
-  sectionHeader(5, 5, "Codex integration (user-level)");
+  sectionHeader(6, 6, "Codex integration (user-level)");
   if (ctx.opts.dryRun) {
     dryLog(`merge SessionStart + UserPromptSubmit + PreToolUse \u2192 ${target.hooksFile}`);
     dryLog(`install skills \u2192 ${target.skillsDir}`);
@@ -1645,7 +1915,7 @@ async function stepCodex(ctx) {
 }
 function templateSkillCount() {
   const src = join8(gorMobileRoot(), "templates", "skills");
-  return existsSync12(src) ? readdirSync4(src).filter((n) => !n.startsWith(".")).length : 0;
+  return existsSync14(src) ? readdirSync4(src).filter((n) => !n.startsWith(".")).length : 0;
 }
 async function cmdSetup(opts = {}) {
   if (opts.noTui || opts.tui === false) forceNoTui();
@@ -1657,6 +1927,7 @@ async function cmdSetup(opts = {}) {
     "Soft-check the ast-index CLI.",
     "Clone the rules pack + hook scripts into ~/.gor-mobile/.",
     "Optionally install a Claude status line.",
+    "Connect Google's Developer Knowledge MCP docs source.",
     "Install the Codex workflow (user-level) if Codex is present."
   ]) {
     console.log(`    ${pc7.dim("\u2022")} ${b}`);
@@ -1677,6 +1948,7 @@ async function cmdSetup(opts = {}) {
     stepAstIndex(ctx);
     await stepRules(ctx);
     await stepClaudeStatusLine(ctx);
+    await stepDocSources(ctx);
     await stepCodex(ctx);
   } catch (err) {
     if (isCancel3(err)) {
@@ -1692,8 +1964,8 @@ async function cmdSetup(opts = {}) {
 }
 
 // src/commands/init.ts
-import { existsSync as existsSync15 } from "fs";
-import { join as join11 } from "path";
+import { existsSync as existsSync18 } from "fs";
+import { join as join12 } from "path";
 import pc8 from "picocolors";
 import { cancel as cancel4, isCancel as isCancel4, select as select2 } from "@clack/prompts";
 
@@ -1737,21 +2009,131 @@ function removeEnabledPlugins(file, keys) {
   writeJson(file, settings);
 }
 
+// src/helpers/mcp-register.ts
+import { existsSync as existsSync15, readFileSync as readFileSync7, rmSync as rmSync4 } from "fs";
+import { join as join9 } from "path";
+function unregisterManaged() {
+  if (!existsSync15(CLAUDE_MCP)) return;
+  const cfg = readJsonSafe(CLAUDE_MCP, {});
+  if (!cfg.mcpServers) return;
+  const filtered = {};
+  for (const [name, server] of Object.entries(cfg.mcpServers)) {
+    if ((server._managed_by ?? "") !== MANAGED_TAG) {
+      filtered[name] = server;
+    }
+  }
+  cfg.mcpServers = filtered;
+  writeJson(CLAUDE_MCP, cfg);
+}
+var PROJECT_MCP_FILE = ".mcp.json";
+function malformedMcpMessage(path) {
+  return `${path} is not valid JSON \u2014 left untouched; fix it and re-run`;
+}
+function projectMcpPath(root) {
+  return join9(root, PROJECT_MCP_FILE);
+}
+function devKnowledgeEntry() {
+  return {
+    type: "http",
+    url: DEV_KNOWLEDGE_MCP_URL,
+    headers: { "X-Goog-Api-Key": `\${${DEV_KNOWLEDGE_API_KEY_ENV}}` }
+  };
+}
+function readProjectMcp(path) {
+  if (!existsSync15(path)) return { malformed: false, config: {} };
+  try {
+    const parsed = JSON.parse(readFileSync7(path, "utf8"));
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { malformed: true, config: null };
+    }
+    return { malformed: false, config: parsed };
+  } catch {
+    return { malformed: true, config: null };
+  }
+}
+function registerProjectMcp(root, owned = []) {
+  const path = projectMcpPath(root);
+  const read = readProjectMcp(path);
+  if (read.malformed) return { written: false, path, malformed: true };
+  const cfg = read.config;
+  const servers = cfg.mcpServers ?? {};
+  if (servers[DEV_KNOWLEDGE_MCP_NAME] && !owned.includes(DEV_KNOWLEDGE_MCP_NAME)) {
+    return { written: false, path };
+  }
+  servers[DEV_KNOWLEDGE_MCP_NAME] = devKnowledgeEntry();
+  cfg.mcpServers = servers;
+  writeJson(path, cfg);
+  return { written: true, path };
+}
+function unregisterProjectMcp(root, names) {
+  const path = projectMcpPath(root);
+  if (!existsSync15(path)) return { written: false, path };
+  const read = readProjectMcp(path);
+  if (read.malformed) return { written: false, path, malformed: true };
+  const cfg = read.config;
+  if (!cfg.mcpServers) return { written: false, path };
+  for (const name of names) delete cfg.mcpServers[name];
+  const nothingLeft = Object.keys(cfg.mcpServers).length === 0 && Object.keys(cfg).filter((k) => k !== "mcpServers").length === 0;
+  if (nothingLeft) {
+    rmSync4(path, { force: true });
+    return { written: true, path };
+  }
+  writeJson(path, cfg);
+  return { written: true, path };
+}
+function projectMcpState(root, hooksFile, owned = []) {
+  const read = readProjectMcp(projectMcpPath(root));
+  const present = !read.malformed && Boolean(read.config.mcpServers?.[DEV_KNOWLEDGE_MCP_NAME]);
+  const settings = readJsonSafe(hooksFile, {});
+  return {
+    present,
+    approved: (settings.enabledMcpjsonServers ?? []).includes(DEV_KNOWLEDGE_MCP_NAME),
+    owned: present && owned.includes(DEV_KNOWLEDGE_MCP_NAME),
+    malformed: read.malformed
+  };
+}
+function approveProjectMcpServers(hooksFile, names) {
+  const settings = readJsonSafe(hooksFile, {});
+  const current = Array.isArray(settings.enabledMcpjsonServers) ? settings.enabledMcpjsonServers : [];
+  settings.enabledMcpjsonServers = [.../* @__PURE__ */ new Set([...current, ...names])];
+  writeJson(hooksFile, settings);
+}
+function removeApprovedMcpServers(hooksFile, names) {
+  const settings = readJsonSafe(hooksFile, {});
+  if (!Array.isArray(settings.enabledMcpjsonServers)) return;
+  const kept = settings.enabledMcpjsonServers.filter(
+    (n) => !names.includes(n)
+  );
+  if (kept.length === 0) delete settings.enabledMcpjsonServers;
+  else settings.enabledMcpjsonServers = kept;
+  writeJson(hooksFile, settings);
+}
+
 // src/helpers/project.ts
 import {
   appendFileSync,
-  existsSync as existsSync13,
+  existsSync as existsSync16,
   readdirSync as readdirSync5,
-  readFileSync as readFileSync6,
+  readFileSync as readFileSync8,
+  rmSync as rmSync5,
   statSync as statSync2,
-  writeFileSync as writeFileSync5
+  writeFileSync as writeFileSync6
 } from "fs";
-import { dirname as dirname4, join as join9 } from "path";
-import { execa as execa5 } from "execa";
+import { dirname as dirname4, join as join10 } from "path";
+import { execa as execa6 } from "execa";
+function projectMarkerPath(root) {
+  return join10(root, PROJECT_STATE_DIR, PROJECT_MARKER_FILE);
+}
+function legacyProjectMarkerPath(root) {
+  return join10(root, LEGACY_PROJECT_MARKER_NAME);
+}
+function hasProjectMarker(root) {
+  return existsSync16(projectMarkerPath(root)) || existsSync16(legacyProjectMarkerPath(root));
+}
 function findProjectRoot(from = process.cwd()) {
   let dir = from;
   while (true) {
-    if (existsSync13(join9(dir, PROJECT_MARKER_NAME))) return dir;
+    if (hasProjectMarker(dir)) return dir;
     if (dir === HOME) return null;
     const parent = dirname4(dir);
     if (parent === dir) return null;
@@ -1759,10 +2141,21 @@ function findProjectRoot(from = process.cwd()) {
   }
 }
 function readProjectMarker(root) {
-  return readJsonSafe(join9(root, PROJECT_MARKER_NAME), {});
+  const current = projectMarkerPath(root);
+  const path = existsSync16(current) ? current : legacyProjectMarkerPath(root);
+  return readJsonSafe(path, {});
 }
 function writeProjectMarker(root, marker) {
-  writeJson(join9(root, PROJECT_MARKER_NAME), marker);
+  writeJson(projectMarkerPath(root), marker);
+}
+function migrateProjectMarker(root) {
+  const legacy = legacyProjectMarkerPath(root);
+  if (!existsSync16(legacy)) return false;
+  if (!existsSync16(projectMarkerPath(root))) {
+    writeJson(projectMarkerPath(root), readJsonSafe(legacy, {}));
+  }
+  rmSync5(legacy, { force: true });
+  return true;
 }
 function detectPlatform(root) {
   const androidMarkers = [
@@ -1772,7 +2165,7 @@ function detectPlatform(root) {
     "settings.gradle.kts",
     "gradlew"
   ];
-  if (androidMarkers.some((m) => existsSync13(join9(root, m)))) return "android";
+  if (androidMarkers.some((m) => existsSync16(join10(root, m)))) return "android";
   try {
     const entries = readdirSync5(root);
     if (entries.some((e) => e.endsWith(".xcodeproj") || e.endsWith(".xcworkspace")) || entries.includes("Podfile") || entries.includes("Package.swift")) {
@@ -1788,7 +2181,8 @@ var NEUTRAL_ENTRIES = /* @__PURE__ */ new Set([
   ".DS_Store",
   ".claude",
   ".idea",
-  PROJECT_MARKER_NAME,
+  PROJECT_STATE_DIR,
+  LEGACY_PROJECT_MARKER_NAME,
   "README.md",
   "LICENSE"
 ]);
@@ -1821,21 +2215,21 @@ function classifyDir(root) {
 function findGitRoot(from) {
   let dir = from;
   while (true) {
-    if (existsSync13(join9(dir, ".git"))) return dir;
+    if (existsSync16(join10(dir, ".git"))) return dir;
     const parent = dirname4(dir);
     if (parent === dir) return null;
     dir = parent;
   }
 }
 async function gitInit(root) {
-  const res = await execa5("git", ["init"], { cwd: root, reject: false });
+  const res = await execa6("git", ["init"], { cwd: root, reject: false });
   return res.exitCode === 0;
 }
 async function gitInfoExcludePath(root) {
-  let gitDir = join9(root, ".git");
-  if (!existsSync13(gitDir)) return null;
+  let gitDir = join10(root, ".git");
+  if (!existsSync16(gitDir)) return null;
   if (!statSync2(gitDir).isDirectory()) {
-    const res = await execa5(
+    const res = await execa6(
       "git",
       ["-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"],
       { reject: false }
@@ -1843,13 +2237,13 @@ async function gitInfoExcludePath(root) {
     if (res.exitCode !== 0) return null;
     gitDir = res.stdout.trim();
   }
-  return join9(gitDir, "info", "exclude");
+  return join10(gitDir, "info", "exclude");
 }
 async function ensureLocalExclude(root, entries) {
   const file = await gitInfoExcludePath(root);
   if (!file) return null;
   ensureParentDir(file);
-  const current = existsSync13(file) ? readFileSync6(file, "utf8") : "";
+  const current = existsSync16(file) ? readFileSync8(file, "utf8") : "";
   const lines = new Set(current.split("\n").map((l) => l.trim()));
   const added = entries.filter((e) => !lines.has(e));
   if (added.length > 0) {
@@ -1861,27 +2255,27 @@ async function ensureLocalExclude(root, entries) {
 }
 async function removeLocalExclude(root, entries) {
   const file = await gitInfoExcludePath(root);
-  if (!file || !existsSync13(file)) return null;
+  if (!file || !existsSync16(file)) return null;
   const drop = new Set(entries);
   const kept = [];
   const removed = [];
-  for (const line of readFileSync6(file, "utf8").split("\n")) {
+  for (const line of readFileSync8(file, "utf8").split("\n")) {
     if (drop.has(line.trim())) removed.push(line.trim());
     else kept.push(line);
   }
   if (removed.length > 0) {
-    writeFileSync5(file, kept.join("\n"));
+    writeFileSync6(file, kept.join("\n"));
   }
   return { file, added: removed };
 }
 function ensureGitignoreFallback(root, entries) {
-  const file = join9(root, ".gitignore");
-  const current = existsSync13(file) ? readFileSync6(file, "utf8") : "";
+  const file = join10(root, ".gitignore");
+  const current = existsSync16(file) ? readFileSync8(file, "utf8") : "";
   const lines = new Set(current.split("\n").map((l) => l.trim()));
   const added = entries.filter((e) => !lines.has(e));
   if (added.length > 0) {
     const prefix2 = current.length > 0 && !current.endsWith("\n") ? "\n" : "";
-    writeFileSync5(file, `${current}${prefix2}${added.map((e) => `${e}
+    writeFileSync6(file, `${current}${prefix2}${added.map((e) => `${e}
 `).join("")}`);
   }
   return { file, added };
@@ -1889,52 +2283,52 @@ function ensureGitignoreFallback(root, entries) {
 
 // src/helpers/state-artifacts.ts
 import {
-  existsSync as existsSync14,
+  existsSync as existsSync17,
   mkdirSync as mkdirSync2,
   readdirSync as readdirSync6,
   renameSync,
   statSync as statSync3,
-  writeFileSync as writeFileSync6
+  writeFileSync as writeFileSync7
 } from "fs";
-import { join as join10 } from "path";
+import { join as join11 } from "path";
 var LEGACY_SUFFIX = ".progress.md";
 function migrateStateLayout(root) {
-  const stateDir = join10(root, ".gor-mobile", "state");
+  const stateDir = join11(root, ".gor-mobile", "state");
   const res = { migrated: [], skipped: [] };
-  if (!existsSync14(stateDir)) return res;
-  writeFileSync6(join10(stateDir, ".gitignore"), "*\n");
+  if (!existsSync17(stateDir)) return res;
+  writeFileSync7(join11(stateDir, ".gitignore"), "*\n");
   for (const name of readdirSync6(stateDir)) {
     if (!name.endsWith(LEGACY_SUFFIX)) continue;
     const slug = name.slice(0, -LEGACY_SUFFIX.length);
     if (!slug) continue;
-    const target = join10(stateDir, slug, "progress.md");
-    if (existsSync14(target)) {
+    const target = join11(stateDir, slug, "progress.md");
+    if (existsSync17(target)) {
       res.skipped.push(name);
       continue;
     }
-    mkdirSync2(join10(stateDir, slug), { recursive: true });
-    renameSync(join10(stateDir, name), target);
+    mkdirSync2(join11(stateDir, slug), { recursive: true });
+    renameSync(join11(stateDir, name), target);
     res.migrated.push(name);
   }
   return res;
 }
 function listMd(dir) {
-  if (!existsSync14(dir)) return [];
-  return readdirSync6(dir).filter((f) => f.endsWith(".md")).map((f) => join10(dir, f));
+  if (!existsSync17(dir)) return [];
+  return readdirSync6(dir).filter((f) => f.endsWith(".md")).map((f) => join11(dir, f));
 }
 function artifactInventory(root) {
-  const gm = join10(root, ".gor-mobile");
-  const plans = listMd(join10(gm, "plans"));
-  const specs = listMd(join10(gm, "specs"));
-  const stateDir = join10(gm, "state");
+  const gm = join11(root, ".gor-mobile");
+  const plans = listMd(join11(gm, "plans"));
+  const specs = listMd(join11(gm, "specs"));
+  const stateDir = join11(gm, "state");
   const workspaces = [];
   const legacy = [];
-  if (existsSync14(stateDir)) {
+  if (existsSync17(stateDir)) {
     for (const name of readdirSync6(stateDir)) {
-      const p = join10(stateDir, name);
+      const p = join11(stateDir, name);
       if (statSync3(p).isDirectory()) {
-        const cp = join10(p, "progress.md");
-        workspaces.push(existsSync14(cp) ? cp : p);
+        const cp = join11(p, "progress.md");
+        workspaces.push(existsSync17(cp) ? cp : p);
       } else if (name.endsWith(LEGACY_SUFFIX)) {
         legacy.push(p);
       }
@@ -1955,9 +2349,9 @@ function artifactInventory(root) {
 }
 
 // src/commands/init.ts
-var EXCLUDE_ENTRIES = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME];
+var EXCLUDE_ENTRIES = [".claude/", `${PROJECT_STATE_DIR}/`, PROJECT_MCP_FILE];
 function machineReady() {
-  if (!existsSync15(join11(GOR_MOBILE_TEMPLATES_DIR, "session-start-hook.sh"))) {
+  if (!existsSync18(join12(GOR_MOBILE_TEMPLATES_DIR, "session-start-hook.sh"))) {
     return { ok: false, reason: "hook scripts not found in ~/.gor-mobile/templates" };
   }
   if (!readManifest()) {
@@ -2029,7 +2423,8 @@ async function cmdInit(opts = {}) {
   const root = process.cwd();
   const spec = projectClaudeSpec(root);
   const marker = readProjectMarker(root);
-  const reinit = existsSync15(join11(root, PROJECT_MARKER_NAME));
+  const reinit = hasProjectMarker(root);
+  const legacyMarker = existsSync18(legacyProjectMarkerPath(root));
   console.log("");
   console.log(pc8.bold(pc8.magenta(`gor-mobile init`)) + pc8.dim(`  \xB7  ${root}`));
   if (reinit) log.info("Existing install found \u2014 refreshing (idempotent re-init).");
@@ -2081,8 +2476,11 @@ async function cmdInit(opts = {}) {
       `merge SessionStart + UserPromptSubmit + PreToolUse \u2192 ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` + (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
       `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
+      `register ${DEV_KNOWLEDGE_MCP_NAME} \u2192 ${join12(root, PROJECT_MCP_FILE)}`,
+      `approve it via enabledMcpjsonServers in ${spec.hooksFile}`,
       "android init \u2192 copy stock skill into .claude/skills, drop Claude-home copy",
       `write ${PROJECT_MARKER_NAME} (platform=${platform})`,
+      ...legacyMarker ? [`move ${LEGACY_PROJECT_MARKER_NAME} \u2192 ${PROJECT_MARKER_NAME}, drop its exclude line`] : [],
       `git exclude += ${EXCLUDE_ENTRIES.join(", ")}`
     ]) {
       console.log(`    ${pc8.dim("[dry-run]")} ${line}`);
@@ -2106,6 +2504,19 @@ async function cmdInit(opts = {}) {
   log.ok(
     extraPlugins.length > 0 ? `Plugins: disabled superpowers, enabled ${extraPlugins.join(", ")}` : "Disabled duplicate superpowers plugin for this repo"
   );
+  const mcp = registerProjectMcp(root, marker.managed_mcp ?? []);
+  if (mcp.written) {
+    approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} \u2192 ${mcp.path} (approved in settings.local.json)`);
+  } else if (mcp.malformed) {
+    log.warn(malformedMcpMessage(mcp.path));
+  } else {
+    log.info(`${DEV_KNOWLEDGE_MCP_NAME} already configured by hand \u2014 left as is`);
+  }
+  const managedMcp = mcp.written ? [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])] : marker.managed_mcp ?? [];
+  if (resolveDevKnowledgeKey().key === null) {
+    log.warn("Developer Knowledge API key not set \u2014 run 'gor-mobile mcp' to add it");
+  }
   const clearContextEnabled = enableClearContextOnPlanAccept(spec.hooksFile);
   const managedSettings = clearContextEnabled ? [.../* @__PURE__ */ new Set([...marker.managed_settings ?? [], CLEAR_CONTEXT_ON_PLAN_ACCEPT])] : marker.managed_settings ?? [];
   if (clearContextEnabled) {
@@ -2127,16 +2538,21 @@ async function cmdInit(opts = {}) {
     installed_at: opts.now ?? marker.installed_at ?? (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
     managed_plugins: managedPlugins,
     managed_settings: managedSettings,
+    managed_mcp: managedMcp,
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };
   writeProjectMarker(root, nextMarker);
   log.ok(`Wrote ${PROJECT_MARKER_NAME}`);
+  if (migrateProjectMarker(root)) {
+    log.ok(`Moved ${LEGACY_PROJECT_MARKER_NAME} \u2192 ${PROJECT_MARKER_NAME}`);
+    if (gitMode === "git") await removeLocalExclude(root, [LEGACY_PROJECT_MARKER_NAME]);
+  }
   await writeExcludes(root, gitMode);
   outro(root, platform);
 }
 function noteAstIndex(root) {
   if (!astIndexPath()) return;
-  if (existsSync15(join11(root, ".claude", "rules", "ast-index.md"))) return;
+  if (existsSync18(join12(root, ".claude", "rules", "ast-index.md"))) return;
   note(
     [
       "ast-index CLI detected but this repo is not indexed yet. To enable the",
@@ -2168,26 +2584,8 @@ import pc9 from "picocolors";
 import { confirm as confirm2, isCancel as isCancel5 } from "@clack/prompts";
 
 // src/helpers/teardown.ts
-import { existsSync as existsSync17, readdirSync as readdirSync7, readFileSync as readFileSync7, rmSync as rmSync4 } from "fs";
-import { join as join12 } from "path";
-
-// src/helpers/mcp-register.ts
-import { existsSync as existsSync16 } from "fs";
-function unregisterManaged() {
-  if (!existsSync16(CLAUDE_MCP)) return;
-  const cfg = readJsonSafe(CLAUDE_MCP, {});
-  if (!cfg.mcpServers) return;
-  const filtered = {};
-  for (const [name, server] of Object.entries(cfg.mcpServers)) {
-    if ((server._managed_by ?? "") !== MANAGED_TAG) {
-      filtered[name] = server;
-    }
-  }
-  cfg.mcpServers = filtered;
-  writeJson(CLAUDE_MCP, cfg);
-}
-
-// src/helpers/teardown.ts
+import { existsSync as existsSync19, readdirSync as readdirSync7, readFileSync as readFileSync9, rmSync as rmSync6 } from "fs";
+import { join as join13 } from "path";
 function teardownUserTarget(target, opts = {}) {
   log.step(`Removing gor-mobile from ${target.label} (${target.home})`);
   removeSessionStartHook(target);
@@ -2206,27 +2604,27 @@ function teardownUserTarget(target, opts = {}) {
   if (target.id === "claude") {
     cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
   }
-  if (existsSync17(target.skillsDir)) {
+  if (existsSync19(target.skillsDir)) {
     for (const entry of readdirSync7(target.skillsDir)) {
       if (entry.startsWith("gor-mobile-")) {
-        rmSync4(join12(target.skillsDir, entry), { recursive: true, force: true });
+        rmSync6(join13(target.skillsDir, entry), { recursive: true, force: true });
       }
     }
   }
   log.ok(`Skills removed (${target.skillsDir})`);
-  if (existsSync17(target.agentsDir)) {
+  if (existsSync19(target.agentsDir)) {
     const ext = `.${target.agentFormat}`;
     for (const entry of readdirSync7(target.agentsDir)) {
       if (entry.startsWith("gor-mobile-") && entry.endsWith(ext)) {
-        rmSync4(join12(target.agentsDir, entry), { force: true });
+        rmSync6(join13(target.agentsDir, entry), { force: true });
       }
     }
     if (target.id === "claude") {
-      const legacyCr = join12(target.agentsDir, "code-reviewer.md");
-      if (existsSync17(legacyCr)) {
-        const head = readFileSync7(legacyCr, "utf8").split("\n").slice(0, 20).join("\n");
+      const legacyCr = join13(target.agentsDir, "code-reviewer.md");
+      if (existsSync19(legacyCr)) {
+        const head = readFileSync9(legacyCr, "utf8").split("\n").slice(0, 20).join("\n");
         if (/^name: code-reviewer/m.test(head)) {
-          rmSync4(legacyCr);
+          rmSync6(legacyCr);
         }
       }
     }
@@ -2235,6 +2633,14 @@ function teardownUserTarget(target, opts = {}) {
   if (target.supportsMcpPrune) {
     unregisterManaged();
     log.ok("Managed MCP entries removed");
+  }
+  if (target.id === "codex") {
+    removeCodexDevKnowledgeMcp();
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} removed from config.toml`);
+  }
+  if (target.id === "claude" && target.scope === "user") {
+    deleteClaudeEnv(DEV_KNOWLEDGE_API_KEY_ENV);
+    log.ok("Developer Knowledge API key removed from settings.json env");
   }
   if (target.instructionsFile) {
     removeManagedSection(target.instructionsFile);
@@ -2290,19 +2696,19 @@ async function cmdMigrate(opts = {}) {
 }
 
 // src/commands/doctor.ts
-import { existsSync as existsSync19, mkdirSync as mkdirSync3, mkdtempSync, readFileSync as readFileSync8, readdirSync as readdirSync8, rmSync as rmSync5, writeFileSync as writeFileSync7 } from "fs";
+import { existsSync as existsSync21, mkdirSync as mkdirSync3, mkdtempSync, readFileSync as readFileSync10, readdirSync as readdirSync8, rmSync as rmSync7, writeFileSync as writeFileSync8 } from "fs";
 import { tmpdir } from "os";
-import { join as join14 } from "path";
-import { execa as execa7 } from "execa";
+import { join as join15 } from "path";
+import { execa as execa8 } from "execa";
 
 // src/helpers/ast-index-freshness.ts
-import { existsSync as existsSync18 } from "fs";
-import { join as join13 } from "path";
-import { execa as execa6 } from "execa";
+import { existsSync as existsSync20 } from "fs";
+import { join as join14 } from "path";
+import { execa as execa7 } from "execa";
 async function runAstIndexUpdate(root) {
   if (!astIndexPath()) return null;
-  if (!existsSync18(join13(root, ".claude", "rules", "ast-index.md"))) return null;
-  const res = await execa6("ast-index", ["update"], {
+  if (!existsSync20(join14(root, ".claude", "rules", "ast-index.md"))) return null;
+  const res = await execa7("ast-index", ["update"], {
     cwd: root,
     reject: false,
     timeout: 1e4
@@ -2326,7 +2732,7 @@ function reportDep(name, path, required) {
   }
 }
 function checkFile(path, label) {
-  if (existsSync19(path)) {
+  if (existsSync21(path)) {
     log.ok(`${label} \u2192 ${path}`);
     return true;
   }
@@ -2334,7 +2740,7 @@ function checkFile(path, label) {
   return false;
 }
 function checkHooks(target) {
-  if (!existsSync19(target.hooksFile)) {
+  if (!existsSync21(target.hooksFile)) {
     log.warn(`No ${target.hooksFile}`);
     return;
   }
@@ -2350,11 +2756,11 @@ function checkHooks(target) {
   }
 }
 function checkInstructionsSection(target) {
-  if (!existsSync19(target.instructionsFile)) {
+  if (!existsSync21(target.instructionsFile)) {
     log.warn(`${target.instructionsFile} does not exist`);
     return;
   }
-  if (readFileSync8(target.instructionsFile, "utf8").includes(SECTION_BEGIN)) {
+  if (readFileSync10(target.instructionsFile, "utf8").includes(SECTION_BEGIN)) {
     log.ok("managed instructions section present");
   } else {
     log.warn("managed instructions section missing \u2014 run 'gor-mobile repair'");
@@ -2380,7 +2786,7 @@ function checkCodexStatusLine() {
   }
 }
 function checkRulesPack() {
-  if (!existsSync19(GOR_MOBILE_RULES_DIR)) {
+  if (!existsSync21(GOR_MOBILE_RULES_DIR)) {
     log.warn(`Rules pack not installed (${GOR_MOBILE_RULES_DIR}) \u2014 run 'gor-mobile setup'`);
     return;
   }
@@ -2402,7 +2808,7 @@ function checkHookTemplates() {
   ];
   let ok = true;
   for (const f of scripts) {
-    if (!existsSync19(join14(GOR_MOBILE_TEMPLATES_DIR, f))) {
+    if (!existsSync21(join15(GOR_MOBILE_TEMPLATES_DIR, f))) {
       ok = false;
       log.warn(`hook template missing: ${f} \u2014 run 'gor-mobile setup'`);
     }
@@ -2417,7 +2823,7 @@ async function verboseHookEmulation(target) {
   ];
   for (const [file, label] of hooks) {
     const path = `${GOR_MOBILE_HOME}/templates/${file}`;
-    if (!existsSync19(path)) {
+    if (!existsSync21(path)) {
       log.warn(`[${label}] template missing: ${path}`);
       continue;
     }
@@ -2430,7 +2836,7 @@ async function verboseHookEmulation(target) {
       session_id: "gor-mobile-doctor",
       prompt: "gor-mobile doctor"
     });
-    const result = await execa7("bash", [path], {
+    const result = await execa8("bash", [path], {
       reject: false,
       input,
       env: {
@@ -2445,11 +2851,11 @@ async function verboseHookEmulation(target) {
     }
     if (label === "PreToolUse") {
       log.ok(`[${label}] guard allows non-symbol probe (exit 0)`);
-      const probeDir = mkdtempSync(join14(tmpdir(), "gorm-guard-probe-"));
+      const probeDir = mkdtempSync(join15(tmpdir(), "gorm-guard-probe-"));
       try {
-        mkdirSync3(join14(probeDir, ".claude", "rules"), { recursive: true });
-        writeFileSync7(join14(probeDir, ".claude", "rules", "ast-index.md"), "");
-        const deny = await execa7("bash", [path], {
+        mkdirSync3(join15(probeDir, ".claude", "rules"), { recursive: true });
+        writeFileSync8(join15(probeDir, ".claude", "rules", "ast-index.md"), "");
+        const deny = await execa8("bash", [path], {
           reject: false,
           input: JSON.stringify({
             tool_name: "Grep",
@@ -2465,7 +2871,7 @@ async function verboseHookEmulation(target) {
           );
         }
       } finally {
-        rmSync5(probeDir, { recursive: true, force: true });
+        rmSync7(probeDir, { recursive: true, force: true });
       }
       continue;
     }
@@ -2490,7 +2896,7 @@ async function verboseHookEmulation(target) {
   }
 }
 function verboseSkillsFrontmatter(target) {
-  if (!existsSync19(target.skillsDir)) {
+  if (!existsSync21(target.skillsDir)) {
     log.warn(`${target.skillsDir} missing`);
     return;
   }
@@ -2498,10 +2904,10 @@ function verboseSkillsFrontmatter(target) {
   let bad = 0;
   for (const entry of readdirSync8(target.skillsDir)) {
     if (!entry.startsWith("gor-mobile-")) continue;
-    const skillMd = join14(target.skillsDir, entry, "SKILL.md");
-    if (!existsSync19(skillMd)) continue;
+    const skillMd = join15(target.skillsDir, entry, "SKILL.md");
+    if (!existsSync21(skillMd)) continue;
     count++;
-    const content = readFileSync8(skillMd, "utf8");
+    const content = readFileSync10(skillMd, "utf8");
     if (!/^name: gor-mobile-/m.test(content)) {
       bad++;
       log.warn(`  ${skillMd} missing 'name: gor-mobile-' prefix`);
@@ -2528,12 +2934,12 @@ async function checkAndroidContract() {
   }
 }
 function verboseContractLint(target) {
-  const skill = join14(target.skillsDir, "gor-mobile-using-android-cli", "SKILL.md");
-  if (!existsSync19(skill)) {
+  const skill = join15(target.skillsDir, "gor-mobile-using-android-cli", "SKILL.md");
+  if (!existsSync21(skill)) {
     log.warn("bridge skill missing \u2014 cannot lint contract");
     return;
   }
-  const text = readFileSync8(skill, "utf8");
+  const text = readFileSync10(skill, "utf8");
   const mentioned = /* @__PURE__ */ new Set();
   const re = /`android ([a-z-]+(?: [a-z-]+)?)/g;
   let m;
@@ -2553,14 +2959,14 @@ function checkTarget(target) {
   } else if (androidCliPath()) {
     log.warn("android-cli skill missing \u2014 run 'gor-mobile repair'");
   }
-  const bridgePath = join14(target.skillsDir, "gor-mobile-using-android-cli", "SKILL.md");
-  if (existsSync19(bridgePath)) {
+  const bridgePath = join15(target.skillsDir, "gor-mobile-using-android-cli", "SKILL.md");
+  if (existsSync21(bridgePath)) {
     log.ok("gor-mobile-using-android-cli bridge skill installed");
   } else if (androidCliPath()) {
     log.warn("gor-mobile-using-android-cli skill missing \u2014 run 'gor-mobile repair'");
   }
-  const astIndexSkillPath = join14(target.skillsDir, "gor-mobile-ast-index", "SKILL.md");
-  if (existsSync19(astIndexSkillPath)) {
+  const astIndexSkillPath = join15(target.skillsDir, "gor-mobile-ast-index", "SKILL.md");
+  if (existsSync21(astIndexSkillPath)) {
     log.ok("gor-mobile-ast-index skill installed");
   } else {
     log.warn("gor-mobile-ast-index skill missing \u2014 run 'gor-mobile repair'");
@@ -2571,7 +2977,15 @@ function checkTarget(target) {
 }
 function checkProject(root) {
   const marker = readProjectMarker(root);
-  log.ok(`.gor-mobile.json \u2192 platform=${marker.platform ?? "?"}, v${marker.version ?? "?"} (${root})`);
+  const legacy = existsSync21(legacyProjectMarkerPath(root));
+  log.ok(
+    `${legacy ? LEGACY_PROJECT_MARKER_NAME : PROJECT_MARKER_NAME} \u2192 platform=${marker.platform ?? "?"}, v${marker.version ?? "?"} (${root})`
+  );
+  if (legacy) {
+    log.warn(
+      `marker still at the repo root \u2014 run 'gor-mobile repair' to move it to ${PROJECT_MARKER_NAME}`
+    );
+  }
   if (marker.version && marker.version !== GOR_MOBILE_VERSION) {
     log.warn(`installed v${marker.version} \u2260 CLI v${GOR_MOBILE_VERSION} \u2014 run 'gor-mobile init' to refresh`);
   }
@@ -2590,6 +3004,18 @@ function checkProject(root) {
     );
   }
   const spec = projectClaudeSpec(root);
+  const mcp = projectMcpState(root, spec.hooksFile, marker.managed_mcp ?? []);
+  if (mcp.malformed) {
+    log.warn(".mcp.json is not valid JSON \u2014 fix it, then run 'gor-mobile mcp'");
+  } else if (!mcp.present) {
+    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from .mcp.json \u2014 run 'gor-mobile mcp'`);
+  } else if (!mcp.owned) {
+    log.info(`${DEV_KNOWLEDGE_MCP_NAME}: custom entry (not managed by gor-mobile)`);
+  } else if (!mcp.approved) {
+    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} not pre-approved \u2014 run 'gor-mobile repair'`);
+  } else {
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} configured + pre-approved (approve on first 'claude' run)`);
+  }
   checkTarget(spec);
   return spec;
 }
@@ -2628,6 +3054,12 @@ async function cmdDoctor(opts = {}) {
       "  \u2192 jq powers the status line AND the ast-index guard hook (guard fails open without it) \u2014 brew install jq"
     );
   }
+  const dk = resolveDevKnowledgeKey();
+  if (dk.key) {
+    log.ok(`Developer Knowledge API key \u2192 ${KEY_SOURCE_LABEL[dk.source]}`);
+  } else {
+    log.warn("Developer Knowledge API key not set \u2014 run 'gor-mobile mcp'");
+  }
   log.step("Machine (~/.gor-mobile)");
   checkHookTemplates();
   checkRulesPack();
@@ -2638,12 +3070,22 @@ async function cmdDoctor(opts = {}) {
   if (root) {
     emulationTargets.push(checkProject(root));
   } else {
-    log.info("No .gor-mobile.json in the current directory tree.");
+    log.info(`No ${PROJECT_MARKER_NAME} in the current directory tree.`);
     log.info("  \u2192 cd into a mobile repo and run 'gor-mobile init' to install the workflow.");
   }
   if (agentHomeExists("codex")) {
     log.step("Codex integration (user-level)");
     checkTarget(TARGETS.codex);
+    const cx = codexMcpState();
+    if (!cx.present) {
+      log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from config.toml \u2014 run 'gor-mobile mcp'`);
+    } else if (cx.foreign) {
+      log.info(`${DEV_KNOWLEDGE_MCP_NAME}: custom entry (not managed by gor-mobile)`);
+    } else {
+      log.ok(
+        `${DEV_KNOWLEDGE_MCP_NAME} registered (${cx.hasLiteralKey ? "http_headers" : "env_http_headers"})`
+      );
+    }
     emulationTargets.push(TARGETS.codex);
   }
   if (opts.verbose) {
@@ -2663,7 +3105,7 @@ async function cmdDoctor(opts = {}) {
 }
 
 // src/commands/repair.ts
-import { join as join15 } from "path";
+import { join as join16 } from "path";
 function refreshHooks(target) {
   const ss = installSessionStartHook(target);
   log.ok(
@@ -2696,6 +3138,16 @@ async function repairProject(root) {
   else log.warn(`android-cli skill not placed: ${android.error ?? "stock skill missing"}`);
   applyEnabledPlugins(spec.hooksFile, [], [SUPERPOWERS_KEY]);
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
+  const marker = readProjectMarker(root);
+  const mcpRes = registerProjectMcp(root, marker.managed_mcp ?? []);
+  if (mcpRes.written) {
+    approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed \u2192 ${mcpRes.path}`);
+    const excl = await ensureLocalExclude(root, [PROJECT_MCP_FILE]);
+    if (excl && excl.added.length > 0) log.ok(`Local ignore updated (${excl.file})`);
+  } else if (mcpRes.malformed) {
+    log.warn(malformedMcpMessage(mcpRes.path));
+  }
   const stateMigration = migrateStateLayout(root);
   if (stateMigration.migrated.length > 0) {
     log.ok(`Migrated ${stateMigration.migrated.length} checkpoint(s) \u2192 .gor-mobile/state/<plan>/progress.md`);
@@ -2703,7 +3155,6 @@ async function repairProject(root) {
   for (const s of stateMigration.skipped) {
     log.warn(`Left legacy ${s} in place \u2014 a workspace checkpoint already exists for that plan`);
   }
-  const marker = readProjectMarker(root);
   const enabledNow = enableClearContextOnPlanAccept(spec.hooksFile);
   const managedSettings = enabledNow ? [.../* @__PURE__ */ new Set([...marker.managed_settings ?? [], CLEAR_CONTEXT_ON_PLAN_ACCEPT])] : marker.managed_settings ?? [];
   if (enabledNow) log.ok(`Enabled ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} (plan-approval "clear context" option)`);
@@ -2711,9 +3162,14 @@ async function repairProject(root) {
     ...marker,
     version: GOR_MOBILE_VERSION,
     managed_settings: managedSettings,
+    managed_mcp: mcpRes.written ? [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])] : marker.managed_mcp ?? [],
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   });
   log.ok(`Marker refreshed (v${GOR_MOBILE_VERSION})`);
+  if (migrateProjectMarker(root)) {
+    log.ok(`Moved ${LEGACY_PROJECT_MARKER_NAME} \u2192 ${PROJECT_MARKER_NAME}`);
+    await removeLocalExclude(root, [LEGACY_PROJECT_MARKER_NAME]);
+  }
 }
 async function repairCodex(target) {
   log.step(`Repairing ${target.label} (${target.home})`);
@@ -2721,6 +3177,11 @@ async function repairCodex(target) {
   if (target.statusLineKind === "codex-config" && codexStatusLineState().managed) {
     installCodexStatusLine({ force: true });
     log.ok("Codex status line refreshed (tui.status_line)");
+  }
+  const cx = codexMcpState();
+  if (!cx.foreign) {
+    installCodexDevKnowledgeMcp(resolveDevKnowledgeKey().key, { force: cx.managed });
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed in config.toml`);
   }
   const skills = installSkills(target);
   if (skills.missingPrefix.length > 0) {
@@ -2733,7 +3194,7 @@ async function repairCodex(target) {
   if (!androidRes.ran) log.info("android CLI not on PATH \u2014 skipping 'android init'");
   else if (androidRes.skillInstalled) log.ok("android-cli skill refreshed via 'android init'");
   else if (androidRes.error) log.warn(`'android init' failed: ${androidRes.error}`);
-  writeManagedSection(target.instructionsFile, join15(gorMobileRoot(), "templates", target.instructionsSnippet));
+  writeManagedSection(target.instructionsFile, join16(gorMobileRoot(), "templates", target.instructionsSnippet));
   log.ok(`Managed instructions section refreshed (${target.instructionsFile})`);
 }
 async function cmdRepair(opts = {}) {
@@ -2759,11 +3220,85 @@ async function cmdRepair(opts = {}) {
   log.ok("Done. Run 'gor-mobile doctor' to verify.");
 }
 
+// src/commands/mcp.ts
+async function cmdMcp(opts = {}) {
+  if (opts.noTui || opts.tui === false) forceNoTui();
+  log.step(`Documentation sources \u2014 ${DEV_KNOWLEDGE_MCP_NAME}`);
+  const root = findProjectRoot();
+  if (root) {
+    const spec = projectClaudeSpec(root);
+    const marker = readProjectMarker(root);
+    const res = registerProjectMcp(root, marker.managed_mcp ?? []);
+    if (res.malformed) {
+      log.warn(malformedMcpMessage(res.path));
+    } else {
+      if (res.written) {
+        approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
+        writeProjectMarker(root, {
+          ...marker,
+          managed_mcp: [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])]
+        });
+        const excl = await ensureLocalExclude(root, [PROJECT_MCP_FILE]);
+        if (excl && excl.added.length > 0) log.ok(`Local ignore updated (${excl.file})`);
+      }
+      const ownedNow = res.written ? [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])] : marker.managed_mcp ?? [];
+      const st = projectMcpState(root, spec.hooksFile, ownedNow);
+      log.ok(`${res.path} \u2014 server ${st.present ? "present" : "missing"}, approval ${st.approved ? "set" : "missing"}`);
+      if (st.present && !st.owned) {
+        log.info(`${DEV_KNOWLEDGE_MCP_NAME} is a custom entry (not managed by gor-mobile) \u2014 left as is`);
+      } else if (st.approved) {
+        log.muted("Approval applies once you have trusted this repo in Claude Code.");
+      }
+    }
+  } else {
+    log.info("Not inside a gor-mobile repo \u2014 skipped the project half (run 'gor-mobile init').");
+  }
+  const resolved = resolveDevKnowledgeKey();
+  let key = resolved.key;
+  if (key) {
+    log.ok(`API key found (${KEY_SOURCE_LABEL[resolved.source]})`);
+    if (isTuiOn() && await confirmStep("Replace the stored API key?", false)) {
+      const next = await captureDevKnowledgeKey();
+      if (next) {
+        key = next;
+        log.ok("API key replaced");
+      }
+    }
+    persistDevKnowledgeKey(key);
+  } else {
+    printDevKnowledgeGuide();
+    const entered = await captureDevKnowledgeKey();
+    if (entered) {
+      key = entered;
+      persistDevKnowledgeKey(entered);
+      log.ok("API key stored in ~/.claude/settings.json env");
+    } else {
+      log.warn("No API key \u2014 the server stays configured but will not connect");
+    }
+  }
+  if (agentHomeExists("codex")) {
+    const st = codexMcpState();
+    if (st.foreign) {
+      log.info(`${CODEX_CONFIG_TOML} has an unmanaged entry \u2014 left as is`);
+    } else {
+      installCodexDevKnowledgeMcp(key, { force: st.managed });
+      const written = codexMcpState();
+      log.ok(`${CODEX_CONFIG_TOML} \u2014 ${written.hasLiteralKey ? "http_headers" : "env_http_headers"}`);
+    }
+  }
+  if (!key) await offerDevKnowledgeLinks();
+}
+
 // src/commands/uninstall.ts
-import { existsSync as existsSync20, readdirSync as readdirSync9, rmdirSync, rmSync as rmSync6 } from "fs";
-import { join as join16 } from "path";
+import { existsSync as existsSync22, readdirSync as readdirSync9, rmdirSync, rmSync as rmSync8 } from "fs";
+import { join as join17 } from "path";
 import { confirm as confirm3, isCancel as isCancel6, select as select3 } from "@clack/prompts";
-var EXCLUDE_ENTRIES2 = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME];
+var EXCLUDE_ENTRIES2 = [
+  ".claude/",
+  `${PROJECT_STATE_DIR}/`,
+  LEGACY_PROJECT_MARKER_NAME,
+  PROJECT_MCP_FILE
+];
 async function resolveMode(opts) {
   if (opts.machine) return "machine";
   if (opts.project) return "project";
@@ -2771,7 +3306,7 @@ async function resolveMode(opts) {
   const pick = await select3({
     message: "What do you want to remove?",
     options: [
-      { value: "project", label: "This repo", hint: ".claude footprint + .gor-mobile.json" },
+      { value: "project", label: "This repo", hint: `.claude footprint + ${PROJECT_MARKER_NAME}` },
       { value: "machine", label: "The whole machine", hint: "user homes + ~/.gor-mobile + rules" }
     ]
   });
@@ -2780,13 +3315,13 @@ async function resolveMode(opts) {
 }
 function rmdirIfEmpty(dir) {
   try {
-    if (existsSync20(dir) && readdirSync9(dir).length === 0) rmdirSync(dir);
+    if (existsSync22(dir) && readdirSync9(dir).length === 0) rmdirSync(dir);
   } catch {
   }
 }
 async function uninstallProject(opts) {
   const root = findProjectRoot() ?? process.cwd();
-  if (!existsSync20(join16(root, PROJECT_MARKER_NAME))) {
+  if (!hasProjectMarker(root)) {
     log.info(`No gor-mobile project install here (${PROJECT_MARKER_NAME} not found in ${root}).`);
     return;
   }
@@ -2810,25 +3345,32 @@ async function uninstallProject(opts) {
     removeClearContextOnPlanAccept(spec.hooksFile);
   }
   log.ok(`Hooks + plugin overrides removed (${spec.hooksFile})`);
-  if (existsSync20(spec.skillsDir)) {
+  const ownedMcp = marker.managed_mcp ?? [];
+  const mcpRes = unregisterProjectMcp(root, ownedMcp);
+  removeApprovedMcpServers(spec.hooksFile, ownedMcp);
+  if (mcpRes.malformed) log.warn(malformedMcpMessage(mcpRes.path));
+  else if (ownedMcp.length > 0) log.ok(`MCP servers removed (${ownedMcp.join(", ")})`);
+  if (existsSync22(spec.skillsDir)) {
     for (const entry of readdirSync9(spec.skillsDir)) {
       if (entry.startsWith("gor-mobile-") || entry === "android-cli") {
-        rmSync6(join16(spec.skillsDir, entry), { recursive: true, force: true });
+        rmSync8(join17(spec.skillsDir, entry), { recursive: true, force: true });
       }
     }
     rmdirIfEmpty(spec.skillsDir);
   }
   log.ok(`Skills removed (${spec.skillsDir})`);
-  if (existsSync20(spec.agentsDir)) {
+  if (existsSync22(spec.agentsDir)) {
     for (const entry of readdirSync9(spec.agentsDir)) {
       if (entry.startsWith("gor-mobile-")) {
-        rmSync6(join16(spec.agentsDir, entry), { force: true });
+        rmSync8(join17(spec.agentsDir, entry), { force: true });
       }
     }
     rmdirIfEmpty(spec.agentsDir);
   }
   log.ok(`Agents removed (${spec.agentsDir})`);
-  rmSync6(join16(root, PROJECT_MARKER_NAME), { force: true });
+  rmSync8(projectMarkerPath(root), { force: true });
+  rmSync8(legacyProjectMarkerPath(root), { force: true });
+  rmdirIfEmpty(join17(root, PROJECT_STATE_DIR));
   log.ok(`Removed ${PROJECT_MARKER_NAME}`);
   const excl = await removeLocalExclude(root, EXCLUDE_ENTRIES2);
   if (excl && excl.added.length > 0) log.ok(`Local ignore cleaned (${excl.file})`);
@@ -2851,11 +3393,11 @@ async function uninstallMachine(opts) {
     teardownUserTarget(target);
   }
   log.step(`Removing ${GOR_MOBILE_HOME} (templates, rules)`);
-  if (existsSync20(GOR_MOBILE_HOME)) {
-    rmSync6(GOR_MOBILE_HOME, { recursive: true, force: true });
+  if (existsSync22(GOR_MOBILE_HOME)) {
+    rmSync8(GOR_MOBILE_HOME, { recursive: true, force: true });
   }
   log.step(`Removing ${GOR_MOBILE_CONFIG}`);
-  if (existsSync20(GOR_MOBILE_CONFIG)) rmSync6(GOR_MOBILE_CONFIG);
+  if (existsSync22(GOR_MOBILE_CONFIG)) rmSync8(GOR_MOBILE_CONFIG);
   rmdirIfEmpty(GOR_MOBILE_CONFIG_DIR);
   log.ok("gor-mobile artifacts removed");
   const cli = androidCliPath();
@@ -2872,7 +3414,7 @@ async function uninstallMachine(opts) {
       if (res.errors.length === 0) log.ok("Android CLI removed");
     }
   }
-  log.info("Per-repo footprints (.claude, .gor-mobile.json) stay put \u2014 run 'gor-mobile uninstall --project' inside each.");
+  log.info(`Per-repo footprints (.claude, ${PROJECT_STATE_DIR}) stay put \u2014 run 'gor-mobile uninstall --project' inside each.`);
 }
 async function cmdUninstall(opts = {}) {
   const mode = await resolveMode(opts);
@@ -2885,14 +3427,14 @@ async function cmdUninstall(opts = {}) {
 }
 
 // src/commands/rules.ts
-import { existsSync as existsSync21, rmSync as rmSync7 } from "fs";
+import { existsSync as existsSync23, rmSync as rmSync9 } from "fs";
 async function rulesList() {
-  if (!existsSync21(GOR_MOBILE_RULES_DIR)) {
+  if (!existsSync23(GOR_MOBILE_RULES_DIR)) {
     log.warn("No rules pack installed. Run: gor-mobile rules use <url>");
     return;
   }
   const m = readManifest();
-  const cfg = existsSync21(GOR_MOBILE_CONFIG) ? readConfig() : {};
+  const cfg = existsSync23(GOR_MOBILE_CONFIG) ? readConfig2() : {};
   const { branch, rev } = await gitBranchAndRev();
   console.log("Installed pack:");
   console.log(`  name:    ${m?.name ?? "?"}`);
@@ -2911,14 +3453,14 @@ async function rulesUse(target) {
     return;
   }
   const backup = `${GOR_MOBILE_RULES_DIR}.bak`;
-  if (existsSync21(GOR_MOBILE_RULES_DIR)) {
+  if (existsSync23(GOR_MOBILE_RULES_DIR)) {
     log.info(`Backing up existing pack to ${backup}`);
-    if (existsSync21(backup)) rmSync7(backup, { recursive: true, force: true });
+    if (existsSync23(backup)) rmSync9(backup, { recursive: true, force: true });
     const { renameSync: renameSync2 } = await import("fs");
     renameSync2(GOR_MOBILE_RULES_DIR, backup);
   }
   try {
-    if (existsSync21(target)) {
+    if (existsSync23(target)) {
       log.info(`Copying local pack from ${target}`);
       copyFromLocal(target);
     } else {
@@ -2927,10 +3469,10 @@ async function rulesUse(target) {
     }
   } catch (err) {
     log.err(`Install failed \u2014 restoring backup: ${err.message}`);
-    if (existsSync21(GOR_MOBILE_RULES_DIR)) {
-      rmSync7(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
+    if (existsSync23(GOR_MOBILE_RULES_DIR)) {
+      rmSync9(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
     }
-    if (existsSync21(backup)) {
+    if (existsSync23(backup)) {
       const { renameSync: renameSync2 } = await import("fs");
       renameSync2(backup, GOR_MOBILE_RULES_DIR);
     }
@@ -2939,7 +3481,7 @@ async function rulesUse(target) {
   }
   saveConfig(target);
   log.ok(`Rules pack installed at ${GOR_MOBILE_RULES_DIR}`);
-  if (existsSync21(backup)) rmSync7(backup, { recursive: true, force: true });
+  if (existsSync23(backup)) rmSync9(backup, { recursive: true, force: true });
   const res = validateManifest();
   if (!res.ok) {
     for (const e of res.errors) log.err(e);
@@ -2981,7 +3523,7 @@ async function rulesValidate() {
 }
 
 // src/commands/docs.ts
-import { execa as execa8 } from "execa";
+import { execa as execa9 } from "execa";
 async function cmdDocs(query) {
   const q = query.join(" ").trim();
   if (!q) {
@@ -2992,7 +3534,7 @@ async function cmdDocs(query) {
   const cli = androidCliPath();
   if (cli) {
     log.info(`\u2192 android docs "${q}"`);
-    const res = await execa8(cli, ["docs", q], { stdio: "inherit", reject: false });
+    const res = await execa9(cli, ["docs", q], { stdio: "inherit", reject: false });
     if (res.exitCode === 0) return;
     log.warn("android docs returned nothing; falling back to web search");
   }
@@ -3003,9 +3545,9 @@ async function cmdDocs(query) {
 }
 
 // src/commands/self-update.ts
-import { existsSync as existsSync22 } from "fs";
-import { join as join17 } from "path";
-import { execa as execa9 } from "execa";
+import { existsSync as existsSync24 } from "fs";
+import { join as join18 } from "path";
+import { execa as execa10 } from "execa";
 function noteMigration() {
   if (legacyClaudeFootprint().length === 0) return;
   log.warn("A legacy v0.2.x global install remains in ~/.claude.");
@@ -3013,19 +3555,19 @@ function noteMigration() {
 }
 async function cmdSelfUpdate() {
   const root = gorMobileRoot();
-  if (existsSync22(join17(root, ".git"))) {
+  if (existsSync24(join18(root, ".git"))) {
     log.step(`git pull in ${root}`);
-    await execa9("git", ["-C", root, "pull", "--ff-only"], { stdio: "inherit" });
+    await execa10("git", ["-C", root, "pull", "--ff-only"], { stdio: "inherit" });
     log.step("npm install");
-    await execa9("npm", ["install", "--production=false"], { cwd: root, stdio: "inherit" });
+    await execa10("npm", ["install", "--production=false"], { cwd: root, stdio: "inherit" });
     log.step("npm run build");
-    await execa9("npm", ["run", "build"], { cwd: root, stdio: "inherit" });
+    await execa10("npm", ["run", "build"], { cwd: root, stdio: "inherit" });
     log.ok("CLI updated");
     noteMigration();
     return;
   }
   if (has("brew")) {
-    const res = await execa9("brew", ["list", "gor-mobile"], { reject: false });
+    const res = await execa10("brew", ["list", "gor-mobile"], { reject: false });
     if (res.exitCode === 0) {
       log.info("Brew-managed install \u2014 use: brew upgrade gor-mobile");
       noteMigration();
@@ -3039,18 +3581,18 @@ async function cmdSelfUpdate() {
 }
 
 // src/commands/android.ts
-import { existsSync as existsSync23 } from "fs";
-import { execa as execa10 } from "execa";
+import { existsSync as existsSync25 } from "fs";
+import { execa as execa11 } from "execa";
 async function cmdAndroid(args) {
   const cli = androidCliPath();
   if (cli) {
-    const res = await execa10(cli, args, { stdio: "inherit", reject: false });
+    const res = await execa11(cli, args, { stdio: "inherit", reject: false });
     process.exit(res.exitCode ?? 0);
   }
   const first = args[0];
-  if (first && ["build", "assemble", "assembleDebug", "assembleRelease"].includes(first) && existsSync23("./gradlew")) {
+  if (first && ["build", "assemble", "assembleDebug", "assembleRelease"].includes(first) && existsSync25("./gradlew")) {
     log.info(`Falling back to ./gradlew ${first}`);
-    const res = await execa10("./gradlew", [first], { stdio: "inherit", reject: false });
+    const res = await execa11("./gradlew", [first], { stdio: "inherit", reject: false });
     process.exit(res.exitCode ?? 0);
   }
   if (!first) {
@@ -3063,11 +3605,11 @@ async function cmdAndroid(args) {
 }
 
 // src/commands/android-skills.ts
-import { existsSync as existsSync24 } from "fs";
-import { join as join18 } from "path";
+import { existsSync as existsSync26 } from "fs";
+import { join as join19 } from "path";
 import { cancel as cancel5, isCancel as isCancel7, multiselect, spinner } from "@clack/prompts";
 function isInstalled(name) {
-  return existsSync24(join18(CLAUDE_SKILLS_DIR, name, "SKILL.md"));
+  return existsSync26(join19(CLAUDE_SKILLS_DIR, name, "SKILL.md"));
 }
 async function cmdAndroidSkills() {
   if (!androidCliPath()) {
@@ -3135,13 +3677,13 @@ async function cmdAndroidSkills() {
 }
 
 // src/commands/update.ts
-import { existsSync as existsSync25 } from "fs";
-import { join as join19 } from "path";
-import { execa as execa11 } from "execa";
+import { existsSync as existsSync27 } from "fs";
+import { join as join20 } from "path";
+import { execa as execa12 } from "execa";
 async function cmdUpdate() {
   log.step("Updating rules pack");
-  if (existsSync25(join19(GOR_MOBILE_RULES_DIR, ".git"))) {
-    const res = await execa11(
+  if (existsSync27(join20(GOR_MOBILE_RULES_DIR, ".git"))) {
+    const res = await execa12(
       "git",
       ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"],
       { reject: false, stdio: "inherit" }
@@ -3152,12 +3694,12 @@ async function cmdUpdate() {
     log.warn("Rules pack is not a git repo \u2014 skipping pull");
   }
   if (has("brew")) {
-    const list = await execa11("brew", ["list", "gor-mobile"], { reject: false });
+    const list = await execa12("brew", ["list", "gor-mobile"], { reject: false });
     if (list.exitCode === 0) {
       log.step("Checking for brew update");
-      await execa11("brew", ["update"], { reject: false });
-      const info = await execa11("brew", ["info", "--json=v2", "gor-mobile"], { reject: false });
-      const versions = await execa11("brew", ["list", "--versions", "gor-mobile"], { reject: false });
+      await execa12("brew", ["update"], { reject: false });
+      const info = await execa12("brew", ["info", "--json=v2", "gor-mobile"], { reject: false });
+      const versions = await execa12("brew", ["list", "--versions", "gor-mobile"], { reject: false });
       try {
         const parsed = JSON.parse(info.stdout);
         const latest = parsed?.formulae?.[0]?.versions?.stable;
@@ -3214,6 +3756,9 @@ program.command("doctor").description("Check machine setup, the current project,
 program.command("repair").description("Refresh managed files: machine hook scripts, this project, and Codex").option("--skip-android-update", "do not auto-update the Android CLI").action(async (opts) => {
   await cmdRepair(opts);
 });
+program.command("mcp").description("Connect Google's Developer Knowledge docs MCP server (and rotate its API key)").option("--no-tui", "force plain-text prompts").action(async (opts) => {
+  await cmdMcp(opts);
+});
 program.command("android-skills").description("Browse + install/remove optional Google Android CLI skills").action(async () => {
   await cmdAndroidSkills();
 });
@@ -3223,7 +3768,7 @@ program.command("update").description("Pull latest rules, then repair managed fi
 program.command("self-update").description("Update the CLI itself (curl-install path)").action(async () => {
   await cmdSelfUpdate();
 });
-program.command("uninstall").description("Remove gor-mobile \u2014 from this repo (--project) or the whole machine (--machine)").option("-y, --yes", "skip confirmation").option("--project", "remove only this repo's .claude footprint + .gor-mobile.json").option("--machine", "remove user agent homes + ~/.gor-mobile (templates, rules)").action(async (opts) => {
+program.command("uninstall").description("Remove gor-mobile \u2014 from this repo (--project) or the whole machine (--machine)").option("-y, --yes", "skip confirmation").option("--project", "remove only this repo's .claude footprint + .gor-mobile/marker.json").option("--machine", "remove user agent homes + ~/.gor-mobile (templates, rules)").action(async (opts) => {
   await cmdUninstall(opts);
 });
 var rules = program.command("rules").description("Manage the architecture rules pack");

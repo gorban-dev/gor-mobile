@@ -38,5 +38,5 @@
   `compact`.
 - Plan artifacts are working files with a retention TTL, not documentation: a
   session-start sweep deletes plans/specs/state entries untouched for
-  `artifact_ttl_days` (`.gor-mobile.json`, default 30; 0 disables). No manual
+  `artifact_ttl_days` (`.gor-mobile/marker.json`, default 30; 0 disables). No manual
   cleanup after a finished plan — completed artifacts age out on their own.

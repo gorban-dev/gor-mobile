@@ -3,22 +3,32 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
 import {
+  DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_CONFIG,
   GOR_MOBILE_HOME,
   GOR_MOBILE_RULES_DIR,
   GOR_MOBILE_TEMPLATES_DIR,
   GOR_MOBILE_VERSION,
+  LEGACY_PROJECT_MARKER_NAME,
+  PROJECT_MARKER_NAME,
   SECTION_BEGIN
 } from "../constants.js";
 import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-cli.js";
 import { ANDROID_CONTRACT } from "../android-contract.js";
+import { codexMcpState } from "../helpers/codex-mcp.js";
+import { KEY_SOURCE_LABEL, resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
+import { projectMcpState } from "../helpers/mcp-register.js";
 import { countManagedHooks } from "../helpers/settings-merge.js";
 import { statusLineState } from "../helpers/settings-statusline.js";
 import { codexStatusLineState } from "../helpers/codex-statusline.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
 import { runAstIndexUpdate } from "../helpers/ast-index-freshness.js";
-import { findProjectRoot, readProjectMarker } from "../helpers/project.js";
+import {
+  findProjectRoot,
+  legacyProjectMarkerPath,
+  readProjectMarker
+} from "../helpers/project.js";
 import { artifactInventory } from "../helpers/state-artifacts.js";
 import { readManifest } from "../helpers/rules-pack.js";
 import {
@@ -317,7 +327,15 @@ function checkTarget(target: TargetSpec): void {
 
 function checkProject(root: string): TargetSpec {
   const marker = readProjectMarker(root);
-  log.ok(`.gor-mobile.json → platform=${marker.platform ?? "?"}, v${marker.version ?? "?"} (${root})`);
+  const legacy = existsSync(legacyProjectMarkerPath(root));
+  log.ok(
+    `${legacy ? LEGACY_PROJECT_MARKER_NAME : PROJECT_MARKER_NAME} → platform=${marker.platform ?? "?"}, v${marker.version ?? "?"} (${root})`
+  );
+  if (legacy) {
+    log.warn(
+      `marker still at the repo root — run 'gor-mobile repair' to move it to ${PROJECT_MARKER_NAME}`
+    );
+  }
   if (marker.version && marker.version !== GOR_MOBILE_VERSION) {
     log.warn(`installed v${marker.version} ≠ CLI v${GOR_MOBILE_VERSION} — run 'gor-mobile init' to refresh`);
   }
@@ -336,6 +354,20 @@ function checkProject(root: string): TargetSpec {
     );
   }
   const spec = projectClaudeSpec(root);
+  const mcp = projectMcpState(root, spec.hooksFile, marker.managed_mcp ?? []);
+  if (mcp.malformed) {
+    log.warn(".mcp.json is not valid JSON — fix it, then run 'gor-mobile mcp'");
+  } else if (!mcp.present) {
+    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from .mcp.json — run 'gor-mobile mcp'`);
+  } else if (!mcp.owned) {
+    // Hand-configured: repair leaves it alone, so "run repair" would be advice
+    // that can never come true. Mirrors the Codex branch below.
+    log.info(`${DEV_KNOWLEDGE_MCP_NAME}: custom entry (not managed by gor-mobile)`);
+  } else if (!mcp.approved) {
+    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} not pre-approved — run 'gor-mobile repair'`);
+  } else {
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} configured + pre-approved (approve on first 'claude' run)`);
+  }
   checkTarget(spec);
   return spec;
 }
@@ -375,6 +407,12 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
       "  → jq powers the status line AND the ast-index guard hook (guard fails open without it) — brew install jq"
     );
   }
+  const dk = resolveDevKnowledgeKey();
+  if (dk.key) {
+    log.ok(`Developer Knowledge API key → ${KEY_SOURCE_LABEL[dk.source]}`);
+  } else {
+    log.warn("Developer Knowledge API key not set — run 'gor-mobile mcp'");
+  }
 
   log.step("Machine (~/.gor-mobile)");
   checkHookTemplates();
@@ -388,13 +426,23 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   if (root) {
     emulationTargets.push(checkProject(root));
   } else {
-    log.info("No .gor-mobile.json in the current directory tree.");
+    log.info(`No ${PROJECT_MARKER_NAME} in the current directory tree.`);
     log.info("  → cd into a mobile repo and run 'gor-mobile init' to install the workflow.");
   }
 
   if (agentHomeExists("codex")) {
     log.step("Codex integration (user-level)");
     checkTarget(TARGETS.codex);
+    const cx = codexMcpState();
+    if (!cx.present) {
+      log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from config.toml — run 'gor-mobile mcp'`);
+    } else if (cx.foreign) {
+      log.info(`${DEV_KNOWLEDGE_MCP_NAME}: custom entry (not managed by gor-mobile)`);
+    } else {
+      log.ok(
+        `${DEV_KNOWLEDGE_MCP_NAME} registered (${cx.hasLiteralKey ? "http_headers" : "env_http_headers"})`
+      );
+    }
     emulationTargets.push(TARGETS.codex);
   }
 

@@ -16,7 +16,8 @@ bad() { printf '  FAIL %s\n' "$1"; fail=$((fail+1)); }
 
 # Fixture repo: marker + skills dir with the superpowers skill + a checkpoint.
 repo="$(mktemp -d)"
-printf '{"platform":"android"}\n' > "$repo/.gor-mobile.json"
+mkdir -p "$repo/.gor-mobile"
+printf '{"platform":"android"}\n' > "$repo/.gor-mobile/marker.json"
 mkdir -p "$repo/.claude/skills/gor-mobile-using-superpowers"
 printf 'name: gor-mobile-using-superpowers\n' \
     > "$repo/.claude/skills/gor-mobile-using-superpowers/SKILL.md"
@@ -67,8 +68,9 @@ esac
 # A stale index answers confidently and wrongly: a changed file yields a false
 # negative, a deleted one yields a phantom with a signature and a line number.
 idx_repo="$(mktemp -d)"
-mkdir -p "$idx_repo/.claude/rules" "$idx_repo/.claude/skills/gor-mobile-using-superpowers"
-printf '{"platform":"android"}\n' > "$idx_repo/.gor-mobile.json"
+mkdir -p "$idx_repo/.claude/rules" "$idx_repo/.claude/skills/gor-mobile-using-superpowers" \
+    "$idx_repo/.gor-mobile"
+printf '{"platform":"android"}\n' > "$idx_repo/.gor-mobile/marker.json"
 : > "$idx_repo/.claude/rules/ast-index.md"
 printf 'stub skill\n' > "$idx_repo/.claude/skills/gor-mobile-using-superpowers/SKILL.md"
 
@@ -149,7 +151,9 @@ else
     bad "Found-only-on-stderr, no Updated: line: invalid JSON"
 fi
 
-# A repo without the ast-index marker must not invoke the CLI at all.
+# A repo without the ast-index marker must not invoke the CLI at all. Seeded
+# with the pre-0.3.5 root marker, so this doubles as back-compat coverage of
+# the walk-up.
 noidx="$(mktemp -d)"
 mkdir -p "$noidx/.claude/skills/gor-mobile-using-superpowers"
 printf '{"platform":"android"}\n' > "$noidx/.gor-mobile.json"

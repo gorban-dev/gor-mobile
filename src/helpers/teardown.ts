@@ -1,7 +1,9 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { CLAUDE_COMMANDS_DIR } from "../constants.js";
+import { CLAUDE_COMMANDS_DIR, DEV_KNOWLEDGE_API_KEY_ENV, DEV_KNOWLEDGE_MCP_NAME } from "../constants.js";
 import { removeManagedSection } from "./claude-md-section.js";
+import { deleteClaudeEnv } from "./claude-env.js";
+import { removeCodexDevKnowledgeMcp } from "./codex-mcp.js";
 import { cleanupLegacyCommands } from "./install-assets.js";
 import { unregisterManaged } from "./mcp-register.js";
 import {
@@ -81,6 +83,16 @@ export function teardownUserTarget(
   if (target.supportsMcpPrune) {
     unregisterManaged();
     log.ok("Managed MCP entries removed");
+  }
+
+  if (target.id === "codex") {
+    removeCodexDevKnowledgeMcp();
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} removed from config.toml`);
+  }
+
+  if (target.id === "claude" && target.scope === "user") {
+    deleteClaudeEnv(DEV_KNOWLEDGE_API_KEY_ENV);
+    log.ok("Developer Knowledge API key removed from settings.json env");
   }
 
   if (target.instructionsFile) {
