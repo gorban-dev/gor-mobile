@@ -56,7 +56,10 @@ export async function cmdMcp(opts: McpOptions = {}): Promise<void> {
         const excl = await ensureLocalExclude(root, [PROJECT_MCP_FILE]);
         if (excl && excl.added.length > 0) log.ok(`Local ignore updated (${excl.file})`);
       }
-      const st = projectMcpState(root, spec.hooksFile, marker.managed_mcp ?? []);
+      const ownedNow = res.written
+        ? [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
+        : (marker.managed_mcp ?? []);
+      const st = projectMcpState(root, spec.hooksFile, ownedNow);
       log.ok(`${res.path} — server ${st.present ? "present" : "missing"}, approval ${st.approved ? "set" : "missing"}`);
       if (st.present && !st.owned) {
         log.info(`${DEV_KNOWLEDGE_MCP_NAME} is a custom entry (not managed by gor-mobile) — left as is`);
