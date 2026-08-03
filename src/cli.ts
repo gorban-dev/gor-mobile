@@ -5,6 +5,7 @@ import { cmdInit } from "./commands/init.js";
 import { cmdMigrate } from "./commands/migrate.js";
 import { cmdDoctor } from "./commands/doctor.js";
 import { cmdRepair } from "./commands/repair.js";
+import { cmdMcp } from "./commands/mcp.js";
 import { cmdUninstall } from "./commands/uninstall.js";
 import {
   rulesDiff,
@@ -95,6 +96,14 @@ program
   .option("--skip-android-update", "do not auto-update the Android CLI")
   .action(async (opts) => {
     await cmdRepair(opts);
+  });
+
+program
+  .command("mcp")
+  .description("Connect Google's Developer Knowledge docs MCP server (and rotate its API key)")
+  .option("--no-tui", "force plain-text prompts")
+  .action(async (opts) => {
+    await cmdMcp(opts);
   });
 
 program

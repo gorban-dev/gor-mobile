@@ -1997,6 +1997,14 @@ function registerProjectMcp(root, owned = []) {
   writeJson(path, cfg);
   return { written: true, path };
 }
+function projectMcpState(root, hooksFile) {
+  const cfg = readJsonSafe(projectMcpPath(root), {});
+  const settings = readJsonSafe(hooksFile, {});
+  return {
+    present: Boolean(cfg.mcpServers?.[DEV_KNOWLEDGE_MCP_NAME]),
+    approved: (settings.enabledMcpjsonServers ?? []).includes(DEV_KNOWLEDGE_MCP_NAME)
+  };
+}
 function approveProjectMcpServers(hooksFile, names) {
   const settings = readJsonSafe(hooksFile, {});
   const current = Array.isArray(settings.enabledMcpjsonServers) ? settings.enabledMcpjsonServers : [];
@@ -3022,6 +3030,66 @@ async function cmdRepair(opts = {}) {
   log.ok("Done. Run 'gor-mobile doctor' to verify.");
 }
 
+// src/commands/mcp.ts
+async function cmdMcp(opts = {}) {
+  if (opts.noTui || opts.tui === false) forceNoTui();
+  log.step(`Documentation sources \u2014 ${DEV_KNOWLEDGE_MCP_NAME}`);
+  const root = findProjectRoot();
+  if (root) {
+    const spec = projectClaudeSpec(root);
+    const marker = readProjectMarker(root);
+    const res = registerProjectMcp(root, marker.managed_mcp ?? []);
+    if (res.written) {
+      approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
+      writeProjectMarker(root, {
+        ...marker,
+        version: GOR_MOBILE_VERSION,
+        managed_mcp: [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])]
+      });
+    }
+    const st = projectMcpState(root, spec.hooksFile);
+    log.ok(`${res.path} \u2014 server ${st.present ? "present" : "missing"}, approval ${st.approved ? "set" : "missing"}`);
+    if (st.approved) {
+      log.muted("Approval applies once you have trusted this repo in Claude Code.");
+    }
+  } else {
+    log.info("Not inside a gor-mobile repo \u2014 skipped the project half (run 'gor-mobile init').");
+  }
+  const resolved = resolveDevKnowledgeKey();
+  let key = resolved.key;
+  if (key) {
+    log.ok(`API key found (${KEY_SOURCE_LABEL[resolved.source]})`);
+    if (isTuiOn() && await confirmStep("Replace the stored API key?", false)) {
+      const next = await captureDevKnowledgeKey();
+      if (next) {
+        key = next;
+        log.ok("API key replaced");
+      }
+    }
+    persistDevKnowledgeKey(key);
+  } else {
+    printDevKnowledgeGuide();
+    const entered = await captureDevKnowledgeKey();
+    if (entered) {
+      key = entered;
+      persistDevKnowledgeKey(entered);
+      log.ok("API key stored in ~/.claude/settings.json env");
+    } else {
+      log.warn("No API key \u2014 the server stays configured but will not connect");
+    }
+  }
+  if (agentHomeExists("codex")) {
+    const st = codexMcpState();
+    if (st.foreign) {
+      log.info(`${CODEX_CONFIG_TOML} has an unmanaged entry \u2014 left as is`);
+    } else {
+      installCodexDevKnowledgeMcp(key, { force: st.managed });
+      log.ok(`${CODEX_CONFIG_TOML} \u2014 ${key ? "http_headers" : "env_http_headers"}`);
+    }
+  }
+  if (!key) await offerDevKnowledgeLinks();
+}
+
 // src/commands/uninstall.ts
 import { existsSync as existsSync22, readdirSync as readdirSync9, rmdirSync, rmSync as rmSync7 } from "fs";
 import { join as join17 } from "path";
@@ -3476,6 +3544,9 @@ program.command("doctor").description("Check machine setup, the current project,
 });
 program.command("repair").description("Refresh managed files: machine hook scripts, this project, and Codex").option("--skip-android-update", "do not auto-update the Android CLI").action(async (opts) => {
   await cmdRepair(opts);
+});
+program.command("mcp").description("Connect Google's Developer Knowledge docs MCP server (and rotate its API key)").option("--no-tui", "force plain-text prompts").action(async (opts) => {
+  await cmdMcp(opts);
 });
 program.command("android-skills").description("Browse + install/remove optional Google Android CLI skills").action(async () => {
   await cmdAndroidSkills();
