@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+Requires `gor-mobile repair` — templates changed.
+
+- **Second documentation source: Google's Developer Knowledge MCP server.**
+  `setup` and `init` register `google-developer-knowledge`
+  (`https://developerknowledge.googleapis.com/mcp`) — Firebase, Google Cloud,
+  Maps and Play Services docs, the corpora `android docs` does not cover.
+  `setup` owns the machine half (a masked key prompt plus the
+  `~/.codex/config.toml` table); `init` owns the project half
+  (`<repo>/.mcp.json` with a `${GOOGLE_DEVELOPER_KNOWLEDGE_API_KEY}` header and
+  an `enabledMcpjsonServers` approval in `settings.local.json`, both excluded
+  from git). The new `gor-mobile mcp` command re-runs the wizard step, prints
+  Google's three-step guide and opens the Cloud Console pages on confirmation,
+  and rotates the key.
+
+- **The API key never touches a shell profile.** It is stored in each harness's
+  own config — `~/.claude/settings.json` `env` for Claude, `http_headers` in
+  `~/.codex/config.toml` for Codex — so an agent launched from the Dock sees it
+  too. Project-scoped `settings.local.json` `env` does not feed `${VAR}`
+  expansion in `.mcp.json`; user scope does. The key is never echoed, never
+  logged, and cannot be passed as a CLI flag. `uninstall` clears both copies.
+
+- **Rung 1 of the ground-truth ladder splits by domain.** `android docs` stays
+  the entry point for Android SDK / Jetpack; the MCP server covers the rest of
+  Google; non-Google libraries still go to their own release notes for the
+  pinned version. `gor-mobile-using-android-cli` changed — run
+  `gor-mobile repair`.
+
 ## 0.3.4 — 2026-07-27
 
 Requires `gor-mobile repair` — templates changed.

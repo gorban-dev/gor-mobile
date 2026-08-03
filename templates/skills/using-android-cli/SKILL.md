@@ -30,10 +30,16 @@ obtained via this ladder — use the first rung that answers the question, and
 record what you used:
 
 1. **Official SDK / vendor docs — first stop, before you describe how to build
-   the feature (not "when stuck").** `android docs search` / `android docs
-   fetch`; developer.android.com; the library's own release notes / API
-   reference for the **pinned** version. When Google ships a domain skill for
-   the API area, browse it (`gor-mobile android-skills`).
+   the feature (not "when stuck").**
+   - **Android SDK / Jetpack** → `android docs search` / `android docs fetch`;
+     developer.android.com. When Google ships a domain skill for the API area,
+     browse it (`gor-mobile android-skills`).
+   - **Firebase, Google Cloud, Maps, Play Services** → the
+     `google-developer-knowledge` MCP server (`search_documents` →
+     `get_documents`), when it is connected. Search first and fetch narrowly —
+     whole doc pages are large and blow out the context window.
+   - **Any non-Google library** → its own release notes / API reference for the
+     **pinned** version.
 2. **Resolved-artifact signatures** — when docs lag the pinned dependency
    version, take exact signatures from the resolved AAR/JAR in the Gradle
    cache: `~/.gradle/caches` → `unzip classes.jar` → `javap -p <Class>`.
@@ -59,9 +65,11 @@ citations — they reference this section rather than restating the ladder.
 | "The plan says paste full code, so I'll write the signature" | Full code is fine — but only doc/artifact-verified signatures, never remembered ones. |
 
 ## Phase → capability
-- **Research (docs-first, mandatory):** `android docs search` / `docs fetch` —
-  the entry point to the ground-truth ladder above; grounds every framework /
-  library API the spec and plan commit to before any design is described.
+- **Research (docs-first, mandatory):** `android docs search` / `docs fetch`
+  for Android, the `google-developer-knowledge` MCP server for Firebase /
+  Cloud / Maps / Play — the entry point to the ground-truth ladder above; it
+  grounds every framework / library API the spec and plan commit to before any
+  design is described.
 - **Plan:** `android describe` for module/APK introspection; `android info` for env.
   - **Symbol search:** use **ast-index** by default (standalone, fast). Only if
     Android Studio is open (`android studio check` reports a live instance) and

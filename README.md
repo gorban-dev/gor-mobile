@@ -105,6 +105,7 @@ Installs the workflow into the current repository, locally (nothing committed):
 - Plan artifacts (`.gor-mobile/plans|specs|state`) have a retention TTL: the SessionStart hook deletes anything untouched for `artifact_ttl_days` (`.gor-mobile.json`, default 30; `0` disables). Freshness is linked per plan — an active plan keeps its spec and workspace alive. `doctor` shows the inventory and the TTL in effect.
 - **Greenfield**: in an empty folder with no build markers, `init` asks the platform (Android / iOS) instead of guessing, then points you at `claude` to scaffold the project.
 - Idempotent: re-running refreshes copies and bumps the marker version.
+- **Documentation sources**: `setup`/`init` register Google's `google-developer-knowledge` MCP server (Firebase, Cloud, Maps, Play — `android docs` still covers Android). The API key lives in `~/.claude/settings.json` `env` and `~/.codex/config.toml`, never in a shell profile and never in `.mcp.json`. `gor-mobile mcp` re-runs the setup and rotates the key.
 
 Flags: `--dry-run`, `--yes`/`-y`, `--no-tui`, `--platform android|ios`, `--plugins <list>`.
 
@@ -117,6 +118,7 @@ gor-mobile setup             # machine setup (once): android CLI, rules, hooks, 
 gor-mobile init              # install the workflow into the current repo (--platform, --plugins)
 gor-mobile doctor            # check machine + this project + Codex (--verbose: hook payload)
 gor-mobile repair            # refresh machine hook scripts, this project, and Codex
+gor-mobile mcp               # connect Google's Developer Knowledge docs MCP + rotate its key
 gor-mobile migrate           # remove a legacy v0.2.x global install (keeps the rules pack)
 gor-mobile android-skills    # browse + install/remove optional Google skills (multi-select)
 gor-mobile update            # pull rules + `android update` + repair
