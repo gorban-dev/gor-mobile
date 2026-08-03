@@ -2,7 +2,6 @@ import { existsSync, readdirSync, rmdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { confirm, isCancel, select } from "@clack/prompts";
 import {
-  DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_CONFIG,
   GOR_MOBILE_CONFIG_DIR,
   GOR_MOBILE_HOME,
@@ -97,7 +96,7 @@ async function uninstallProject(opts: UninstallOptions): Promise<void> {
   }
   log.ok(`Hooks + plugin overrides removed (${spec.hooksFile})`);
 
-  const ownedMcp = marker.managed_mcp ?? [DEV_KNOWLEDGE_MCP_NAME];
+  const ownedMcp = marker.managed_mcp ?? [];
   unregisterProjectMcp(root, ownedMcp);
   removeApprovedMcpServers(spec.hooksFile, ownedMcp);
   log.ok(`MCP servers removed (${ownedMcp.join(", ")})`);

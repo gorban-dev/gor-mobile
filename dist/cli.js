@@ -3225,7 +3225,7 @@ async function uninstallProject(opts) {
     removeClearContextOnPlanAccept(spec.hooksFile);
   }
   log.ok(`Hooks + plugin overrides removed (${spec.hooksFile})`);
-  const ownedMcp = marker.managed_mcp ?? [DEV_KNOWLEDGE_MCP_NAME];
+  const ownedMcp = marker.managed_mcp ?? [];
   unregisterProjectMcp(root, ownedMcp);
   removeApprovedMcpServers(spec.hooksFile, ownedMcp);
   log.ok(`MCP servers removed (${ownedMcp.join(", ")})`);
