@@ -6,7 +6,9 @@ import {
   DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_TEMPLATES_DIR,
   GOR_MOBILE_VERSION,
-  PROJECT_MARKER_NAME
+  LEGACY_PROJECT_MARKER_NAME,
+  PROJECT_MARKER_NAME,
+  PROJECT_STATE_DIR
 } from "../constants.js";
 import { provisionProjectAndroidSkill } from "../helpers/android-cli.js";
 import { androidCliPath } from "../helpers/deps.js";
@@ -27,7 +29,11 @@ import {
   ensureLocalExclude,
   findGitRoot,
   gitInit,
+  hasProjectMarker,
+  legacyProjectMarkerPath,
+  migrateProjectMarker,
   readProjectMarker,
+  removeLocalExclude,
   writeProjectMarker,
   type ProjectMarker,
   type ProjectPlatform
@@ -59,8 +65,9 @@ export interface InitOptions {
   now?: string;
 }
 
-// Local-ignore entries so nothing gor-mobile writes shows up in git.
-const EXCLUDE_ENTRIES = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME, PROJECT_MCP_FILE];
+// Local-ignore entries so nothing gor-mobile writes shows up in git. The
+// marker lives under .gor-mobile/, so that one directory line covers it.
+const EXCLUDE_ENTRIES = [".claude/", `${PROJECT_STATE_DIR}/`, PROJECT_MCP_FILE];
 
 function machineReady(): { ok: boolean; reason?: string } {
   if (!existsSync(join(GOR_MOBILE_TEMPLATES_DIR, "session-start-hook.sh"))) {
@@ -153,7 +160,8 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   const root = process.cwd();
   const spec = projectClaudeSpec(root);
   const marker = readProjectMarker(root);
-  const reinit = existsSync(join(root, PROJECT_MARKER_NAME));
+  const reinit = hasProjectMarker(root);
+  const legacyMarker = existsSync(legacyProjectMarkerPath(root));
 
   console.log("");
   console.log(pc.bold(pc.magenta(`gor-mobile init`)) + pc.dim(`  ·  ${root}`));
@@ -216,6 +224,9 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       `approve it via enabledMcpjsonServers in ${spec.hooksFile}`,
       "android init → copy stock skill into .claude/skills, drop Claude-home copy",
       `write ${PROJECT_MARKER_NAME} (platform=${platform})`,
+      ...(legacyMarker
+        ? [`move ${LEGACY_PROJECT_MARKER_NAME} → ${PROJECT_MARKER_NAME}, drop its exclude line`]
+        : []),
       `git exclude += ${EXCLUDE_ENTRIES.join(", ")}`
     ]) {
       console.log(`    ${pc.dim("[dry-run]")} ${line}`);
@@ -302,6 +313,13 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   };
   writeProjectMarker(root, nextMarker);
   log.ok(`Wrote ${PROJECT_MARKER_NAME}`);
+
+  // Pre-0.3.5 installs kept the marker at the repo root; the fresh one is
+  // already written, so this only clears the stray file and its ignore line.
+  if (migrateProjectMarker(root)) {
+    log.ok(`Moved ${LEGACY_PROJECT_MARKER_NAME} → ${PROJECT_MARKER_NAME}`);
+    if (gitMode === "git") await removeLocalExclude(root, [LEGACY_PROJECT_MARKER_NAME]);
+  }
 
   await writeExcludes(root, gitMode);
 

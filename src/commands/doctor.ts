@@ -9,6 +9,8 @@ import {
   GOR_MOBILE_RULES_DIR,
   GOR_MOBILE_TEMPLATES_DIR,
   GOR_MOBILE_VERSION,
+  LEGACY_PROJECT_MARKER_NAME,
+  PROJECT_MARKER_NAME,
   SECTION_BEGIN
 } from "../constants.js";
 import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-cli.js";
@@ -22,7 +24,11 @@ import { codexStatusLineState } from "../helpers/codex-statusline.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
 import { runAstIndexUpdate } from "../helpers/ast-index-freshness.js";
-import { findProjectRoot, readProjectMarker } from "../helpers/project.js";
+import {
+  findProjectRoot,
+  legacyProjectMarkerPath,
+  readProjectMarker
+} from "../helpers/project.js";
 import { artifactInventory } from "../helpers/state-artifacts.js";
 import { readManifest } from "../helpers/rules-pack.js";
 import {
@@ -321,7 +327,15 @@ function checkTarget(target: TargetSpec): void {
 
 function checkProject(root: string): TargetSpec {
   const marker = readProjectMarker(root);
-  log.ok(`.gor-mobile.json → platform=${marker.platform ?? "?"}, v${marker.version ?? "?"} (${root})`);
+  const legacy = existsSync(legacyProjectMarkerPath(root));
+  log.ok(
+    `${legacy ? LEGACY_PROJECT_MARKER_NAME : PROJECT_MARKER_NAME} → platform=${marker.platform ?? "?"}, v${marker.version ?? "?"} (${root})`
+  );
+  if (legacy) {
+    log.warn(
+      `marker still at the repo root — run 'gor-mobile repair' to move it to ${PROJECT_MARKER_NAME}`
+    );
+  }
   if (marker.version && marker.version !== GOR_MOBILE_VERSION) {
     log.warn(`installed v${marker.version} ≠ CLI v${GOR_MOBILE_VERSION} — run 'gor-mobile init' to refresh`);
   }
@@ -412,7 +426,7 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   if (root) {
     emulationTargets.push(checkProject(root));
   } else {
-    log.info("No .gor-mobile.json in the current directory tree.");
+    log.info(`No ${PROJECT_MARKER_NAME} in the current directory tree.`);
     log.info("  → cd into a mobile repo and run 'gor-mobile init' to install the workflow.");
   }
 

@@ -50,12 +50,13 @@ Layout per scope:
 | Instructions | injected by SessionStart hook (no file) | `AGENTS.md` managed section (same markers) |
 | Plugins | `settings.local.json` `enabledPlugins` (superpowers off) | — |
 | Status line | — (user-level, `setup` only) | `config.toml` `[tui].status_line` (built-in items) |
-| Marker | `<repo>/.gor-mobile.json` (platform, version) | — |
+| Marker | `<repo>/.gor-mobile/marker.json` (platform, version) | — |
 
 The shared hook scripts (`~/.gor-mobile/templates/`) are target-neutral;
 `session-start-hook.sh` reads its skills folder from `GORM_SKILLS_DIR` when the
 Codex hook command sets it (always-on), and otherwise (bare command = Claude
-project mode) walks up from cwd to the `.gor-mobile.json` marker and injects
+project mode) walks up from cwd to the `.gor-mobile/marker.json` marker (the
+pre-0.3.5 root `.gor-mobile.json` is still recognized) and injects
 from `<repo>/.claude/skills`. `android init` is run bare; `init` moves the stock
 skill into `<repo>/.claude/skills` (Claude) and `setup` leaves Codex's home
 copy.

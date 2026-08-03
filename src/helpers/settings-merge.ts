@@ -79,7 +79,7 @@ function removeHook(hooksFile: string, hookType: HookType): void {
 }
 
 // session-start-hook.sh branches on GORM_SKILLS_DIR: unset → Claude per-project
-// mode (the hook finds the repo root by walking up to .gor-mobile.json and reads
+// mode (the hook finds the repo root by walking up to the marker and reads
 // <root>/.claude/skills); set → Codex user-level, always inject from that folder.
 // So the bare command is exactly the project-mode signal.
 function sessionStartCommand(target: TargetSpec): string {

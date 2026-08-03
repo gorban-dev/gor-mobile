@@ -94,15 +94,16 @@ Installs the workflow into the current repository, locally (nothing committed):
   .claude/settings.local.json      # SessionStart + UserPromptSubmit + PreToolUse hooks
                                    # + enabledPlugins: superpowers disabled for this repo
                                    # + showClearContextOnPlanAccept: plan-approval clear-context option
-  .gor-mobile.json                 # marker: platform, version, install date
+  .gor-mobile/marker.json          # marker: platform, version, install date
+  .gor-mobile/plans|specs|state/   # plan artifacts (created by the skills, TTL-swept)
 ```
 
 - Hooks reference `~/.gor-mobile/templates/*.sh` by absolute path; `settings.local.json` is never committed by Claude Code, so no foreign-path problem. The **PreToolUse ast-index guard** denies bare-identifier `grep`/`rg` in ast-indexed repos (`.claude/rules/ast-index.md` present) and fails open otherwise.
-- No `CLAUDE.md` managed section: the former workflow pointers are injected by the SessionStart hook, keyed on the `.gor-mobile.json` marker (walk up from cwd). A repo with no marker injects nothing.
+- No `CLAUDE.md` managed section: the former workflow pointers are injected by the SessionStart hook, keyed on the `.gor-mobile/marker.json` marker (walk up from cwd). A repo with no marker injects nothing.
 - `superpowers@claude-plugins-official` is disabled in `settings.local.json` so the bundled upstream skills don't duplicate the `gor-mobile-*` copies. `--plugins figma,swagger-android,…` additionally enables named plugins for the repo.
-- `showClearContextOnPlanAccept` is enabled in `settings.local.json`: the writing-plans handoff exits through the plan-approval dialog, whose first option ("Yes, clear context") clears the planning context exactly once; the SessionStart hook then rehydrates execution from the `.gor-mobile/state/<plan>/progress.md` checkpoint (legacy flat `*.progress.md` files are still picked up). Tracked in `.gor-mobile.json` `managed_settings`, removed on `uninstall --project` unless it was already on. Without plan-mode tools the skill falls back to a two-option dialog + manual `/clear` (Codex: `/compact`).
-- `.claude/`, `.gor-mobile/`, and `.gor-mobile.json` are added to `.git/info/exclude` (local ignore — no repo diff). If the folder is not a git repo, `init` offers `git init`; declining falls back to a committed `.gitignore` with a warning.
-- Plan artifacts (`.gor-mobile/plans|specs|state`) have a retention TTL: the SessionStart hook deletes anything untouched for `artifact_ttl_days` (`.gor-mobile.json`, default 30; `0` disables). Freshness is linked per plan — an active plan keeps its spec and workspace alive. `doctor` shows the inventory and the TTL in effect.
+- `showClearContextOnPlanAccept` is enabled in `settings.local.json`: the writing-plans handoff exits through the plan-approval dialog, whose first option ("Yes, clear context") clears the planning context exactly once; the SessionStart hook then rehydrates execution from the `.gor-mobile/state/<plan>/progress.md` checkpoint (legacy flat `*.progress.md` files are still picked up). Tracked in `.gor-mobile/marker.json` `managed_settings`, removed on `uninstall --project` unless it was already on. Without plan-mode tools the skill falls back to a two-option dialog + manual `/clear` (Codex: `/compact`).
+- `.claude/`, `.gor-mobile/`, and `.mcp.json` are added to `.git/info/exclude` (local ignore — no repo diff). If the folder is not a git repo, `init` offers `git init`; declining falls back to a committed `.gitignore` with a warning.
+- Plan artifacts (`.gor-mobile/plans|specs|state`) have a retention TTL: the SessionStart hook deletes anything untouched for `artifact_ttl_days` (`.gor-mobile/marker.json`, default 30; `0` disables). Freshness is linked per plan — an active plan keeps its spec and workspace alive. `doctor` shows the inventory and the TTL in effect.
 - **Greenfield**: in an empty folder with no build markers, `init` asks the platform (Android / iOS) instead of guessing, then points you at `claude` to scaffold the project.
 - Idempotent: re-running refreshes copies and bumps the marker version.
 - **Documentation sources**: `setup`/`init` register Google's `google-developer-knowledge` MCP server (Firebase, Cloud, Maps, Play — `android docs` still covers Android). The API key lives in `~/.claude/settings.json` `env` and `~/.codex/config.toml`, never in a shell profile and never in `.mcp.json`. `gor-mobile mcp` re-runs the setup and rotates the key.
@@ -128,7 +129,7 @@ gor-mobile uninstall         # --project (this repo) or --machine (user homes + 
 
 `doctor` and `repair` are two-mode: they always cover the machine
 (`~/.gor-mobile`) and Codex (if `~/.codex/` exists), plus the project in the
-current directory when it carries a `.gor-mobile.json` marker. `init`/`doctor`/
+current directory when it carries a `.gor-mobile/marker.json` marker. `init`/`doctor`/
 `repair`/`update` refuse to run on top of a legacy v0.2.x global install until
 `gor-mobile migrate` clears it.
 
@@ -192,7 +193,7 @@ The shared hook scripts live once in `~/.gor-mobile/templates/` and are
 target-neutral; the SessionStart hook reads its skills folder from
 `GORM_SKILLS_DIR` when set (the Codex hook command sets it → always-on,
 user-level). A bare command (Claude) is the per-project signal: the hook walks
-up from the cwd to a `.gor-mobile.json` marker and injects from
+up from the cwd to a `.gor-mobile/marker.json` marker and injects from
 `<repo>/.claude/skills`, staying silent when there is no marker. The Google
 Android CLI is installed once by `setup`; for Claude, `init` copies the stock
 `android-cli` skill into the repo's `.claude/skills/` and drops the home copy,
@@ -286,7 +287,7 @@ Agents:
 ## Uninstall
 
 ```sh
-gor-mobile uninstall --project   # this repo: .claude footprint + .gor-mobile.json + exclude lines
+gor-mobile uninstall --project   # this repo: .claude footprint + .gor-mobile/marker.json + exclude lines
 gor-mobile uninstall --machine   # user homes (~/.claude, ~/.codex) + ~/.gor-mobile + config
 gor-mobile uninstall             # no flag: asks which (defaults to --machine under --yes)
 # --machine prompts at the end whether to also remove the Android CLI:

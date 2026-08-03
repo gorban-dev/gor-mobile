@@ -37,7 +37,7 @@ function projectMcpPath(root: string): string {
 
 // No _managed_by field goes into this file: Claude Code parses it, and an
 // unknown key risks every server the user has. Ownership lives in
-// .gor-mobile.json -> managed_mcp instead.
+// .gor-mobile/marker.json -> managed_mcp instead.
 function devKnowledgeEntry(): McpServer {
   return {
     type: "http",

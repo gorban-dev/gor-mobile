@@ -28,7 +28,8 @@ export PATH="$SAFE_PATH"
 
 REPO="$TMP/app"
 mkdir -p "$REPO/.claude"
-# A per-project marker so `repair` finds this repo (walks up from cwd).
+# A per-project marker so `repair` finds this repo (walks up from cwd). Seeded
+# in the pre-0.3.5 root location — repair must find it there and move it.
 printf '{ "platform": "android", "version": "0.0.0" }\n' > "$REPO/.gor-mobile.json"
 
 # Three untagged legacy entries per event (varied absolute paths, as real
@@ -65,4 +66,10 @@ node "$ROOT/bin/gor-mobile.mjs" repair >/dev/null 2>&1 || { echo "repair #2 exit
 
 echo "→ asserting final settings.local.json"
 node "$ROOT/test/assert-hooks.mjs" "$REPO/.claude/settings.local.json"
-echo "PASS: hook upsert is idempotent and collapses legacy entries"
+
+echo "→ asserting marker migration"
+[ -f "$REPO/.gor-mobile/marker.json" ] || { echo "marker not moved to .gor-mobile/marker.json"; exit 1; }
+if [ -f "$REPO/.gor-mobile.json" ]; then echo "legacy root marker still present"; exit 1; fi
+grep -q '"platform": "android"' "$REPO/.gor-mobile/marker.json" || { echo "migrated marker lost its content"; exit 1; }
+
+echo "PASS: hook upsert is idempotent and collapses legacy entries; marker migrated"

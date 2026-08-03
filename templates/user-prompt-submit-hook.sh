@@ -4,8 +4,9 @@
 #
 # Gate mirrors the SessionStart hook:
 #   - Codex (user-level): GORM_SKILLS_DIR set → always inject.
-#   - Claude (per-project): walk up from cwd to a .gor-mobile.json marker; no
-#     marker → stay silent (repo did not run `gor-mobile init`).
+#   - Claude (per-project): walk up from cwd to a .gor-mobile/marker.json marker
+#     (pre-0.3.5 installs kept it at .gor-mobile.json); no marker → stay silent
+#     (repo did not run `gor-mobile init`).
 #
 # Kept intentionally directive (not just "check skills") because the mild
 # variant was empirically ignored: the model would match a generic skill or
@@ -21,7 +22,9 @@ if [[ -z "${GORM_SKILLS_DIR:-}" ]]; then
     root=""
     dir="$cwd"
     while [[ -n "$dir" && "$dir" != "/" ]]; do
-        if [[ -f "$dir/.gor-mobile.json" ]]; then root="$dir"; break; fi
+        if [[ -f "$dir/.gor-mobile/marker.json" || -f "$dir/.gor-mobile.json" ]]; then
+            root="$dir"; break
+        fi
         [[ "$dir" == "$HOME" ]] && break
         nd="$(dirname "$dir")"
         [[ "$nd" == "$dir" ]] && break

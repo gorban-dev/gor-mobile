@@ -131,7 +131,7 @@ program
   .command("uninstall")
   .description("Remove gor-mobile — from this repo (--project) or the whole machine (--machine)")
   .option("-y, --yes", "skip confirmation")
-  .option("--project", "remove only this repo's .claude footprint + .gor-mobile.json")
+  .option("--project", "remove only this repo's .claude footprint + .gor-mobile/marker.json")
   .option("--machine", "remove user agent homes + ~/.gor-mobile (templates, rules)")
   .action(async (opts) => {
     await cmdUninstall(opts);

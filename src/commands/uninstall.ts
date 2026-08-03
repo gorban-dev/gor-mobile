@@ -5,7 +5,9 @@ import {
   GOR_MOBILE_CONFIG,
   GOR_MOBILE_CONFIG_DIR,
   GOR_MOBILE_HOME,
-  PROJECT_MARKER_NAME
+  LEGACY_PROJECT_MARKER_NAME,
+  PROJECT_MARKER_NAME,
+  PROJECT_STATE_DIR
 } from "../constants.js";
 import { uninstallAndroidCli } from "../helpers/android-cli.js";
 import { androidCliPath } from "../helpers/deps.js";
@@ -16,7 +18,14 @@ import {
   removeApprovedMcpServers,
   unregisterProjectMcp
 } from "../helpers/mcp-register.js";
-import { findProjectRoot, readProjectMarker, removeLocalExclude } from "../helpers/project.js";
+import {
+  findProjectRoot,
+  hasProjectMarker,
+  legacyProjectMarkerPath,
+  projectMarkerPath,
+  readProjectMarker,
+  removeLocalExclude
+} from "../helpers/project.js";
 import {
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
   removeAstIndexGuardHook,
@@ -41,7 +50,14 @@ interface UninstallOptions {
 
 type UninstallMode = "project" | "machine";
 
-const EXCLUDE_ENTRIES = [".claude/", ".gor-mobile/", PROJECT_MARKER_NAME, PROJECT_MCP_FILE];
+// Includes the pre-0.3.5 root-marker line so repos installed before the move
+// come out clean too.
+const EXCLUDE_ENTRIES = [
+  ".claude/",
+  `${PROJECT_STATE_DIR}/`,
+  LEGACY_PROJECT_MARKER_NAME,
+  PROJECT_MCP_FILE
+];
 
 async function resolveMode(opts: UninstallOptions): Promise<UninstallMode | null> {
   if (opts.machine) return "machine";
@@ -50,7 +66,7 @@ async function resolveMode(opts: UninstallOptions): Promise<UninstallMode | null
   const pick = await select<UninstallMode>({
     message: "What do you want to remove?",
     options: [
-      { value: "project", label: "This repo", hint: ".claude footprint + .gor-mobile.json" },
+      { value: "project", label: "This repo", hint: `.claude footprint + ${PROJECT_MARKER_NAME}` },
       { value: "machine", label: "The whole machine", hint: "user homes + ~/.gor-mobile + rules" }
     ]
   });
@@ -69,7 +85,7 @@ function rmdirIfEmpty(dir: string): void {
 
 async function uninstallProject(opts: UninstallOptions): Promise<void> {
   const root = findProjectRoot() ?? process.cwd();
-  if (!existsSync(join(root, PROJECT_MARKER_NAME))) {
+  if (!hasProjectMarker(root)) {
     log.info(`No gor-mobile project install here (${PROJECT_MARKER_NAME} not found in ${root}).`);
     return;
   }
@@ -123,7 +139,11 @@ async function uninstallProject(opts: UninstallOptions): Promise<void> {
   }
   log.ok(`Agents removed (${spec.agentsDir})`);
 
-  rmSync(join(root, PROJECT_MARKER_NAME), { force: true });
+  // Plan artifacts under .gor-mobile/ are the user's working files — only the
+  // marker goes, and the directory itself only if nothing else is left.
+  rmSync(projectMarkerPath(root), { force: true });
+  rmSync(legacyProjectMarkerPath(root), { force: true });
+  rmdirIfEmpty(join(root, PROJECT_STATE_DIR));
   log.ok(`Removed ${PROJECT_MARKER_NAME}`);
 
   const excl = await removeLocalExclude(root, EXCLUDE_ENTRIES);
@@ -178,7 +198,7 @@ async function uninstallMachine(opts: UninstallOptions): Promise<void> {
     }
   }
 
-  log.info("Per-repo footprints (.claude, .gor-mobile.json) stay put — run 'gor-mobile uninstall --project' inside each.");
+  log.info(`Per-repo footprints (.claude, ${PROJECT_STATE_DIR}) stay put — run 'gor-mobile uninstall --project' inside each.`);
 }
 
 export async function cmdUninstall(opts: UninstallOptions = {}): Promise<void> {

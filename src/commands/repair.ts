@@ -3,6 +3,8 @@ import {
   CLAUDE_COMMANDS_DIR,
   DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_VERSION,
+  LEGACY_PROJECT_MARKER_NAME,
+  PROJECT_MARKER_NAME,
   gorMobileRoot
 } from "../constants.js";
 import {
@@ -30,7 +32,9 @@ import {
 import {
   ensureLocalExclude,
   findProjectRoot,
+  migrateProjectMarker,
   readProjectMarker,
+  removeLocalExclude,
   writeProjectMarker
 } from "../helpers/project.js";
 import { migrateStateLayout } from "../helpers/state-artifacts.js";
@@ -137,6 +141,13 @@ async function repairProject(root: string): Promise<void> {
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   });
   log.ok(`Marker refreshed (v${GOR_MOBILE_VERSION})`);
+
+  // Pre-0.3.5 layout: marker at the repo root. The refreshed one is already
+  // under .gor-mobile/, so this drops the stray file and its ignore line.
+  if (migrateProjectMarker(root)) {
+    log.ok(`Moved ${LEGACY_PROJECT_MARKER_NAME} → ${PROJECT_MARKER_NAME}`);
+    await removeLocalExclude(root, [LEGACY_PROJECT_MARKER_NAME]);
+  }
 }
 
 async function repairCodex(target: TargetSpec): Promise<void> {

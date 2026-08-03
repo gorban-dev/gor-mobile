@@ -4,6 +4,18 @@
 
 Requires `gor-mobile repair` — templates changed.
 
+- **The project marker moved into the workspace folder:**
+  `<repo>/.gor-mobile.json` → `<repo>/.gor-mobile/marker.json`. Everything
+  gor-mobile writes per repo now lives in two directories instead of leaking a
+  dotfile into the project root. `init` and `repair` migrate an existing repo
+  in place — the old file is read, rewritten to the new path, deleted, and its
+  now-redundant `.git/info/exclude` line removed (`.gor-mobile/` covers it).
+  `doctor` reports a not-yet-migrated repo and points at `repair`. Both hooks
+  still recognize the root marker during the walk-up, so a repo keeps working
+  until it is repaired. `uninstall --project` removes the marker and the
+  `.gor-mobile/` directory only when nothing else is left in it — plans, specs
+  and workspaces are the user's files.
+
 - **Second documentation source: Google's Developer Knowledge MCP server.**
   `setup` and `init` register `google-developer-knowledge`
   (`https://developerknowledge.googleapis.com/mcp`) — Firebase, Google Cloud,

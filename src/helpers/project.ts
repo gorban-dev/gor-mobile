@@ -3,12 +3,18 @@ import {
   existsSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { execa } from "execa";
-import { HOME, PROJECT_MARKER_NAME } from "../constants.js";
+import {
+  HOME,
+  LEGACY_PROJECT_MARKER_NAME,
+  PROJECT_MARKER_FILE,
+  PROJECT_STATE_DIR
+} from "../constants.js";
 import { ensureParentDir, readJsonSafe, writeJson } from "./paths.js";
 
 export type ProjectPlatform = "android" | "ios";
@@ -29,11 +35,25 @@ export interface ProjectMarker {
   [key: string]: unknown;
 }
 
-/** Walk up from `from` to the first dir carrying .gor-mobile.json. */
+export function projectMarkerPath(root: string): string {
+  return join(root, PROJECT_STATE_DIR, PROJECT_MARKER_FILE);
+}
+
+export function legacyProjectMarkerPath(root: string): string {
+  return join(root, LEGACY_PROJECT_MARKER_NAME);
+}
+
+/** Marker in either location — current `.gor-mobile/marker.json` or the
+ *  pre-0.3.5 repo-root file. */
+export function hasProjectMarker(root: string): boolean {
+  return existsSync(projectMarkerPath(root)) || existsSync(legacyProjectMarkerPath(root));
+}
+
+/** Walk up from `from` to the first dir carrying an install marker. */
 export function findProjectRoot(from: string = process.cwd()): string | null {
   let dir = from;
   while (true) {
-    if (existsSync(join(dir, PROJECT_MARKER_NAME))) return dir;
+    if (hasProjectMarker(dir)) return dir;
     if (dir === HOME) return null;
     const parent = dirname(dir);
     if (parent === dir) return null;
@@ -42,11 +62,28 @@ export function findProjectRoot(from: string = process.cwd()): string | null {
 }
 
 export function readProjectMarker(root: string): ProjectMarker {
-  return readJsonSafe<ProjectMarker>(join(root, PROJECT_MARKER_NAME), {});
+  const current = projectMarkerPath(root);
+  const path = existsSync(current) ? current : legacyProjectMarkerPath(root);
+  return readJsonSafe<ProjectMarker>(path, {});
 }
 
 export function writeProjectMarker(root: string, marker: ProjectMarker): void {
-  writeJson(join(root, PROJECT_MARKER_NAME), marker);
+  writeJson(projectMarkerPath(root), marker);
+}
+
+/**
+ * Move a pre-0.3.5 root marker into `.gor-mobile/marker.json`. Content wins
+ * from whichever file the caller already read, so a half-migrated repo (both
+ * files present) keeps the current one and just drops the stray root copy.
+ */
+export function migrateProjectMarker(root: string): boolean {
+  const legacy = legacyProjectMarkerPath(root);
+  if (!existsSync(legacy)) return false;
+  if (!existsSync(projectMarkerPath(root))) {
+    writeJson(projectMarkerPath(root), readJsonSafe<ProjectMarker>(legacy, {}));
+  }
+  rmSync(legacy, { force: true });
+  return true;
 }
 
 /** Platform from build markers at the repo root. null = greenfield / unknown. */
@@ -83,7 +120,8 @@ const NEUTRAL_ENTRIES = new Set([
   ".DS_Store",
   ".claude",
   ".idea",
-  PROJECT_MARKER_NAME,
+  PROJECT_STATE_DIR,
+  LEGACY_PROJECT_MARKER_NAME,
   "README.md",
   "LICENSE"
 ]);
