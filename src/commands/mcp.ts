@@ -1,4 +1,4 @@
-import { CODEX_CONFIG_TOML, DEV_KNOWLEDGE_MCP_NAME, GOR_MOBILE_VERSION } from "../constants.js";
+import { CODEX_CONFIG_TOML, DEV_KNOWLEDGE_MCP_NAME } from "../constants.js";
 import { codexMcpState, installCodexDevKnowledgeMcp } from "../helpers/codex-mcp.js";
 import {
   captureDevKnowledgeKey,
@@ -10,10 +10,17 @@ import {
 } from "../helpers/dev-knowledge.js";
 import {
   approveProjectMcpServers,
+  malformedMcpMessage,
   projectMcpState,
+  PROJECT_MCP_FILE,
   registerProjectMcp
 } from "../helpers/mcp-register.js";
-import { findProjectRoot, readProjectMarker, writeProjectMarker } from "../helpers/project.js";
+import {
+  ensureLocalExclude,
+  findProjectRoot,
+  readProjectMarker,
+  writeProjectMarker
+} from "../helpers/project.js";
 import { agentHomeExists, projectClaudeSpec } from "../targets.js";
 import { confirmStep } from "../ui/confirm-step.js";
 import { log } from "../ui/log.js";
@@ -35,18 +42,27 @@ export async function cmdMcp(opts: McpOptions = {}): Promise<void> {
     const spec = projectClaudeSpec(root);
     const marker = readProjectMarker(root);
     const res = registerProjectMcp(root, marker.managed_mcp ?? []);
-    if (res.written) {
-      approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
-      writeProjectMarker(root, {
-        ...marker,
-        version: GOR_MOBILE_VERSION,
-        managed_mcp: [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
-      });
-    }
-    const st = projectMcpState(root, spec.hooksFile);
-    log.ok(`${res.path} — server ${st.present ? "present" : "missing"}, approval ${st.approved ? "set" : "missing"}`);
-    if (st.approved) {
-      log.muted("Approval applies once you have trusted this repo in Claude Code.");
+    if (res.malformed) {
+      log.warn(malformedMcpMessage(res.path));
+    } else {
+      if (res.written) {
+        approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
+        // No version bump: this command does not refresh skills, agents or
+        // hooks, and doctor's upgrade prompt keys on that field.
+        writeProjectMarker(root, {
+          ...marker,
+          managed_mcp: [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
+        });
+        const excl = await ensureLocalExclude(root, [PROJECT_MCP_FILE]);
+        if (excl && excl.added.length > 0) log.ok(`Local ignore updated (${excl.file})`);
+      }
+      const st = projectMcpState(root, spec.hooksFile, marker.managed_mcp ?? []);
+      log.ok(`${res.path} — server ${st.present ? "present" : "missing"}, approval ${st.approved ? "set" : "missing"}`);
+      if (st.present && !st.owned) {
+        log.info(`${DEV_KNOWLEDGE_MCP_NAME} is a custom entry (not managed by gor-mobile) — left as is`);
+      } else if (st.approved) {
+        log.muted("Approval applies once you have trusted this repo in Claude Code.");
+      }
     }
   } else {
     log.info("Not inside a gor-mobile repo — skipped the project half (run 'gor-mobile init').");
@@ -83,7 +99,10 @@ export async function cmdMcp(opts: McpOptions = {}): Promise<void> {
       log.info(`${CODEX_CONFIG_TOML} has an unmanaged entry — left as is`);
     } else {
       installCodexDevKnowledgeMcp(key, { force: st.managed });
-      log.ok(`${CODEX_CONFIG_TOML} — ${key ? "http_headers" : "env_http_headers"}`);
+      // Read the shape back rather than inferring it from `key`: a key that is
+      // not key-shaped is refused by the writer and lands as env_http_headers.
+      const written = codexMcpState();
+      log.ok(`${CODEX_CONFIG_TOML} — ${written.hasLiteralKey ? "http_headers" : "env_http_headers"}`);
     }
   }
 

@@ -21,8 +21,18 @@ import {
   installAgents,
   installSkills
 } from "../helpers/install-assets.js";
-import { approveProjectMcpServers, registerProjectMcp } from "../helpers/mcp-register.js";
-import { findProjectRoot, readProjectMarker, writeProjectMarker } from "../helpers/project.js";
+import {
+  approveProjectMcpServers,
+  malformedMcpMessage,
+  PROJECT_MCP_FILE,
+  registerProjectMcp
+} from "../helpers/mcp-register.js";
+import {
+  ensureLocalExclude,
+  findProjectRoot,
+  readProjectMarker,
+  writeProjectMarker
+} from "../helpers/project.js";
 import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
@@ -96,6 +106,12 @@ async function repairProject(root: string): Promise<void> {
   if (mcpRes.written) {
     approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
     log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed → ${mcpRes.path}`);
+    // A repo initialized before .mcp.json existed has no exclude line for it —
+    // without this the refresh puts an untracked file in `git status`.
+    const excl = await ensureLocalExclude(root, [PROJECT_MCP_FILE]);
+    if (excl && excl.added.length > 0) log.ok(`Local ignore updated (${excl.file})`);
+  } else if (mcpRes.malformed) {
+    log.warn(malformedMcpMessage(mcpRes.path));
   }
 
   const stateMigration = migrateStateLayout(root);
@@ -135,8 +151,9 @@ async function repairCodex(target: TargetSpec): Promise<void> {
 
   const cx = codexMcpState();
   if (!cx.foreign) {
-    // Whichever shape is on disk is preserved implicitly: a resolvable key
-    // yields http_headers, null yields env_http_headers.
+    // A literal key already in the managed table is one of the sources
+    // resolveDevKnowledgeKey reads, so re-writing the block keeps it: the
+    // http_headers shape survives because the key is found, not by accident.
     installCodexDevKnowledgeMcp(resolveDevKnowledgeKey().key, { force: cx.managed });
     log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed in config.toml`);
   }

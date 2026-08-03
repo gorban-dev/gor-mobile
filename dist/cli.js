@@ -38,6 +38,7 @@ var DEV_KNOWLEDGE_API_KEY_ENV = "GOOGLE_DEVELOPER_KNOWLEDGE_API_KEY";
 var DEV_KNOWLEDGE_DOCS_URL = "https://developers.google.com/knowledge/mcp";
 var DEV_KNOWLEDGE_ENABLE_API_URL = "https://console.cloud.google.com/start/api?id=developerknowledge.googleapis.com";
 var DEV_KNOWLEDGE_CREDENTIALS_URL = "https://console.cloud.google.com/apis/credentials";
+var DEV_KNOWLEDGE_KEY_SHAPE = /^[A-Za-z0-9_-]+$/;
 function gorMobileRoot() {
   if (process.env.GOR_MOBILE_ROOT) return process.env.GOR_MOBILE_ROOT;
   const here = dirname(fileURLToPath(import.meta.url));
@@ -792,6 +793,7 @@ var MARKER = `# ${MANAGED_TAG}`;
 var HEADER = `[mcp_servers.${DEV_KNOWLEDGE_MCP_NAME}]`;
 var TABLE_RE = /^\s*\[/;
 var LITERAL_RE = /^\s*http_headers\s*=/;
+var LITERAL_KEY_RE = /^\s*http_headers\s*=\s*\{\s*"X-Goog-Api-Key"\s*=\s*"([^"]*)"\s*\}\s*$/;
 function readConfig() {
   return existsSync6(CODEX_CONFIG_TOML) ? readFileSync3(CODEX_CONFIG_TOML, "utf8") : "";
 }
@@ -821,11 +823,24 @@ function codexMcpState() {
   }
   return { present: true, managed, foreign: !managed, hasLiteralKey };
 }
+function codexDevKnowledgeKey() {
+  const content = readConfig();
+  if (!content) return null;
+  const lines = content.split("\n");
+  const table = findTable(lines);
+  if (!table || !lines[table.header].includes(MANAGED_TAG)) return null;
+  for (let i = table.header + 1; i < table.end; i++) {
+    const found = LITERAL_KEY_RE.exec(lines[i]);
+    if (found) return found[1] ?? null;
+  }
+  return null;
+}
 function blockLines(key) {
+  const literal = key !== null && DEV_KNOWLEDGE_KEY_SHAPE.test(key) ? key : null;
   return [
     `${HEADER} ${MARKER}`,
     `url = "${DEV_KNOWLEDGE_MCP_URL}"`,
-    key ? `http_headers = { "X-Goog-Api-Key" = "${key}" }` : `env_http_headers = { "X-Goog-Api-Key" = "${DEV_KNOWLEDGE_API_KEY_ENV}" }`
+    literal ? `http_headers = { "X-Goog-Api-Key" = "${literal}" }` : `env_http_headers = { "X-Goog-Api-Key" = "${DEV_KNOWLEDGE_API_KEY_ENV}" }`
   ];
 }
 function installCodexDevKnowledgeMcp(key, opts = {}) {
@@ -982,8 +997,10 @@ function openUrl(url) {
 var KEY_SOURCE_LABEL = {
   environment: `$${DEV_KNOWLEDGE_API_KEY_ENV}`,
   "claude-settings": "~/.claude/settings.json env",
+  "codex-config": "~/.codex/config.toml",
   none: "not set"
 };
+var KEY_SHAPE_HINT = "Google API keys are letters, digits, '-' and '_' only";
 function resolveDevKnowledgeKey() {
   const fromEnv = process.env[DEV_KNOWLEDGE_API_KEY_ENV];
   if (fromEnv && fromEnv.trim().length > 0) {
@@ -993,11 +1010,19 @@ function resolveDevKnowledgeKey() {
   if (fromClaude && fromClaude.trim().length > 0) {
     return { key: fromClaude.trim(), source: "claude-settings" };
   }
+  const fromCodex = codexDevKnowledgeKey();
+  if (fromCodex && fromCodex.trim().length > 0) {
+    return { key: fromCodex.trim(), source: "codex-config" };
+  }
   return { key: null, source: "none" };
 }
 function persistDevKnowledgeKey(key) {
   const trimmed = key.trim();
   if (trimmed.length === 0) return;
+  if (!DEV_KNOWLEDGE_KEY_SHAPE.test(trimmed)) {
+    log.warn(`Not storing that API key \u2014 ${KEY_SHAPE_HINT}`);
+    return;
+  }
   setClaudeEnv(DEV_KNOWLEDGE_API_KEY_ENV, trimmed);
   if (agentHomeExists("codex")) {
     installCodexDevKnowledgeMcp(trimmed, { force: codexMcpState().managed });
@@ -1005,8 +1030,13 @@ function persistDevKnowledgeKey(key) {
 }
 async function captureDevKnowledgeKey() {
   if (!isTuiOn()) return null;
-  const entered = await passwordPrompt("Developer Knowledge API key (Enter to skip)");
-  return entered.length > 0 ? entered : null;
+  const entered = (await passwordPrompt("Developer Knowledge API key (Enter to skip)")).trim();
+  if (entered.length === 0) return null;
+  if (!DEV_KNOWLEDGE_KEY_SHAPE.test(entered)) {
+    log.warn(`That does not look like an API key \u2014 ${KEY_SHAPE_HINT}. Ignored.`);
+    return null;
+  }
+  return entered;
 }
 var GUIDE_LINES = [
   "Firebase / Google Cloud / Maps / Play docs come from Google's Developer",
@@ -1977,7 +2007,7 @@ function removeEnabledPlugins(file, keys) {
 }
 
 // src/helpers/mcp-register.ts
-import { existsSync as existsSync15, rmSync as rmSync4 } from "fs";
+import { existsSync as existsSync15, readFileSync as readFileSync7, rmSync as rmSync4 } from "fs";
 import { join as join9 } from "path";
 function unregisterManaged() {
   if (!existsSync15(CLAUDE_MCP)) return;
@@ -1993,6 +2023,9 @@ function unregisterManaged() {
   writeJson(CLAUDE_MCP, cfg);
 }
 var PROJECT_MCP_FILE = ".mcp.json";
+function malformedMcpMessage(path) {
+  return `${path} is not valid JSON \u2014 left untouched; fix it and re-run`;
+}
 function projectMcpPath(root) {
   return join9(root, PROJECT_MCP_FILE);
 }
@@ -2003,9 +2036,23 @@ function devKnowledgeEntry() {
     headers: { "X-Goog-Api-Key": `\${${DEV_KNOWLEDGE_API_KEY_ENV}}` }
   };
 }
+function readProjectMcp(path) {
+  if (!existsSync15(path)) return { malformed: false, config: {} };
+  try {
+    const parsed = JSON.parse(readFileSync7(path, "utf8"));
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { malformed: true, config: null };
+    }
+    return { malformed: false, config: parsed };
+  } catch {
+    return { malformed: true, config: null };
+  }
+}
 function registerProjectMcp(root, owned = []) {
   const path = projectMcpPath(root);
-  const cfg = readJsonSafe(path, {});
+  const read = readProjectMcp(path);
+  if (read.malformed) return { written: false, path, malformed: true };
+  const cfg = read.config;
   const servers = cfg.mcpServers ?? {};
   if (servers[DEV_KNOWLEDGE_MCP_NAME] && !owned.includes(DEV_KNOWLEDGE_MCP_NAME)) {
     return { written: false, path };
@@ -2017,23 +2064,29 @@ function registerProjectMcp(root, owned = []) {
 }
 function unregisterProjectMcp(root, names) {
   const path = projectMcpPath(root);
-  if (!existsSync15(path)) return;
-  const cfg = readJsonSafe(path, {});
-  if (!cfg.mcpServers) return;
+  if (!existsSync15(path)) return { written: false, path };
+  const read = readProjectMcp(path);
+  if (read.malformed) return { written: false, path, malformed: true };
+  const cfg = read.config;
+  if (!cfg.mcpServers) return { written: false, path };
   for (const name of names) delete cfg.mcpServers[name];
   const nothingLeft = Object.keys(cfg.mcpServers).length === 0 && Object.keys(cfg).filter((k) => k !== "mcpServers").length === 0;
   if (nothingLeft) {
     rmSync4(path, { force: true });
-    return;
+    return { written: true, path };
   }
   writeJson(path, cfg);
+  return { written: true, path };
 }
-function projectMcpState(root, hooksFile) {
-  const cfg = readJsonSafe(projectMcpPath(root), {});
+function projectMcpState(root, hooksFile, owned = []) {
+  const read = readProjectMcp(projectMcpPath(root));
+  const present = !read.malformed && Boolean(read.config.mcpServers?.[DEV_KNOWLEDGE_MCP_NAME]);
   const settings = readJsonSafe(hooksFile, {});
   return {
-    present: Boolean(cfg.mcpServers?.[DEV_KNOWLEDGE_MCP_NAME]),
-    approved: (settings.enabledMcpjsonServers ?? []).includes(DEV_KNOWLEDGE_MCP_NAME)
+    present,
+    approved: (settings.enabledMcpjsonServers ?? []).includes(DEV_KNOWLEDGE_MCP_NAME),
+    owned: present && owned.includes(DEV_KNOWLEDGE_MCP_NAME),
+    malformed: read.malformed
   };
 }
 function approveProjectMcpServers(hooksFile, names) {
@@ -2058,7 +2111,7 @@ import {
   appendFileSync,
   existsSync as existsSync16,
   readdirSync as readdirSync5,
-  readFileSync as readFileSync7,
+  readFileSync as readFileSync8,
   statSync as statSync2,
   writeFileSync as writeFileSync6
 } from "fs";
@@ -2165,7 +2218,7 @@ async function ensureLocalExclude(root, entries) {
   const file = await gitInfoExcludePath(root);
   if (!file) return null;
   ensureParentDir(file);
-  const current = existsSync16(file) ? readFileSync7(file, "utf8") : "";
+  const current = existsSync16(file) ? readFileSync8(file, "utf8") : "";
   const lines = new Set(current.split("\n").map((l) => l.trim()));
   const added = entries.filter((e) => !lines.has(e));
   if (added.length > 0) {
@@ -2181,7 +2234,7 @@ async function removeLocalExclude(root, entries) {
   const drop = new Set(entries);
   const kept = [];
   const removed = [];
-  for (const line of readFileSync7(file, "utf8").split("\n")) {
+  for (const line of readFileSync8(file, "utf8").split("\n")) {
     if (drop.has(line.trim())) removed.push(line.trim());
     else kept.push(line);
   }
@@ -2192,7 +2245,7 @@ async function removeLocalExclude(root, entries) {
 }
 function ensureGitignoreFallback(root, entries) {
   const file = join10(root, ".gitignore");
-  const current = existsSync16(file) ? readFileSync7(file, "utf8") : "";
+  const current = existsSync16(file) ? readFileSync8(file, "utf8") : "";
   const lines = new Set(current.split("\n").map((l) => l.trim()));
   const added = entries.filter((e) => !lines.has(e));
   if (added.length > 0) {
@@ -2428,6 +2481,8 @@ async function cmdInit(opts = {}) {
   if (mcp.written) {
     approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
     log.ok(`${DEV_KNOWLEDGE_MCP_NAME} \u2192 ${mcp.path} (approved in settings.local.json)`);
+  } else if (mcp.malformed) {
+    log.warn(malformedMcpMessage(mcp.path));
   } else {
     log.info(`${DEV_KNOWLEDGE_MCP_NAME} already configured by hand \u2014 left as is`);
   }
@@ -2498,7 +2553,7 @@ import pc9 from "picocolors";
 import { confirm as confirm2, isCancel as isCancel5 } from "@clack/prompts";
 
 // src/helpers/teardown.ts
-import { existsSync as existsSync19, readdirSync as readdirSync7, readFileSync as readFileSync8, rmSync as rmSync5 } from "fs";
+import { existsSync as existsSync19, readdirSync as readdirSync7, readFileSync as readFileSync9, rmSync as rmSync5 } from "fs";
 import { join as join13 } from "path";
 function teardownUserTarget(target, opts = {}) {
   log.step(`Removing gor-mobile from ${target.label} (${target.home})`);
@@ -2536,7 +2591,7 @@ function teardownUserTarget(target, opts = {}) {
     if (target.id === "claude") {
       const legacyCr = join13(target.agentsDir, "code-reviewer.md");
       if (existsSync19(legacyCr)) {
-        const head = readFileSync8(legacyCr, "utf8").split("\n").slice(0, 20).join("\n");
+        const head = readFileSync9(legacyCr, "utf8").split("\n").slice(0, 20).join("\n");
         if (/^name: code-reviewer/m.test(head)) {
           rmSync5(legacyCr);
         }
@@ -2610,7 +2665,7 @@ async function cmdMigrate(opts = {}) {
 }
 
 // src/commands/doctor.ts
-import { existsSync as existsSync21, mkdirSync as mkdirSync3, mkdtempSync, readFileSync as readFileSync9, readdirSync as readdirSync8, rmSync as rmSync6, writeFileSync as writeFileSync8 } from "fs";
+import { existsSync as existsSync21, mkdirSync as mkdirSync3, mkdtempSync, readFileSync as readFileSync10, readdirSync as readdirSync8, rmSync as rmSync6, writeFileSync as writeFileSync8 } from "fs";
 import { tmpdir } from "os";
 import { join as join15 } from "path";
 import { execa as execa8 } from "execa";
@@ -2674,7 +2729,7 @@ function checkInstructionsSection(target) {
     log.warn(`${target.instructionsFile} does not exist`);
     return;
   }
-  if (readFileSync9(target.instructionsFile, "utf8").includes(SECTION_BEGIN)) {
+  if (readFileSync10(target.instructionsFile, "utf8").includes(SECTION_BEGIN)) {
     log.ok("managed instructions section present");
   } else {
     log.warn("managed instructions section missing \u2014 run 'gor-mobile repair'");
@@ -2821,7 +2876,7 @@ function verboseSkillsFrontmatter(target) {
     const skillMd = join15(target.skillsDir, entry, "SKILL.md");
     if (!existsSync21(skillMd)) continue;
     count++;
-    const content = readFileSync9(skillMd, "utf8");
+    const content = readFileSync10(skillMd, "utf8");
     if (!/^name: gor-mobile-/m.test(content)) {
       bad++;
       log.warn(`  ${skillMd} missing 'name: gor-mobile-' prefix`);
@@ -2853,7 +2908,7 @@ function verboseContractLint(target) {
     log.warn("bridge skill missing \u2014 cannot lint contract");
     return;
   }
-  const text = readFileSync9(skill, "utf8");
+  const text = readFileSync10(skill, "utf8");
   const mentioned = /* @__PURE__ */ new Set();
   const re = /`android ([a-z-]+(?: [a-z-]+)?)/g;
   let m;
@@ -2910,9 +2965,13 @@ function checkProject(root) {
     );
   }
   const spec = projectClaudeSpec(root);
-  const mcp = projectMcpState(root, spec.hooksFile);
-  if (!mcp.present) {
+  const mcp = projectMcpState(root, spec.hooksFile, marker.managed_mcp ?? []);
+  if (mcp.malformed) {
+    log.warn(".mcp.json is not valid JSON \u2014 fix it, then run 'gor-mobile mcp'");
+  } else if (!mcp.present) {
     log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from .mcp.json \u2014 run 'gor-mobile mcp'`);
+  } else if (!mcp.owned) {
+    log.info(`${DEV_KNOWLEDGE_MCP_NAME}: custom entry (not managed by gor-mobile)`);
   } else if (!mcp.approved) {
     log.warn(`${DEV_KNOWLEDGE_MCP_NAME} not pre-approved \u2014 run 'gor-mobile repair'`);
   } else {
@@ -3045,6 +3104,10 @@ async function repairProject(root) {
   if (mcpRes.written) {
     approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
     log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed \u2192 ${mcpRes.path}`);
+    const excl = await ensureLocalExclude(root, [PROJECT_MCP_FILE]);
+    if (excl && excl.added.length > 0) log.ok(`Local ignore updated (${excl.file})`);
+  } else if (mcpRes.malformed) {
+    log.warn(malformedMcpMessage(mcpRes.path));
   }
   const stateMigration = migrateStateLayout(root);
   if (stateMigration.migrated.length > 0) {
@@ -3123,18 +3186,25 @@ async function cmdMcp(opts = {}) {
     const spec = projectClaudeSpec(root);
     const marker = readProjectMarker(root);
     const res = registerProjectMcp(root, marker.managed_mcp ?? []);
-    if (res.written) {
-      approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
-      writeProjectMarker(root, {
-        ...marker,
-        version: GOR_MOBILE_VERSION,
-        managed_mcp: [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])]
-      });
-    }
-    const st = projectMcpState(root, spec.hooksFile);
-    log.ok(`${res.path} \u2014 server ${st.present ? "present" : "missing"}, approval ${st.approved ? "set" : "missing"}`);
-    if (st.approved) {
-      log.muted("Approval applies once you have trusted this repo in Claude Code.");
+    if (res.malformed) {
+      log.warn(malformedMcpMessage(res.path));
+    } else {
+      if (res.written) {
+        approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
+        writeProjectMarker(root, {
+          ...marker,
+          managed_mcp: [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])]
+        });
+        const excl = await ensureLocalExclude(root, [PROJECT_MCP_FILE]);
+        if (excl && excl.added.length > 0) log.ok(`Local ignore updated (${excl.file})`);
+      }
+      const st = projectMcpState(root, spec.hooksFile, marker.managed_mcp ?? []);
+      log.ok(`${res.path} \u2014 server ${st.present ? "present" : "missing"}, approval ${st.approved ? "set" : "missing"}`);
+      if (st.present && !st.owned) {
+        log.info(`${DEV_KNOWLEDGE_MCP_NAME} is a custom entry (not managed by gor-mobile) \u2014 left as is`);
+      } else if (st.approved) {
+        log.muted("Approval applies once you have trusted this repo in Claude Code.");
+      }
     }
   } else {
     log.info("Not inside a gor-mobile repo \u2014 skipped the project half (run 'gor-mobile init').");
@@ -3168,7 +3238,8 @@ async function cmdMcp(opts = {}) {
       log.info(`${CODEX_CONFIG_TOML} has an unmanaged entry \u2014 left as is`);
     } else {
       installCodexDevKnowledgeMcp(key, { force: st.managed });
-      log.ok(`${CODEX_CONFIG_TOML} \u2014 ${key ? "http_headers" : "env_http_headers"}`);
+      const written = codexMcpState();
+      log.ok(`${CODEX_CONFIG_TOML} \u2014 ${written.hasLiteralKey ? "http_headers" : "env_http_headers"}`);
     }
   }
   if (!key) await offerDevKnowledgeLinks();
@@ -3226,9 +3297,10 @@ async function uninstallProject(opts) {
   }
   log.ok(`Hooks + plugin overrides removed (${spec.hooksFile})`);
   const ownedMcp = marker.managed_mcp ?? [];
-  unregisterProjectMcp(root, ownedMcp);
+  const mcpRes = unregisterProjectMcp(root, ownedMcp);
   removeApprovedMcpServers(spec.hooksFile, ownedMcp);
-  log.ok(`MCP servers removed (${ownedMcp.join(", ")})`);
+  if (mcpRes.malformed) log.warn(malformedMcpMessage(mcpRes.path));
+  else if (ownedMcp.length > 0) log.ok(`MCP servers removed (${ownedMcp.join(", ")})`);
   if (existsSync22(spec.skillsDir)) {
     for (const entry of readdirSync9(spec.skillsDir)) {
       if (entry.startsWith("gor-mobile-") || entry === "android-cli") {

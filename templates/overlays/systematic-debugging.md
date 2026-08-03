@@ -50,11 +50,14 @@ lifecycle callback, a Room DAO, a WorkManager constraint, …), establish what
 *correct* behavior is from authoritative sources — **not** from training
 memory. Locate the problematic part first, then read how it is **supposed** to
 work via the **Docs-first ground-truth contract** in
-`[[gor-mobile-using-android-cli]]` (official docs through `android docs` →
-resolved-artifact signatures via `javap` → source/decompiled read for
-*behavior*). For Android specifically, `android docs` and component inspection
-let you study any component and confirm whether the current code uses it
-correctly — use it as the reference against which you judge the buggy code.
+`[[gor-mobile-using-android-cli]]` (official docs — `android docs` for the
+Android SDK / Jetpack, the `google-developer-knowledge` MCP server
+(`search_documents` → `get_documents`) for Firebase / Google Cloud / Maps /
+Play Services when it is connected → resolved-artifact signatures via `javap`
+→ source/decompiled read for *behavior*). For Android specifically, `android
+docs` and component inspection let you study any component and confirm whether
+the current code uses it correctly — use it as the reference against which you
+judge the buggy code.
 
 This sharpens the body's Phase 2 ("read the reference implementation
 COMPLETELY"): for a framework component, the reference IS the official docs /

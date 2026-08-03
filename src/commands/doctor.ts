@@ -340,9 +340,15 @@ function checkProject(root: string): TargetSpec {
     );
   }
   const spec = projectClaudeSpec(root);
-  const mcp = projectMcpState(root, spec.hooksFile);
-  if (!mcp.present) {
+  const mcp = projectMcpState(root, spec.hooksFile, marker.managed_mcp ?? []);
+  if (mcp.malformed) {
+    log.warn(".mcp.json is not valid JSON — fix it, then run 'gor-mobile mcp'");
+  } else if (!mcp.present) {
     log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from .mcp.json — run 'gor-mobile mcp'`);
+  } else if (!mcp.owned) {
+    // Hand-configured: repair leaves it alone, so "run repair" would be advice
+    // that can never come true. Mirrors the Codex branch below.
+    log.info(`${DEV_KNOWLEDGE_MCP_NAME}: custom entry (not managed by gor-mobile)`);
   } else if (!mcp.approved) {
     log.warn(`${DEV_KNOWLEDGE_MCP_NAME} not pre-approved — run 'gor-mobile repair'`);
   } else {

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
   CODEX_CONFIG_TOML,
   DEV_KNOWLEDGE_API_KEY_ENV,
+  DEV_KNOWLEDGE_KEY_SHAPE,
   DEV_KNOWLEDGE_MCP_NAME,
   DEV_KNOWLEDGE_MCP_URL,
   MANAGED_TAG
@@ -12,6 +13,7 @@ const MARKER = `# ${MANAGED_TAG}`;
 const HEADER = `[mcp_servers.${DEV_KNOWLEDGE_MCP_NAME}]`;
 const TABLE_RE = /^\s*\[/;
 const LITERAL_RE = /^\s*http_headers\s*=/;
+const LITERAL_KEY_RE = /^\s*http_headers\s*=\s*\{\s*"X-Goog-Api-Key"\s*=\s*"([^"]*)"\s*\}\s*$/;
 
 function readConfig(): string {
   return existsSync(CODEX_CONFIG_TOML)
@@ -56,15 +58,37 @@ export function codexMcpState(): CodexMcpState {
   return { present: true, managed, foreign: !managed, hasLiteralKey };
 }
 
+/**
+ * The literal key out of a MANAGED table's http_headers line, or null when
+ * there is no table, the table is foreign, or it carries the env_http_headers
+ * shape. This is the third key source: a user who pastes their key into
+ * config.toml following Google's snippet must not lose it on the next repair.
+ */
+export function codexDevKnowledgeKey(): string | null {
+  const content = readConfig();
+  if (!content) return null;
+  const lines = content.split("\n");
+  const table = findTable(lines);
+  if (!table || !lines[table.header]!.includes(MANAGED_TAG)) return null;
+  for (let i = table.header + 1; i < table.end; i++) {
+    const found = LITERAL_KEY_RE.exec(lines[i]!);
+    if (found) return found[1] ?? null;
+  }
+  return null;
+}
+
 // Two shapes, exactly one present. A literal header is the only way for Codex
 // to see the key without a shell export — it has no settings.env equivalent.
 // env_http_headers is the fallback for users who export the variable themselves.
+// A key that is not key-shaped falls back to env_http_headers rather than
+// emitting TOML that would break the whole file.
 function blockLines(key: string | null): string[] {
+  const literal = key !== null && DEV_KNOWLEDGE_KEY_SHAPE.test(key) ? key : null;
   return [
     `${HEADER} ${MARKER}`,
     `url = "${DEV_KNOWLEDGE_MCP_URL}"`,
-    key
-      ? `http_headers = { "X-Goog-Api-Key" = "${key}" }`
+    literal
+      ? `http_headers = { "X-Goog-Api-Key" = "${literal}" }`
       : `env_http_headers = { "X-Goog-Api-Key" = "${DEV_KNOWLEDGE_API_KEY_ENV}" }`
   ];
 }

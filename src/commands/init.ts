@@ -16,6 +16,7 @@ import { applyEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins
 import { installAgents, installSkills } from "../helpers/install-assets.js";
 import {
   approveProjectMcpServers,
+  malformedMcpMessage,
   PROJECT_MCP_FILE,
   registerProjectMcp
 } from "../helpers/mcp-register.js";
@@ -256,6 +257,8 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   if (mcp.written) {
     approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
     log.ok(`${DEV_KNOWLEDGE_MCP_NAME} → ${mcp.path} (approved in settings.local.json)`);
+  } else if (mcp.malformed) {
+    log.warn(malformedMcpMessage(mcp.path));
   } else {
     log.info(`${DEV_KNOWLEDGE_MCP_NAME} already configured by hand — left as is`);
   }

@@ -63,6 +63,10 @@ export const DEV_KNOWLEDGE_ENABLE_API_URL =
   "https://console.cloud.google.com/start/api?id=developerknowledge.googleapis.com";
 export const DEV_KNOWLEDGE_CREDENTIALS_URL =
   "https://console.cloud.google.com/apis/credentials";
+// Google API keys are [A-Za-z0-9_-]+. Anything else is rejected on capture: a
+// quote in the value would produce invalid TOML and take down the whole
+// ~/.codex/config.toml (status line, hooks, model settings included).
+export const DEV_KNOWLEDGE_KEY_SHAPE = /^[A-Za-z0-9_-]+$/;
 
 /**
  * Resolve install root — location of the checked-out/installed gor-mobile

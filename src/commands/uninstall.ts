@@ -11,6 +11,7 @@ import { uninstallAndroidCli } from "../helpers/android-cli.js";
 import { androidCliPath } from "../helpers/deps.js";
 import { removeEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
 import {
+  malformedMcpMessage,
   PROJECT_MCP_FILE,
   removeApprovedMcpServers,
   unregisterProjectMcp
@@ -97,9 +98,10 @@ async function uninstallProject(opts: UninstallOptions): Promise<void> {
   log.ok(`Hooks + plugin overrides removed (${spec.hooksFile})`);
 
   const ownedMcp = marker.managed_mcp ?? [];
-  unregisterProjectMcp(root, ownedMcp);
+  const mcpRes = unregisterProjectMcp(root, ownedMcp);
   removeApprovedMcpServers(spec.hooksFile, ownedMcp);
-  log.ok(`MCP servers removed (${ownedMcp.join(", ")})`);
+  if (mcpRes.malformed) log.warn(malformedMcpMessage(mcpRes.path));
+  else if (ownedMcp.length > 0) log.ok(`MCP servers removed (${ownedMcp.join(", ")})`);
 
   if (existsSync(spec.skillsDir)) {
     for (const entry of readdirSync(spec.skillsDir)) {

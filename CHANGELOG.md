@@ -26,8 +26,21 @@ Requires `gor-mobile repair` — templates changed.
 - **Rung 1 of the ground-truth ladder splits by domain.** `android docs` stays
   the entry point for Android SDK / Jetpack; the MCP server covers the rest of
   Google; non-Google libraries still go to their own release notes for the
-  pinned version. `gor-mobile-using-android-cli` changed — run
-  `gor-mobile repair`.
+  pinned version. `gor-mobile-using-android-cli` and the
+  `systematic-debugging` overlay changed — run `gor-mobile repair`.
+
+- **Nothing you wrote by hand gets overwritten.** A `.mcp.json` that does not
+  parse is left byte-for-byte alone by `init`, `repair`, `mcp` and
+  `uninstall`, each of which now says so and points at the file instead of
+  writing a fresh config over the team's servers. A key pasted into the managed
+  `~/.codex/config.toml` table is the third place the CLI looks for it, after
+  `$GOOGLE_DEVELOPER_KNOWLEDGE_API_KEY` and `~/.claude/settings.json` — so
+  `repair` keeps it instead of reverting the table to the variable shape. A
+  value that is not key-shaped (`[A-Za-z0-9_-]+`) is refused at the prompt
+  rather than written into TOML that would break the rest of the file.
+  `repair` and `mcp` now add `.mcp.json` to the repo's local git exclude, which
+  only `init` did; `mcp` no longer stamps the marker version, so `doctor` keeps
+  telling you when the repo's assets are older than the CLI.
 
 ## 0.3.4 — 2026-07-27
 
