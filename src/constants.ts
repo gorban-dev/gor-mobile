@@ -50,6 +50,20 @@ export const DEFAULT_RULES_URL =
   "https://github.com/gorban-dev/gor-mobile-rules-default.git";
 export const DEFAULT_RULES_REF = "main";
 
+// Google Developer Knowledge MCP — the non-Android half of the docs ladder.
+// Names and URLs come from https://developers.google.com/knowledge/mcp. The
+// server name matches Google's own snippets for every client; their single
+// `claude mcp add google-dev-knowledge` line is the outlier.
+export const DEV_KNOWLEDGE_MCP_NAME = "google-developer-knowledge";
+export const DEV_KNOWLEDGE_MCP_URL =
+  "https://developerknowledge.googleapis.com/mcp";
+export const DEV_KNOWLEDGE_API_KEY_ENV = "GOOGLE_DEVELOPER_KNOWLEDGE_API_KEY";
+export const DEV_KNOWLEDGE_DOCS_URL = "https://developers.google.com/knowledge/mcp";
+export const DEV_KNOWLEDGE_ENABLE_API_URL =
+  "https://console.cloud.google.com/start/api?id=developerknowledge.googleapis.com";
+export const DEV_KNOWLEDGE_CREDENTIALS_URL =
+  "https://console.cloud.google.com/apis/credentials";
+
 /**
  * Resolve install root — location of the checked-out/installed gor-mobile
  * package, which holds templates/ and rules-default/ next to dist/.
