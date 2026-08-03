@@ -94,7 +94,7 @@ export function installCodexDevKnowledgeMcp(
 
   lines.splice(table.header, table.end - table.header, ...blockLines(key));
   ensureParentDir(CODEX_CONFIG_TOML);
-  writeFileSync(CODEX_CONFIG_TOML, `${lines.join("\n")}\n`);
+  writeFileSync(CODEX_CONFIG_TOML, lines.join("\n").replace(/\n*$/, "") + "\n");
   return true;
 }
 
@@ -106,6 +106,6 @@ export function removeCodexDevKnowledgeMcp(): void {
   const table = findTable(lines);
   if (!table || !lines[table.header]!.includes(MANAGED_TAG)) return;
   lines.splice(table.header, table.end - table.header);
-  const remaining = lines.join("\n");
-  writeFileSync(CODEX_CONFIG_TOML, remaining.length > 0 ? `${remaining}\n` : "");
+  const remaining = lines.join("\n").replace(/\n*$/, "");
+  writeFileSync(CODEX_CONFIG_TOML, remaining.length > 0 ? remaining + "\n" : "");
 }
