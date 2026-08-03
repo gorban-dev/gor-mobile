@@ -2861,6 +2861,14 @@ function checkProject(root) {
     );
   }
   const spec = projectClaudeSpec(root);
+  const mcp = projectMcpState(root, spec.hooksFile);
+  if (!mcp.present) {
+    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from .mcp.json \u2014 run 'gor-mobile mcp'`);
+  } else if (!mcp.approved) {
+    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} not pre-approved \u2014 run 'gor-mobile repair'`);
+  } else {
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} configured + pre-approved (approve on first 'claude' run)`);
+  }
   checkTarget(spec);
   return spec;
 }
@@ -2899,6 +2907,12 @@ async function cmdDoctor(opts = {}) {
       "  \u2192 jq powers the status line AND the ast-index guard hook (guard fails open without it) \u2014 brew install jq"
     );
   }
+  const dk = resolveDevKnowledgeKey();
+  if (dk.key) {
+    log.ok(`Developer Knowledge API key \u2192 ${KEY_SOURCE_LABEL[dk.source]}`);
+  } else {
+    log.warn("Developer Knowledge API key not set \u2014 run 'gor-mobile mcp'");
+  }
   log.step("Machine (~/.gor-mobile)");
   checkHookTemplates();
   checkRulesPack();
@@ -2915,6 +2929,16 @@ async function cmdDoctor(opts = {}) {
   if (agentHomeExists("codex")) {
     log.step("Codex integration (user-level)");
     checkTarget(TARGETS.codex);
+    const cx = codexMcpState();
+    if (!cx.present) {
+      log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from config.toml \u2014 run 'gor-mobile mcp'`);
+    } else if (cx.foreign) {
+      log.info(`${DEV_KNOWLEDGE_MCP_NAME}: custom entry (not managed by gor-mobile)`);
+    } else {
+      log.ok(
+        `${DEV_KNOWLEDGE_MCP_NAME} registered (${cx.hasLiteralKey ? "http_headers" : "env_http_headers"})`
+      );
+    }
     emulationTargets.push(TARGETS.codex);
   }
   if (opts.verbose) {
@@ -2967,6 +2991,12 @@ async function repairProject(root) {
   else log.warn(`android-cli skill not placed: ${android.error ?? "stock skill missing"}`);
   applyEnabledPlugins(spec.hooksFile, [], [SUPERPOWERS_KEY]);
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
+  const marker = readProjectMarker(root);
+  const mcpRes = registerProjectMcp(root, marker.managed_mcp ?? []);
+  if (mcpRes.written) {
+    approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed \u2192 ${mcpRes.path}`);
+  }
   const stateMigration = migrateStateLayout(root);
   if (stateMigration.migrated.length > 0) {
     log.ok(`Migrated ${stateMigration.migrated.length} checkpoint(s) \u2192 .gor-mobile/state/<plan>/progress.md`);
@@ -2974,7 +3004,6 @@ async function repairProject(root) {
   for (const s of stateMigration.skipped) {
     log.warn(`Left legacy ${s} in place \u2014 a workspace checkpoint already exists for that plan`);
   }
-  const marker = readProjectMarker(root);
   const enabledNow = enableClearContextOnPlanAccept(spec.hooksFile);
   const managedSettings = enabledNow ? [.../* @__PURE__ */ new Set([...marker.managed_settings ?? [], CLEAR_CONTEXT_ON_PLAN_ACCEPT])] : marker.managed_settings ?? [];
   if (enabledNow) log.ok(`Enabled ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} (plan-approval "clear context" option)`);
@@ -2982,6 +3011,7 @@ async function repairProject(root) {
     ...marker,
     version: GOR_MOBILE_VERSION,
     managed_settings: managedSettings,
+    managed_mcp: mcpRes.written ? [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])] : marker.managed_mcp ?? [],
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   });
   log.ok(`Marker refreshed (v${GOR_MOBILE_VERSION})`);
@@ -2992,6 +3022,11 @@ async function repairCodex(target) {
   if (target.statusLineKind === "codex-config" && codexStatusLineState().managed) {
     installCodexStatusLine({ force: true });
     log.ok("Codex status line refreshed (tui.status_line)");
+  }
+  const cx = codexMcpState();
+  if (!cx.foreign) {
+    installCodexDevKnowledgeMcp(resolveDevKnowledgeKey().key, { force: cx.managed });
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed in config.toml`);
   }
   const skills = installSkills(target);
   if (skills.missingPrefix.length > 0) {

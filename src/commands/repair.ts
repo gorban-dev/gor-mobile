@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import {
   CLAUDE_COMMANDS_DIR,
+  DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_VERSION,
   gorMobileRoot
 } from "../constants.js";
@@ -10,6 +11,8 @@ import {
   runAndroidInit
 } from "../helpers/android-cli.js";
 import { writeManagedSection } from "../helpers/claude-md-section.js";
+import { codexMcpState, installCodexDevKnowledgeMcp } from "../helpers/codex-mcp.js";
+import { resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
 import { applyEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
 import {
   cleanupLegacyAgents,
@@ -18,6 +21,7 @@ import {
   installAgents,
   installSkills
 } from "../helpers/install-assets.js";
+import { approveProjectMcpServers, registerProjectMcp } from "../helpers/mcp-register.js";
 import { findProjectRoot, readProjectMarker, writeProjectMarker } from "../helpers/project.js";
 import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
@@ -87,6 +91,13 @@ async function repairProject(root: string): Promise<void> {
   applyEnabledPlugins(spec.hooksFile, [], [SUPERPOWERS_KEY]);
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
 
+  const marker = readProjectMarker(root);
+  const mcpRes = registerProjectMcp(root, marker.managed_mcp ?? []);
+  if (mcpRes.written) {
+    approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed → ${mcpRes.path}`);
+  }
+
   const stateMigration = migrateStateLayout(root);
   if (stateMigration.migrated.length > 0) {
     log.ok(`Migrated ${stateMigration.migrated.length} checkpoint(s) → .gor-mobile/state/<plan>/progress.md`);
@@ -95,7 +106,6 @@ async function repairProject(root: string): Promise<void> {
     log.warn(`Left legacy ${s} in place — a workspace checkpoint already exists for that plan`);
   }
 
-  const marker = readProjectMarker(root);
   const enabledNow = enableClearContextOnPlanAccept(spec.hooksFile);
   const managedSettings = enabledNow
     ? [...new Set([...(marker.managed_settings ?? []), CLEAR_CONTEXT_ON_PLAN_ACCEPT])]
@@ -105,6 +115,9 @@ async function repairProject(root: string): Promise<void> {
     ...marker,
     version: GOR_MOBILE_VERSION,
     managed_settings: managedSettings,
+    managed_mcp: mcpRes.written
+      ? [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
+      : (marker.managed_mcp ?? []),
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   });
   log.ok(`Marker refreshed (v${GOR_MOBILE_VERSION})`);
@@ -118,6 +131,14 @@ async function repairCodex(target: TargetSpec): Promise<void> {
   if (target.statusLineKind === "codex-config" && codexStatusLineState().managed) {
     installCodexStatusLine({ force: true });
     log.ok("Codex status line refreshed (tui.status_line)");
+  }
+
+  const cx = codexMcpState();
+  if (!cx.foreign) {
+    // Whichever shape is on disk is preserved implicitly: a resolvable key
+    // yields http_headers, null yields env_http_headers.
+    installCodexDevKnowledgeMcp(resolveDevKnowledgeKey().key, { force: cx.managed });
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed in config.toml`);
   }
 
   const skills = installSkills(target);

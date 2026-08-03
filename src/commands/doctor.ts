@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
 import {
+  DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_CONFIG,
   GOR_MOBILE_HOME,
   GOR_MOBILE_RULES_DIR,
@@ -12,6 +13,9 @@ import {
 } from "../constants.js";
 import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-cli.js";
 import { ANDROID_CONTRACT } from "../android-contract.js";
+import { codexMcpState } from "../helpers/codex-mcp.js";
+import { KEY_SOURCE_LABEL, resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
+import { projectMcpState } from "../helpers/mcp-register.js";
 import { countManagedHooks } from "../helpers/settings-merge.js";
 import { statusLineState } from "../helpers/settings-statusline.js";
 import { codexStatusLineState } from "../helpers/codex-statusline.js";
@@ -336,6 +340,14 @@ function checkProject(root: string): TargetSpec {
     );
   }
   const spec = projectClaudeSpec(root);
+  const mcp = projectMcpState(root, spec.hooksFile);
+  if (!mcp.present) {
+    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from .mcp.json — run 'gor-mobile mcp'`);
+  } else if (!mcp.approved) {
+    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} not pre-approved — run 'gor-mobile repair'`);
+  } else {
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} configured + pre-approved (approve on first 'claude' run)`);
+  }
   checkTarget(spec);
   return spec;
 }
@@ -375,6 +387,12 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
       "  → jq powers the status line AND the ast-index guard hook (guard fails open without it) — brew install jq"
     );
   }
+  const dk = resolveDevKnowledgeKey();
+  if (dk.key) {
+    log.ok(`Developer Knowledge API key → ${KEY_SOURCE_LABEL[dk.source]}`);
+  } else {
+    log.warn("Developer Knowledge API key not set — run 'gor-mobile mcp'");
+  }
 
   log.step("Machine (~/.gor-mobile)");
   checkHookTemplates();
@@ -395,6 +413,16 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
   if (agentHomeExists("codex")) {
     log.step("Codex integration (user-level)");
     checkTarget(TARGETS.codex);
+    const cx = codexMcpState();
+    if (!cx.present) {
+      log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from config.toml — run 'gor-mobile mcp'`);
+    } else if (cx.foreign) {
+      log.info(`${DEV_KNOWLEDGE_MCP_NAME}: custom entry (not managed by gor-mobile)`);
+    } else {
+      log.ok(
+        `${DEV_KNOWLEDGE_MCP_NAME} registered (${cx.hasLiteralKey ? "http_headers" : "env_http_headers"})`
+      );
+    }
     emulationTargets.push(TARGETS.codex);
   }
 
