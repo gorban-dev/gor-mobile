@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const GOR_MOBILE_VERSION = "0.3.5";
+export const GOR_MOBILE_VERSION = "0.3.6";
 export const GOR_MOBILE_NAME = "gor-mobile";
 
 export const HOME = homedir();
@@ -23,6 +23,11 @@ export const CLAUDE_DIR = join(HOME, ".claude");
 export const CLAUDE_SETTINGS = join(CLAUDE_DIR, "settings.json");
 export const CLAUDE_CLAUDE_MD = join(CLAUDE_DIR, "CLAUDE.md");
 export const CLAUDE_MCP = join(CLAUDE_DIR, "mcp.json");
+// Claude Code's own state file — holds local-scope MCP servers under
+// projects["<canonical repo path>"].mcpServers. CLAUDE_CONFIG_DIR moves it out
+// of $HOME (measured on CC 2.1.221: the file lands in that dir, not in
+// <dir>/.claude).
+export const CLAUDE_JSON = join(process.env.CLAUDE_CONFIG_DIR ?? HOME, ".claude.json");
 export const CLAUDE_COMMANDS_DIR = join(CLAUDE_DIR, "commands");
 export const CLAUDE_AGENTS_DIR = join(CLAUDE_DIR, "agents");
 export const CLAUDE_SKILLS_DIR = join(CLAUDE_DIR, "skills");

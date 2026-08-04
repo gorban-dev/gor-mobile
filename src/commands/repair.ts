@@ -24,13 +24,13 @@ import {
   installSkills
 } from "../helpers/install-assets.js";
 import {
-  approveProjectMcpServers,
+  cleanLegacyProjectMcp,
+  LEGACY_PROJECT_MCP_FILE,
   malformedMcpMessage,
-  PROJECT_MCP_FILE,
-  registerProjectMcp
+  registerLocalMcp,
+  removeApprovedMcpServers
 } from "../helpers/mcp-register.js";
 import {
-  ensureLocalExclude,
   findProjectRoot,
   migrateProjectMarker,
   readProjectMarker,
@@ -106,16 +106,25 @@ async function repairProject(root: string): Promise<void> {
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
 
   const marker = readProjectMarker(root);
-  const mcpRes = registerProjectMcp(root, marker.managed_mcp ?? []);
+  const mcpRes = registerLocalMcp(root, marker.managed_mcp ?? []);
   if (mcpRes.written) {
-    approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
-    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed → ${mcpRes.path}`);
-    // A repo initialized before .mcp.json existed has no exclude line for it —
-    // without this the refresh puts an untracked file in `git status`.
-    const excl = await ensureLocalExclude(root, [PROJECT_MCP_FILE]);
-    if (excl && excl.added.length > 0) log.ok(`Local ignore updated (${excl.file})`);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed → ${mcpRes.path} (local scope)`);
   } else if (mcpRes.malformed) {
     log.warn(malformedMcpMessage(mcpRes.path));
+  }
+
+  // Installs before 0.3.6 kept the server in <repo>/.mcp.json.
+  const legacyMcp = cleanLegacyProjectMcp(root, marker.managed_mcp ?? []);
+  if (legacyMcp.malformed) {
+    log.warn(malformedMcpMessage(legacyMcp.path));
+  } else if (legacyMcp.removed.length > 0) {
+    removeApprovedMcpServers(spec.hooksFile, legacyMcp.removed);
+    await removeLocalExclude(root, [LEGACY_PROJECT_MCP_FILE]);
+    log.ok(
+      legacyMcp.fileDeleted
+        ? `Removed ${LEGACY_PROJECT_MCP_FILE} (server now lives in local scope)`
+        : `Dropped ${legacyMcp.removed.join(", ")} from ${LEGACY_PROJECT_MCP_FILE}`
+    );
   }
 
   const stateMigration = migrateStateLayout(root);

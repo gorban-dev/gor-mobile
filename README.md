@@ -21,7 +21,7 @@ A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Cl
 
 Two-level install (since v0.3.0): `gor-mobile setup` provisions the machine once (`~/.gor-mobile/` rules + hook scripts, the Android CLI, and the user-level Codex workflow under `~/.codex/`, honoring `$CODEX_HOME`); `gor-mobile init` installs the Claude workflow **per repo** under `<repo>/.claude/`. Skills are shared (cross-compatible `SKILL.md`); hooks, reviewer agents, and the global-instructions handling adapt to each agent's format. See [Targets](#targets-claude--codex).
 
-> Status: `v0.3.5` — pre-release scaffolding, under active development on `main`. See `CHANGELOG.md`.
+> Status: `v0.3.6` — pre-release scaffolding, under active development on `main`. See `CHANGELOG.md`.
 
 ## Requirements
 
@@ -102,11 +102,11 @@ Installs the workflow into the current repository, locally (nothing committed):
 - No `CLAUDE.md` managed section: the former workflow pointers are injected by the SessionStart hook, keyed on the `.gor-mobile/marker.json` marker (walk up from cwd). A repo with no marker injects nothing.
 - `superpowers@claude-plugins-official` is disabled in `settings.local.json` so the bundled upstream skills don't duplicate the `gor-mobile-*` copies. `--plugins figma,swagger-android,…` additionally enables named plugins for the repo.
 - `showClearContextOnPlanAccept` is enabled in `settings.local.json`: the writing-plans handoff exits through the plan-approval dialog, whose first option ("Yes, clear context") clears the planning context exactly once; the SessionStart hook then rehydrates execution from the `.gor-mobile/state/<plan>/progress.md` checkpoint (legacy flat `*.progress.md` files are still picked up). Tracked in `.gor-mobile/marker.json` `managed_settings`, removed on `uninstall --project` unless it was already on. Without plan-mode tools the skill falls back to a two-option dialog + manual `/clear` (Codex: `/compact`).
-- `.claude/`, `.gor-mobile/`, and `.mcp.json` are added to `.git/info/exclude` (local ignore — no repo diff). If the folder is not a git repo, `init` offers `git init`; declining falls back to a committed `.gitignore` with a warning.
+- `.claude/` and `.gor-mobile/` are added to `.git/info/exclude` (local ignore — no repo diff). If the folder is not a git repo, `init` offers `git init`; declining falls back to a committed `.gitignore` with a warning.
 - Plan artifacts (`.gor-mobile/plans|specs|state`) have a retention TTL: the SessionStart hook deletes anything untouched for `artifact_ttl_days` (`.gor-mobile/marker.json`, default 30; `0` disables). Freshness is linked per plan — an active plan keeps its spec and workspace alive. `doctor` shows the inventory and the TTL in effect.
 - **Greenfield**: in an empty folder with no build markers, `init` asks the platform (Android / iOS) instead of guessing, then points you at `claude` to scaffold the project.
 - Idempotent: re-running refreshes copies and bumps the marker version.
-- **Documentation sources**: `setup`/`init` register Google's `google-developer-knowledge` MCP server (Firebase, Cloud, Maps, Play — `android docs` still covers Android). The API key lives in `~/.claude/settings.json` `env` and `~/.codex/config.toml`, never in a shell profile and never in `.mcp.json`. `gor-mobile mcp` re-runs the setup and rotates the key.
+- **Documentation sources**: `setup`/`init` register Google's `google-developer-knowledge` MCP server (Firebase, Cloud, Maps, Play — `android docs` still covers Android). On the Claude side it goes into Claude Code's **local scope** — `~/.claude.json`, `projects["<repo>"].mcpServers` — so the repo working tree stays untouched and no approval step is needed. The API key lives in `~/.claude/settings.json` `env` and `~/.codex/config.toml`, never in a shell profile and never in a repo file. `gor-mobile mcp` re-runs the setup and rotates the key.
 
 Flags: `--dry-run`, `--yes`/`-y`, `--no-tui`, `--platform android|ios`, `--plugins <list>`.
 

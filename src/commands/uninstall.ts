@@ -13,10 +13,11 @@ import { uninstallAndroidCli } from "../helpers/android-cli.js";
 import { androidCliPath } from "../helpers/deps.js";
 import { removeEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
 import {
+  cleanLegacyProjectMcp,
+  LEGACY_PROJECT_MCP_FILE,
   malformedMcpMessage,
-  PROJECT_MCP_FILE,
   removeApprovedMcpServers,
-  unregisterProjectMcp
+  unregisterLocalMcp
 } from "../helpers/mcp-register.js";
 import {
   findProjectRoot,
@@ -50,13 +51,13 @@ interface UninstallOptions {
 
 type UninstallMode = "project" | "machine";
 
-// Includes the pre-0.3.5 root-marker line so repos installed before the move
-// come out clean too.
+// Includes the pre-0.3.5 root-marker line and the pre-0.3.6 .mcp.json line so
+// repos installed before those moves come out clean too.
 const EXCLUDE_ENTRIES = [
   ".claude/",
   `${PROJECT_STATE_DIR}/`,
   LEGACY_PROJECT_MARKER_NAME,
-  PROJECT_MCP_FILE
+  LEGACY_PROJECT_MCP_FILE
 ];
 
 async function resolveMode(opts: UninstallOptions): Promise<UninstallMode | null> {
@@ -114,10 +115,20 @@ async function uninstallProject(opts: UninstallOptions): Promise<void> {
   log.ok(`Hooks + plugin overrides removed (${spec.hooksFile})`);
 
   const ownedMcp = marker.managed_mcp ?? [];
-  const mcpRes = unregisterProjectMcp(root, ownedMcp);
+  const mcpRes = unregisterLocalMcp(root, ownedMcp);
   removeApprovedMcpServers(spec.hooksFile, ownedMcp);
   if (mcpRes.malformed) log.warn(malformedMcpMessage(mcpRes.path));
-  else if (ownedMcp.length > 0) log.ok(`MCP servers removed (${ownedMcp.join(", ")})`);
+  else if (ownedMcp.length > 0) log.ok(`MCP servers removed from local scope (${ownedMcp.join(", ")})`);
+  // Pre-0.3.6 installs also left a <repo>/.mcp.json behind.
+  const legacyMcp = cleanLegacyProjectMcp(root, ownedMcp);
+  if (legacyMcp.malformed) log.warn(malformedMcpMessage(legacyMcp.path));
+  else if (legacyMcp.removed.length > 0) {
+    log.ok(
+      legacyMcp.fileDeleted
+        ? `Removed ${LEGACY_PROJECT_MCP_FILE}`
+        : `Dropped ${legacyMcp.removed.join(", ")} from ${LEGACY_PROJECT_MCP_FILE}`
+    );
+  }
 
   if (existsSync(spec.skillsDir)) {
     for (const entry of readdirSync(spec.skillsDir)) {

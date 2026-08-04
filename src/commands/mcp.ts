@@ -9,16 +9,17 @@ import {
   resolveDevKnowledgeKey
 } from "../helpers/dev-knowledge.js";
 import {
-  approveProjectMcpServers,
+  cleanLegacyProjectMcp,
+  LEGACY_PROJECT_MCP_FILE,
+  localMcpState,
   malformedMcpMessage,
-  projectMcpState,
-  PROJECT_MCP_FILE,
-  registerProjectMcp
+  registerLocalMcp,
+  removeApprovedMcpServers
 } from "../helpers/mcp-register.js";
 import {
-  ensureLocalExclude,
   findProjectRoot,
   readProjectMarker,
+  removeLocalExclude,
   writeProjectMarker
 } from "../helpers/project.js";
 import { agentHomeExists, projectClaudeSpec } from "../targets.js";
@@ -36,35 +37,42 @@ export async function cmdMcp(opts: McpOptions = {}): Promise<void> {
 
   log.step(`Documentation sources — ${DEV_KNOWLEDGE_MCP_NAME}`);
 
-  // Project half: register + approve, idempotently.
+  // Project half: register in Claude Code's local scope, idempotently.
   const root = findProjectRoot();
   if (root) {
     const spec = projectClaudeSpec(root);
     const marker = readProjectMarker(root);
-    const res = registerProjectMcp(root, marker.managed_mcp ?? []);
+    const res = registerLocalMcp(root, marker.managed_mcp ?? []);
     if (res.malformed) {
       log.warn(malformedMcpMessage(res.path));
     } else {
       if (res.written) {
-        approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
         // No version bump: this command does not refresh skills, agents or
         // hooks, and doctor's upgrade prompt keys on that field.
         writeProjectMarker(root, {
           ...marker,
           managed_mcp: [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
         });
-        const excl = await ensureLocalExclude(root, [PROJECT_MCP_FILE]);
-        if (excl && excl.added.length > 0) log.ok(`Local ignore updated (${excl.file})`);
       }
       const ownedNow = res.written
         ? [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
         : (marker.managed_mcp ?? []);
-      const st = projectMcpState(root, spec.hooksFile, ownedNow);
-      log.ok(`${res.path} — server ${st.present ? "present" : "missing"}, approval ${st.approved ? "set" : "missing"}`);
+      const st = localMcpState(root, ownedNow);
+      log.ok(`${res.path} — server ${st.present ? "present" : "missing"} for ${root} (local scope)`);
       if (st.present && !st.owned) {
         log.info(`${DEV_KNOWLEDGE_MCP_NAME} is a custom entry (not managed by gor-mobile) — left as is`);
-      } else if (st.approved) {
-        log.muted("Approval applies once you have trusted this repo in Claude Code.");
+      }
+      const legacyMcp = cleanLegacyProjectMcp(root, marker.managed_mcp ?? []);
+      if (legacyMcp.malformed) {
+        log.warn(malformedMcpMessage(legacyMcp.path));
+      } else if (legacyMcp.removed.length > 0) {
+        removeApprovedMcpServers(spec.hooksFile, legacyMcp.removed);
+        await removeLocalExclude(root, [LEGACY_PROJECT_MCP_FILE]);
+        log.ok(
+          legacyMcp.fileDeleted
+            ? `Removed ${LEGACY_PROJECT_MCP_FILE} (server now lives in local scope)`
+            : `Dropped ${legacyMcp.removed.join(", ")} from ${LEGACY_PROJECT_MCP_FILE}`
+        );
       }
     }
   } else {

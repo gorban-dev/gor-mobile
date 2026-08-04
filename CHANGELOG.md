@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.6 — 2026-08-04
+
+Run `gor-mobile repair` in each repo — it moves the MCP registration out of the
+working tree.
+
+- **The Developer Knowledge MCP server left the repo.** It is now registered in
+  Claude Code's *local* scope — `~/.claude.json`,
+  `projects["<repo>"].mcpServers` — instead of `<repo>/.mcp.json`. Nothing
+  gor-mobile provisions lands in the working tree anymore: the project half is
+  `.claude/` plus `.gor-mobile/`, both already local-ignored. Local scope also
+  drops the approval dance — no `enabledMcpjsonServers` entry, no "pending
+  approval" until the repo is trusted. `${GOOGLE_DEVELOPER_KNOWLEDGE_API_KEY}`
+  still expands from `~/.claude/settings.json` `env` (measured on Claude Code
+  2.1.221: the header reaches the server resolved), so the key keeps living in
+  the harness config and only there.
+
+- **Migration is automatic.** `init`, `repair` and `mcp` take the server out of
+  a pre-0.3.6 `<repo>/.mcp.json`, delete the file when nothing else is in it,
+  drop its `.git/info/exclude` line and clear the `enabledMcpjsonServers`
+  leftover. A server in that file that gor-mobile did not write (not in
+  `marker.json` `managed_mcp`) keeps the file alive and stays in it. `doctor`
+  reports a repo that still has the old file. `uninstall --project` cleans both
+  places.
+
+- The project key in `~/.claude.json` is the symlink-resolved repo path, which
+  is what Claude Code reads back; `CLAUDE_CONFIG_DIR` moves the file out of
+  `$HOME` and is honored.
+
 ## 0.3.5 — 2026-08-03
 
 Requires `gor-mobile repair` — templates changed.

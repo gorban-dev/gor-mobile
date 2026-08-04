@@ -5,7 +5,7 @@ import { Command } from "commander";
 import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-var GOR_MOBILE_VERSION = "0.3.5";
+var GOR_MOBILE_VERSION = "0.3.6";
 var HOME = homedir();
 var GOR_MOBILE_HOME = process.env.GOR_MOBILE_HOME ?? join(HOME, ".gor-mobile");
 var GOR_MOBILE_RULES_DIR = join(GOR_MOBILE_HOME, "rules");
@@ -17,6 +17,7 @@ var CLAUDE_DIR = join(HOME, ".claude");
 var CLAUDE_SETTINGS = join(CLAUDE_DIR, "settings.json");
 var CLAUDE_CLAUDE_MD = join(CLAUDE_DIR, "CLAUDE.md");
 var CLAUDE_MCP = join(CLAUDE_DIR, "mcp.json");
+var CLAUDE_JSON = join(process.env.CLAUDE_CONFIG_DIR ?? HOME, ".claude.json");
 var CLAUDE_COMMANDS_DIR = join(CLAUDE_DIR, "commands");
 var CLAUDE_AGENTS_DIR = join(CLAUDE_DIR, "agents");
 var CLAUDE_SKILLS_DIR = join(CLAUDE_DIR, "skills");
@@ -2010,7 +2011,7 @@ function removeEnabledPlugins(file, keys) {
 }
 
 // src/helpers/mcp-register.ts
-import { existsSync as existsSync15, readFileSync as readFileSync7, rmSync as rmSync4 } from "fs";
+import { existsSync as existsSync15, readFileSync as readFileSync7, realpathSync, rmSync as rmSync4 } from "fs";
 import { join as join9 } from "path";
 function unregisterManaged() {
   if (!existsSync15(CLAUDE_MCP)) return;
@@ -2025,12 +2026,16 @@ function unregisterManaged() {
   cfg.mcpServers = filtered;
   writeJson(CLAUDE_MCP, cfg);
 }
-var PROJECT_MCP_FILE = ".mcp.json";
+var LEGACY_PROJECT_MCP_FILE = ".mcp.json";
 function malformedMcpMessage(path) {
   return `${path} is not valid JSON \u2014 left untouched; fix it and re-run`;
 }
-function projectMcpPath(root) {
-  return join9(root, PROJECT_MCP_FILE);
+function projectKey(root) {
+  try {
+    return realpathSync(root);
+  } catch {
+    return root;
+  }
 }
 function devKnowledgeEntry() {
   return {
@@ -2039,7 +2044,7 @@ function devKnowledgeEntry() {
     headers: { "X-Goog-Api-Key": `\${${DEV_KNOWLEDGE_API_KEY_ENV}}` }
   };
 }
-function readProjectMcp(path) {
+function readObjectJson(path) {
   if (!existsSync15(path)) return { malformed: false, config: {} };
   try {
     const parsed = JSON.parse(readFileSync7(path, "utf8"));
@@ -2051,52 +2056,78 @@ function readProjectMcp(path) {
     return { malformed: true, config: null };
   }
 }
-function registerProjectMcp(root, owned = []) {
-  const path = projectMcpPath(root);
-  const read = readProjectMcp(path);
-  if (read.malformed) return { written: false, path, malformed: true };
+function registerLocalMcp(root, owned = []) {
+  const read = readObjectJson(CLAUDE_JSON);
+  if (read.malformed) return { written: false, path: CLAUDE_JSON, malformed: true };
   const cfg = read.config;
-  const servers = cfg.mcpServers ?? {};
+  const projects = cfg.projects ?? {};
+  const key = projectKey(root);
+  const entry = projects[key] ?? {};
+  const servers = entry.mcpServers ?? {};
   if (servers[DEV_KNOWLEDGE_MCP_NAME] && !owned.includes(DEV_KNOWLEDGE_MCP_NAME)) {
-    return { written: false, path };
+    return { written: false, path: CLAUDE_JSON };
   }
   servers[DEV_KNOWLEDGE_MCP_NAME] = devKnowledgeEntry();
-  cfg.mcpServers = servers;
-  writeJson(path, cfg);
-  return { written: true, path };
+  entry.mcpServers = servers;
+  projects[key] = entry;
+  cfg.projects = projects;
+  writeJson(CLAUDE_JSON, cfg);
+  return { written: true, path: CLAUDE_JSON };
 }
-function unregisterProjectMcp(root, names) {
-  const path = projectMcpPath(root);
-  if (!existsSync15(path)) return { written: false, path };
-  const read = readProjectMcp(path);
-  if (read.malformed) return { written: false, path, malformed: true };
+function unregisterLocalMcp(root, names) {
+  if (!existsSync15(CLAUDE_JSON)) return { written: false, path: CLAUDE_JSON };
+  const read = readObjectJson(CLAUDE_JSON);
+  if (read.malformed) return { written: false, path: CLAUDE_JSON, malformed: true };
   const cfg = read.config;
-  if (!cfg.mcpServers) return { written: false, path };
-  for (const name of names) delete cfg.mcpServers[name];
-  const nothingLeft = Object.keys(cfg.mcpServers).length === 0 && Object.keys(cfg).filter((k) => k !== "mcpServers").length === 0;
-  if (nothingLeft) {
-    rmSync4(path, { force: true });
-    return { written: true, path };
+  const servers = cfg.projects?.[projectKey(root)]?.mcpServers;
+  if (!servers) return { written: false, path: CLAUDE_JSON };
+  let touched = false;
+  for (const name of names) {
+    if (name in servers) {
+      delete servers[name];
+      touched = true;
+    }
   }
-  writeJson(path, cfg);
-  return { written: true, path };
+  if (!touched) return { written: false, path: CLAUDE_JSON };
+  writeJson(CLAUDE_JSON, cfg);
+  return { written: true, path: CLAUDE_JSON };
 }
-function projectMcpState(root, hooksFile, owned = []) {
-  const read = readProjectMcp(projectMcpPath(root));
-  const present = !read.malformed && Boolean(read.config.mcpServers?.[DEV_KNOWLEDGE_MCP_NAME]);
-  const settings = readJsonSafe(hooksFile, {});
+function localMcpState(root, owned = []) {
+  const read = readObjectJson(CLAUDE_JSON);
+  if (read.malformed) return { present: false, owned: false, malformed: true };
+  const present = Boolean(
+    read.config.projects?.[projectKey(root)]?.mcpServers?.[DEV_KNOWLEDGE_MCP_NAME]
+  );
   return {
     present,
-    approved: (settings.enabledMcpjsonServers ?? []).includes(DEV_KNOWLEDGE_MCP_NAME),
     owned: present && owned.includes(DEV_KNOWLEDGE_MCP_NAME),
-    malformed: read.malformed
+    malformed: false
   };
 }
-function approveProjectMcpServers(hooksFile, names) {
-  const settings = readJsonSafe(hooksFile, {});
-  const current = Array.isArray(settings.enabledMcpjsonServers) ? settings.enabledMcpjsonServers : [];
-  settings.enabledMcpjsonServers = [.../* @__PURE__ */ new Set([...current, ...names])];
-  writeJson(hooksFile, settings);
+function legacyProjectMcpServers(root) {
+  const read = readObjectJson(join9(root, LEGACY_PROJECT_MCP_FILE));
+  if (read.malformed) return [];
+  return Object.keys(read.config.mcpServers ?? {});
+}
+function cleanLegacyProjectMcp(root, names) {
+  const path = join9(root, LEGACY_PROJECT_MCP_FILE);
+  const base = { path, removed: [], fileDeleted: false, malformed: false };
+  if (!existsSync15(path)) return base;
+  const read = readObjectJson(path);
+  if (read.malformed) return { ...base, malformed: true };
+  const cfg = read.config;
+  const servers = cfg.mcpServers ?? {};
+  const removed = names.filter((n) => n in servers);
+  if (removed.length === 0) return base;
+  for (const name of removed) delete servers[name];
+  const nothingLeft = Object.keys(servers).length === 0 && Object.keys(cfg).filter((k) => k !== "mcpServers").length === 0;
+  if (nothingLeft) {
+    rmSync4(path, { force: true });
+    return { ...base, removed, fileDeleted: true };
+  }
+  cfg.mcpServers = servers;
+  writeJson(path, cfg);
+  return { ...base, removed };
 }
 function removeApprovedMcpServers(hooksFile, names) {
   const settings = readJsonSafe(hooksFile, {});
@@ -2349,7 +2380,7 @@ function artifactInventory(root) {
 }
 
 // src/commands/init.ts
-var EXCLUDE_ENTRIES = [".claude/", `${PROJECT_STATE_DIR}/`, PROJECT_MCP_FILE];
+var EXCLUDE_ENTRIES = [".claude/", `${PROJECT_STATE_DIR}/`];
 function machineReady() {
   if (!existsSync18(join12(GOR_MOBILE_TEMPLATES_DIR, "session-start-hook.sh"))) {
     return { ok: false, reason: "hook scripts not found in ~/.gor-mobile/templates" };
@@ -2476,11 +2507,11 @@ async function cmdInit(opts = {}) {
       `merge SessionStart + UserPromptSubmit + PreToolUse \u2192 ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` + (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
       `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
-      `register ${DEV_KNOWLEDGE_MCP_NAME} \u2192 ${join12(root, PROJECT_MCP_FILE)}`,
-      `approve it via enabledMcpjsonServers in ${spec.hooksFile}`,
+      `register ${DEV_KNOWLEDGE_MCP_NAME} \u2192 ${CLAUDE_JSON} (local scope, projects["${root}"])`,
       "android init \u2192 copy stock skill into .claude/skills, drop Claude-home copy",
       `write ${PROJECT_MARKER_NAME} (platform=${platform})`,
       ...legacyMarker ? [`move ${LEGACY_PROJECT_MARKER_NAME} \u2192 ${PROJECT_MARKER_NAME}, drop its exclude line`] : [],
+      ...existsSync18(join12(root, LEGACY_PROJECT_MCP_FILE)) ? [`drop ${DEV_KNOWLEDGE_MCP_NAME} from ${LEGACY_PROJECT_MCP_FILE}, clear its exclude line`] : [],
       `git exclude += ${EXCLUDE_ENTRIES.join(", ")}`
     ]) {
       console.log(`    ${pc8.dim("[dry-run]")} ${line}`);
@@ -2504,14 +2535,23 @@ async function cmdInit(opts = {}) {
   log.ok(
     extraPlugins.length > 0 ? `Plugins: disabled superpowers, enabled ${extraPlugins.join(", ")}` : "Disabled duplicate superpowers plugin for this repo"
   );
-  const mcp = registerProjectMcp(root, marker.managed_mcp ?? []);
+  const mcp = registerLocalMcp(root, marker.managed_mcp ?? []);
   if (mcp.written) {
-    approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
-    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} \u2192 ${mcp.path} (approved in settings.local.json)`);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} \u2192 ${mcp.path} (local scope, nothing in the repo)`);
   } else if (mcp.malformed) {
     log.warn(malformedMcpMessage(mcp.path));
   } else {
     log.info(`${DEV_KNOWLEDGE_MCP_NAME} already configured by hand \u2014 left as is`);
+  }
+  const legacyMcp = cleanLegacyProjectMcp(root, marker.managed_mcp ?? []);
+  if (legacyMcp.malformed) {
+    log.warn(malformedMcpMessage(legacyMcp.path));
+  } else if (legacyMcp.removed.length > 0) {
+    removeApprovedMcpServers(spec.hooksFile, legacyMcp.removed);
+    await removeLocalExclude(root, [LEGACY_PROJECT_MCP_FILE]);
+    log.ok(
+      legacyMcp.fileDeleted ? `Removed ${LEGACY_PROJECT_MCP_FILE} (server now lives in local scope)` : `Dropped ${legacyMcp.removed.join(", ")} from ${LEGACY_PROJECT_MCP_FILE}`
+    );
   }
   const managedMcp = mcp.written ? [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])] : marker.managed_mcp ?? [];
   if (resolveDevKnowledgeKey().key === null) {
@@ -3004,17 +3044,23 @@ function checkProject(root) {
     );
   }
   const spec = projectClaudeSpec(root);
-  const mcp = projectMcpState(root, spec.hooksFile, marker.managed_mcp ?? []);
+  const mcp = localMcpState(root, marker.managed_mcp ?? []);
   if (mcp.malformed) {
-    log.warn(".mcp.json is not valid JSON \u2014 fix it, then run 'gor-mobile mcp'");
+    log.warn(`${CLAUDE_JSON} is not valid JSON \u2014 fix it, then run 'gor-mobile mcp'`);
   } else if (!mcp.present) {
-    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from .mcp.json \u2014 run 'gor-mobile mcp'`);
+    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from local scope \u2014 run 'gor-mobile mcp'`);
   } else if (!mcp.owned) {
     log.info(`${DEV_KNOWLEDGE_MCP_NAME}: custom entry (not managed by gor-mobile)`);
-  } else if (!mcp.approved) {
-    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} not pre-approved \u2014 run 'gor-mobile repair'`);
   } else {
-    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} configured + pre-approved (approve on first 'claude' run)`);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} configured in local scope (${CLAUDE_JSON})`);
+  }
+  const staleLegacy = legacyProjectMcpServers(root).filter(
+    (n) => (marker.managed_mcp ?? []).includes(n)
+  );
+  if (staleLegacy.length > 0) {
+    log.warn(
+      `${LEGACY_PROJECT_MCP_FILE} still registers ${staleLegacy.join(", ")} \u2014 run 'gor-mobile repair' to clear the pre-0.3.6 entry`
+    );
   }
   checkTarget(spec);
   return spec;
@@ -3139,14 +3185,21 @@ async function repairProject(root) {
   applyEnabledPlugins(spec.hooksFile, [], [SUPERPOWERS_KEY]);
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
   const marker = readProjectMarker(root);
-  const mcpRes = registerProjectMcp(root, marker.managed_mcp ?? []);
+  const mcpRes = registerLocalMcp(root, marker.managed_mcp ?? []);
   if (mcpRes.written) {
-    approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
-    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed \u2192 ${mcpRes.path}`);
-    const excl = await ensureLocalExclude(root, [PROJECT_MCP_FILE]);
-    if (excl && excl.added.length > 0) log.ok(`Local ignore updated (${excl.file})`);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed \u2192 ${mcpRes.path} (local scope)`);
   } else if (mcpRes.malformed) {
     log.warn(malformedMcpMessage(mcpRes.path));
+  }
+  const legacyMcp = cleanLegacyProjectMcp(root, marker.managed_mcp ?? []);
+  if (legacyMcp.malformed) {
+    log.warn(malformedMcpMessage(legacyMcp.path));
+  } else if (legacyMcp.removed.length > 0) {
+    removeApprovedMcpServers(spec.hooksFile, legacyMcp.removed);
+    await removeLocalExclude(root, [LEGACY_PROJECT_MCP_FILE]);
+    log.ok(
+      legacyMcp.fileDeleted ? `Removed ${LEGACY_PROJECT_MCP_FILE} (server now lives in local scope)` : `Dropped ${legacyMcp.removed.join(", ")} from ${LEGACY_PROJECT_MCP_FILE}`
+    );
   }
   const stateMigration = migrateStateLayout(root);
   if (stateMigration.migrated.length > 0) {
@@ -3228,26 +3281,31 @@ async function cmdMcp(opts = {}) {
   if (root) {
     const spec = projectClaudeSpec(root);
     const marker = readProjectMarker(root);
-    const res = registerProjectMcp(root, marker.managed_mcp ?? []);
+    const res = registerLocalMcp(root, marker.managed_mcp ?? []);
     if (res.malformed) {
       log.warn(malformedMcpMessage(res.path));
     } else {
       if (res.written) {
-        approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
         writeProjectMarker(root, {
           ...marker,
           managed_mcp: [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])]
         });
-        const excl = await ensureLocalExclude(root, [PROJECT_MCP_FILE]);
-        if (excl && excl.added.length > 0) log.ok(`Local ignore updated (${excl.file})`);
       }
       const ownedNow = res.written ? [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])] : marker.managed_mcp ?? [];
-      const st = projectMcpState(root, spec.hooksFile, ownedNow);
-      log.ok(`${res.path} \u2014 server ${st.present ? "present" : "missing"}, approval ${st.approved ? "set" : "missing"}`);
+      const st = localMcpState(root, ownedNow);
+      log.ok(`${res.path} \u2014 server ${st.present ? "present" : "missing"} for ${root} (local scope)`);
       if (st.present && !st.owned) {
         log.info(`${DEV_KNOWLEDGE_MCP_NAME} is a custom entry (not managed by gor-mobile) \u2014 left as is`);
-      } else if (st.approved) {
-        log.muted("Approval applies once you have trusted this repo in Claude Code.");
+      }
+      const legacyMcp = cleanLegacyProjectMcp(root, marker.managed_mcp ?? []);
+      if (legacyMcp.malformed) {
+        log.warn(malformedMcpMessage(legacyMcp.path));
+      } else if (legacyMcp.removed.length > 0) {
+        removeApprovedMcpServers(spec.hooksFile, legacyMcp.removed);
+        await removeLocalExclude(root, [LEGACY_PROJECT_MCP_FILE]);
+        log.ok(
+          legacyMcp.fileDeleted ? `Removed ${LEGACY_PROJECT_MCP_FILE} (server now lives in local scope)` : `Dropped ${legacyMcp.removed.join(", ")} from ${LEGACY_PROJECT_MCP_FILE}`
+        );
       }
     }
   } else {
@@ -3297,7 +3355,7 @@ var EXCLUDE_ENTRIES2 = [
   ".claude/",
   `${PROJECT_STATE_DIR}/`,
   LEGACY_PROJECT_MARKER_NAME,
-  PROJECT_MCP_FILE
+  LEGACY_PROJECT_MCP_FILE
 ];
 async function resolveMode(opts) {
   if (opts.machine) return "machine";
@@ -3346,10 +3404,17 @@ async function uninstallProject(opts) {
   }
   log.ok(`Hooks + plugin overrides removed (${spec.hooksFile})`);
   const ownedMcp = marker.managed_mcp ?? [];
-  const mcpRes = unregisterProjectMcp(root, ownedMcp);
+  const mcpRes = unregisterLocalMcp(root, ownedMcp);
   removeApprovedMcpServers(spec.hooksFile, ownedMcp);
   if (mcpRes.malformed) log.warn(malformedMcpMessage(mcpRes.path));
-  else if (ownedMcp.length > 0) log.ok(`MCP servers removed (${ownedMcp.join(", ")})`);
+  else if (ownedMcp.length > 0) log.ok(`MCP servers removed from local scope (${ownedMcp.join(", ")})`);
+  const legacyMcp = cleanLegacyProjectMcp(root, ownedMcp);
+  if (legacyMcp.malformed) log.warn(malformedMcpMessage(legacyMcp.path));
+  else if (legacyMcp.removed.length > 0) {
+    log.ok(
+      legacyMcp.fileDeleted ? `Removed ${LEGACY_PROJECT_MCP_FILE}` : `Dropped ${legacyMcp.removed.join(", ")} from ${LEGACY_PROJECT_MCP_FILE}`
+    );
+  }
   if (existsSync22(spec.skillsDir)) {
     for (const entry of readdirSync9(spec.skillsDir)) {
       if (entry.startsWith("gor-mobile-") || entry === "android-cli") {

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
 import {
+  CLAUDE_JSON,
   DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_CONFIG,
   GOR_MOBILE_HOME,
@@ -17,7 +18,11 @@ import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-
 import { ANDROID_CONTRACT } from "../android-contract.js";
 import { codexMcpState } from "../helpers/codex-mcp.js";
 import { KEY_SOURCE_LABEL, resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
-import { projectMcpState } from "../helpers/mcp-register.js";
+import {
+  LEGACY_PROJECT_MCP_FILE,
+  legacyProjectMcpServers,
+  localMcpState
+} from "../helpers/mcp-register.js";
 import { countManagedHooks } from "../helpers/settings-merge.js";
 import { statusLineState } from "../helpers/settings-statusline.js";
 import { codexStatusLineState } from "../helpers/codex-statusline.js";
@@ -354,19 +359,27 @@ function checkProject(root: string): TargetSpec {
     );
   }
   const spec = projectClaudeSpec(root);
-  const mcp = projectMcpState(root, spec.hooksFile, marker.managed_mcp ?? []);
+  const mcp = localMcpState(root, marker.managed_mcp ?? []);
   if (mcp.malformed) {
-    log.warn(".mcp.json is not valid JSON — fix it, then run 'gor-mobile mcp'");
+    log.warn(`${CLAUDE_JSON} is not valid JSON — fix it, then run 'gor-mobile mcp'`);
   } else if (!mcp.present) {
-    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from .mcp.json — run 'gor-mobile mcp'`);
+    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} missing from local scope — run 'gor-mobile mcp'`);
   } else if (!mcp.owned) {
     // Hand-configured: repair leaves it alone, so "run repair" would be advice
     // that can never come true. Mirrors the Codex branch below.
     log.info(`${DEV_KNOWLEDGE_MCP_NAME}: custom entry (not managed by gor-mobile)`);
-  } else if (!mcp.approved) {
-    log.warn(`${DEV_KNOWLEDGE_MCP_NAME} not pre-approved — run 'gor-mobile repair'`);
   } else {
-    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} configured + pre-approved (approve on first 'claude' run)`);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} configured in local scope (${CLAUDE_JSON})`);
+  }
+  // Only ours is worth reporting: a .mcp.json holding somebody else's servers
+  // is the team's file, and repair will not touch it.
+  const staleLegacy = legacyProjectMcpServers(root).filter((n) =>
+    (marker.managed_mcp ?? []).includes(n)
+  );
+  if (staleLegacy.length > 0) {
+    log.warn(
+      `${LEGACY_PROJECT_MCP_FILE} still registers ${staleLegacy.join(", ")} — run 'gor-mobile repair' to clear the pre-0.3.6 entry`
+    );
   }
   checkTarget(spec);
   return spec;

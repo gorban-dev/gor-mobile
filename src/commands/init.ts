@@ -3,6 +3,7 @@ import { join } from "node:path";
 import pc from "picocolors";
 import { cancel, isCancel, select } from "@clack/prompts";
 import {
+  CLAUDE_JSON,
   DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_TEMPLATES_DIR,
   GOR_MOBILE_VERSION,
@@ -17,10 +18,11 @@ import { resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
 import { applyEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
 import { installAgents, installSkills } from "../helpers/install-assets.js";
 import {
-  approveProjectMcpServers,
+  cleanLegacyProjectMcp,
+  LEGACY_PROJECT_MCP_FILE,
   malformedMcpMessage,
-  PROJECT_MCP_FILE,
-  registerProjectMcp
+  registerLocalMcp,
+  removeApprovedMcpServers
 } from "../helpers/mcp-register.js";
 import {
   classifyDir,
@@ -67,7 +69,7 @@ export interface InitOptions {
 
 // Local-ignore entries so nothing gor-mobile writes shows up in git. The
 // marker lives under .gor-mobile/, so that one directory line covers it.
-const EXCLUDE_ENTRIES = [".claude/", `${PROJECT_STATE_DIR}/`, PROJECT_MCP_FILE];
+const EXCLUDE_ENTRIES = [".claude/", `${PROJECT_STATE_DIR}/`];
 
 function machineReady(): { ok: boolean; reason?: string } {
   if (!existsSync(join(GOR_MOBILE_TEMPLATES_DIR, "session-start-hook.sh"))) {
@@ -220,12 +222,14 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` +
         (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
       `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
-      `register ${DEV_KNOWLEDGE_MCP_NAME} → ${join(root, PROJECT_MCP_FILE)}`,
-      `approve it via enabledMcpjsonServers in ${spec.hooksFile}`,
+      `register ${DEV_KNOWLEDGE_MCP_NAME} → ${CLAUDE_JSON} (local scope, projects["${root}"])`,
       "android init → copy stock skill into .claude/skills, drop Claude-home copy",
       `write ${PROJECT_MARKER_NAME} (platform=${platform})`,
       ...(legacyMarker
         ? [`move ${LEGACY_PROJECT_MARKER_NAME} → ${PROJECT_MARKER_NAME}, drop its exclude line`]
+        : []),
+      ...(existsSync(join(root, LEGACY_PROJECT_MCP_FILE))
+        ? [`drop ${DEV_KNOWLEDGE_MCP_NAME} from ${LEGACY_PROJECT_MCP_FILE}, clear its exclude line`]
         : []),
       `git exclude += ${EXCLUDE_ENTRIES.join(", ")}`
     ]) {
@@ -264,14 +268,28 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
 
   // Ownership comes from the marker: a same-named entry we did not write is a
   // hand-configured server and must survive an idempotent re-init.
-  const mcp = registerProjectMcp(root, marker.managed_mcp ?? []);
+  const mcp = registerLocalMcp(root, marker.managed_mcp ?? []);
   if (mcp.written) {
-    approveProjectMcpServers(spec.hooksFile, [DEV_KNOWLEDGE_MCP_NAME]);
-    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} → ${mcp.path} (approved in settings.local.json)`);
+    log.ok(`${DEV_KNOWLEDGE_MCP_NAME} → ${mcp.path} (local scope, nothing in the repo)`);
   } else if (mcp.malformed) {
     log.warn(malformedMcpMessage(mcp.path));
   } else {
     log.info(`${DEV_KNOWLEDGE_MCP_NAME} already configured by hand — left as is`);
+  }
+
+  // Installs before 0.3.6 put the server in <repo>/.mcp.json. Local scope
+  // replaces it, so the stray file, its approval entry and its ignore line go.
+  const legacyMcp = cleanLegacyProjectMcp(root, marker.managed_mcp ?? []);
+  if (legacyMcp.malformed) {
+    log.warn(malformedMcpMessage(legacyMcp.path));
+  } else if (legacyMcp.removed.length > 0) {
+    removeApprovedMcpServers(spec.hooksFile, legacyMcp.removed);
+    await removeLocalExclude(root, [LEGACY_PROJECT_MCP_FILE]);
+    log.ok(
+      legacyMcp.fileDeleted
+        ? `Removed ${LEGACY_PROJECT_MCP_FILE} (server now lives in local scope)`
+        : `Dropped ${legacyMcp.removed.join(", ")} from ${LEGACY_PROJECT_MCP_FILE}`
+    );
   }
   const managedMcp = mcp.written
     ? [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]

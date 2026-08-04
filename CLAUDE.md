@@ -50,6 +50,7 @@ Layout per scope:
 | Instructions | injected by SessionStart hook (no file) | `AGENTS.md` managed section (same markers) |
 | Plugins | `settings.local.json` `enabledPlugins` (superpowers off) | — |
 | Status line | — (user-level, `setup` only) | `config.toml` `[tui].status_line` (built-in items) |
+| MCP | `~/.claude.json` → `projects["<repo>"].mcpServers` (local scope) | `config.toml` `[mcp_servers.*]` |
 | Marker | `<repo>/.gor-mobile/marker.json` (platform, version) | — |
 
 The shared hook scripts (`~/.gor-mobile/templates/`) are target-neutral;
