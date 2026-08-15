@@ -1,8 +1,8 @@
 <p align="center">
-  <img src=".github/assets/banner.png" alt="Camel — gor-mobile" width="100%">
+  <img src=".github/assets/banner.png" alt="gor-mobile" width="100%">
 </p>
 
-<h1 align="center">Camel</h1>
+<h1 align="center">gor-mobile</h1>
 
 <p align="center">
   <b>Turn Claude Code &amp; Codex into a mobile engineer.</b><br>
