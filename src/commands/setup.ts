@@ -28,6 +28,12 @@ import {
   astIndexPath
 } from "../helpers/ast-index.js";
 import {
+  DEBROID_INSTALL_CMD,
+  DEBROID_REPO_URL,
+  debroidContract,
+  debroidPath
+} from "../helpers/debroid.js";
+import {
   captureDevKnowledgeKey,
   offerDevKnowledgeLinks,
   persistDevKnowledgeKey,
@@ -112,7 +118,7 @@ function warnLegacy(): void {
 }
 
 async function stepDeps(): Promise<void> {
-  sectionHeader(1, 6, "Base dependencies");
+  sectionHeader(1, 7, "Base dependencies");
   const required: Array<[string, string | null]> = [
     ["git", which("git")],
     ["curl", which("curl")],
@@ -137,7 +143,7 @@ async function stepDeps(): Promise<void> {
 }
 
 async function stepAndroidBinary(ctx: SetupCtx): Promise<void> {
-  sectionHeader(2, 6, "Google Android CLI");
+  sectionHeader(2, 7, "Google Android CLI");
   const existing = androidCliPath();
   if (existing) {
     progressItem(1, 1, "android CLI", "ok", existing);
@@ -200,7 +206,7 @@ async function stepAndroidBinary(ctx: SetupCtx): Promise<void> {
 }
 
 function stepAstIndex(ctx: SetupCtx): void {
-  sectionHeader(3, 6, "ast-index CLI (code search)");
+  sectionHeader(3, 7, "ast-index CLI (code search)");
   if (ctx.opts.dryRun) {
     progressItem(1, 1, "ast-index CLI", "skip", "dry-run: which ast-index");
     return;
@@ -225,8 +231,42 @@ function stepAstIndex(ctx: SetupCtx): void {
   );
 }
 
+async function stepDebroid(ctx: SetupCtx): Promise<void> {
+  sectionHeader(4, 7, "debroid (runtime Android debugging, optional)");
+  if (ctx.opts.dryRun) {
+    progressItem(1, 1, "debroid CLI", "skip", "dry-run: which debroid");
+    return;
+  }
+  const path = debroidPath();
+  if (path) {
+    const dc = await debroidContract();
+    progressItem(1, 1, "debroid CLI", dc.missing.length > 0 ? "warn" : "ok",
+      dc.missing.length > 0 ? `missing: ${dc.missing.join(", ")}` : path);
+    return;
+  }
+  progressItem(1, 1, "debroid CLI", "warn", "not found");
+  note(
+    [
+      "debroid gives agents a live JDWP debugger: breakpoints, exception",
+      "traps, memory inspection, variable mutation on a running app.",
+      "The systematic-debugging skill uses it for runtime evidence when a",
+      "bug reproduces on a device/emulator.",
+      "",
+      `Install: ${DEBROID_INSTALL_CMD}`,
+      `Repo: ${DEBROID_REPO_URL}`
+    ].join("\n"),
+    "debroid optional"
+  );
+  if (ctx.opts.yes || !isTuiOn()) return;
+  const doInstall = await confirmStep("Install debroid now (runs the official install script)?", false);
+  if (!doInstall) return;
+  const res = await execa("bash", ["-c", DEBROID_INSTALL_CMD], { reject: false, stdio: "inherit" });
+  if (res.exitCode === 0 && debroidPath()) progressItem(1, 1, "debroid CLI", "ok", debroidPath() ?? "installed");
+  else log.warn("debroid install did not complete — install manually and re-run 'gor-mobile doctor'");
+}
+
 async function stepRules(ctx: SetupCtx): Promise<void> {
-  sectionHeader(4, 6, "Rules pack + shared hook scripts");
+  sectionHeader(5, 7, "Rules pack + shared hook scripts");
 
   if (ctx.opts.advanced && !ctx.opts.rules) {
     ctx.rulesUrl = await textPrompt("Rules pack URL", ctx.rulesUrl, (v) => {
@@ -291,7 +331,7 @@ async function stepClaudeStatusLine(ctx: SetupCtx): Promise<void> {
 // connection is `claude` or `codex`, never gor-mobile. Nothing is written to a
 // shell profile, so a GUI-launched agent sees the key too.
 async function stepDocSources(ctx: SetupCtx): Promise<void> {
-  sectionHeader(5, 6, "Documentation sources (MCP)");
+  sectionHeader(6, 7, "Documentation sources (MCP)");
 
   if (ctx.opts.dryRun) {
     dryLog(`register ${DEV_KNOWLEDGE_MCP_NAME} → ~/.codex/config.toml`);
@@ -337,7 +377,7 @@ async function stepDocSources(ctx: SetupCtx): Promise<void> {
 async function stepCodex(ctx: SetupCtx): Promise<void> {
   if (!ctx.installCodex) return;
   const target = TARGETS.codex;
-  sectionHeader(6, 6, "Codex integration (user-level)");
+  sectionHeader(7, 7, "Codex integration (user-level)");
 
   if (ctx.opts.dryRun) {
     dryLog(`merge SessionStart + UserPromptSubmit + PreToolUse → ${target.hooksFile}`);
@@ -397,6 +437,7 @@ export async function cmdSetup(opts: SetupOptions = {}): Promise<void> {
     "Verify base deps (git, curl, node, jq).",
     "Install + update the Google Android CLI (hard requirement).",
     "Soft-check the ast-index CLI.",
+    "Offer to install debroid (optional runtime Android debugger).",
     "Clone the rules pack + hook scripts into ~/.gor-mobile/.",
     "Optionally install a Claude status line.",
     "Connect Google's Developer Knowledge MCP docs source.",
@@ -421,6 +462,7 @@ export async function cmdSetup(opts: SetupOptions = {}): Promise<void> {
     await stepDeps();
     await stepAndroidBinary(ctx);
     stepAstIndex(ctx);
+    await stepDebroid(ctx);
     await stepRules(ctx);
     await stepClaudeStatusLine(ctx);
     await stepDocSources(ctx);

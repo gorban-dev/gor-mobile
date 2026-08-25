@@ -183,7 +183,7 @@ export const WORKFLOW_PERMISSION_ENTRIES = [
  * Resolve the newest installed Codex companion script and return an exact-path
  * Bash allow entry for it (`Bash(node <abs-path>:*)`), or null when the plugin
  * is not installed. No shell involved (plain fs readdir + mtime sort), unlike
- * the `ls -t ... | head -1` the workflow's own scope agent runs at review time.
+ * the `ls -t` listing the workflow's own scope agent runs at review time.
  */
 export function codexCompanionAllowEntry(): string | null {
   const codexDir = join(HOME, ".claude", "plugins", "cache", "openai-codex", "codex");

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { cpSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import pc from "picocolors";
 import { cancel, isCancel, select } from "@clack/prompts";
@@ -14,6 +14,7 @@ import {
 import { provisionProjectAndroidSkill } from "../helpers/android-cli.js";
 import { androidCliPath } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
+import { debroidSkillSourceDir } from "../helpers/debroid.js";
 import { resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
 import { applyEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
 import { installAgents, installSkills, installWorkflows } from "../helpers/install-assets.js";
@@ -227,7 +228,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       `install skills → ${spec.skillsDir}`,
       `install agents → ${spec.agentsDir}`,
       `install workflows → ${spec.workflowsDir}`,
-      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls, gradle, SDD scripts, codex companion) → ${spec.hooksFile}`,
+      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls, gradle, android CLI, SDD scripts + codex companion) → ${spec.hooksFile}`,
       `merge SessionStart + UserPromptSubmit + PreToolUse → ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` +
         (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
@@ -265,7 +266,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   const agents = installAgents(spec);
   log.ok(`${agents.length} review agents → ${spec.agentsDir}`);
 
-  const workflows = installWorkflows(spec);
+  const workflows = installWorkflows(spec, marker.managed_workflows ?? []);
   log.ok(`${workflows.length} workflows → ${spec.workflowsDir}`);
 
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
@@ -340,6 +341,12 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   else if (!android.ran) log.warn("android CLI not on PATH — skipped android-cli skill (run 'gor-mobile setup')");
   else log.warn(`android-cli skill not placed: ${android.error ?? "stock skill missing"}`);
 
+  const debroidSrc = debroidSkillSourceDir();
+  if (existsSync(join(debroidSrc, "SKILL.md"))) {
+    cpSync(debroidSrc, join(spec.skillsDir, "debroid-cli"), { recursive: true });
+    log.ok(`debroid-cli skill → ${spec.skillsDir}/debroid-cli/`);
+  }
+
   if (platform === "android") noteAstIndex(root);
 
   const stateMigration = migrateStateLayout(root);
@@ -362,7 +369,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
         ...addedPerms
       ])
     ],
-    managed_workflows: workflows,
+    managed_workflows: [...new Set([...(marker.managed_workflows ?? []), ...workflows])],
     managed_mcp: managedMcp,
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };

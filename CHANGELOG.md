@@ -25,9 +25,9 @@ existing installs will not have the workflows, the permission allowlist,
 - **SDD scripts** (`sdd-workspace`, `sdd-snapshot`, `task-brief`,
   `review-package`) are now installed to `~/.gor-mobile/scripts` by `setup`,
   so `/gor-execute` can call them by absolute path from any repo.
-- The workflow permission allowlist gains `./gradlew` and an exact-path rule
-  for the `~/.gor-mobile/scripts` directory, alongside the existing
-  git/ls/codex-companion entries.
+- The workflow permission allowlist gains `./gradlew` and `android` (device
+  control) and an exact-path rule for the `~/.gor-mobile/scripts` directory,
+  alongside the existing git/ls/codex-companion entries.
 - **Claude project installs no longer ship the six orchestration skills**
   (`subagent-driven-development`, `executing-plans`, `requesting-code-review`,
   `receiving-code-review`, `verification-before-completion`,
@@ -37,6 +37,20 @@ existing installs will not have the workflows, the permission allowlist,
   plan approval); the prompt-submit reminder routes review/execute requests
   to the workflows instead of the removed skills. `gor-mobile repair` removes
   the six from existing Claude installs.
+
+- **`debroid` integration** (optional runtime Android debugger —
+  https://github.com/PatilShreyas/debroid): `doctor` detects the binary and
+  checks its command contract (`launch`, `attach`, `break`,
+  `catch-exception`, `pause-state`, `inspect`, `set-var`, `resume`) the same
+  way it validates the android CLI — a capability contract, not a version
+  pin. `setup` gains a consent-gated install step (off by default, `--yes`
+  never installs unattended) that offers the official install script when
+  the binary is missing. `init`/`repair` copy debroid's own
+  `~/.debroid/skills/debroid-cli` skill into the project's skills dir when
+  present. The `systematic-debugging` skill gains a runtime-evidence phase:
+  when a bug reproduces on a device/emulator and debroid is installed, gather
+  breakpoint/exception-trap/variable-mutation evidence before falling back to
+  the static-reading path.
 
 ## 0.3.6 — 2026-08-04
 

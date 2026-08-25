@@ -1,3 +1,4 @@
+import { cpSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   CLAUDE_COMMANDS_DIR,
@@ -14,6 +15,7 @@ import {
 } from "../helpers/android-cli.js";
 import { writeManagedSection } from "../helpers/claude-md-section.js";
 import { codexMcpState, installCodexDevKnowledgeMcp } from "../helpers/codex-mcp.js";
+import { debroidSkillSourceDir } from "../helpers/debroid.js";
 import { resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
 import { applyEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
 import {
@@ -106,7 +108,7 @@ async function repairProject(root: string): Promise<void> {
   const agents = installAgents(spec);
   log.ok(`Agents refreshed (${agents.length} in ${spec.agentsDir})`);
 
-  const workflows = installWorkflows(spec);
+  const workflows = installWorkflows(spec, marker.managed_workflows ?? []);
   log.ok(`Workflows refreshed (${workflows.length} in ${spec.workflowsDir})`);
 
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
@@ -128,6 +130,12 @@ async function repairProject(root: string): Promise<void> {
   if (android.installed) log.ok(`android-cli skill refreshed → ${spec.skillsDir}/android-cli/`);
   else if (!android.ran) log.info("android CLI not on PATH — skipped android-cli skill");
   else log.warn(`android-cli skill not placed: ${android.error ?? "stock skill missing"}`);
+
+  const debroidSrc = debroidSkillSourceDir();
+  if (existsSync(join(debroidSrc, "SKILL.md"))) {
+    cpSync(debroidSrc, join(spec.skillsDir, "debroid-cli"), { recursive: true });
+    log.ok(`debroid-cli skill → ${spec.skillsDir}/debroid-cli/`);
+  }
 
   // Re-assert the superpowers override; existing extra enables in the file are
   // preserved (applyEnabledPlugins only sets keys, never clears others).
@@ -180,7 +188,7 @@ async function repairProject(root: string): Promise<void> {
         ...addedPerms
       ])
     ],
-    managed_workflows: workflows,
+    managed_workflows: [...new Set([...(marker.managed_workflows ?? []), ...workflows])],
     managed_mcp: mcpRes.written
       ? [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
       : (marker.managed_mcp ?? []),

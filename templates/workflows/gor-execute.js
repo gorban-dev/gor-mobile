@@ -371,7 +371,7 @@ Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the 
     })
     if (!rr) return out({ status: 'error', error: `re-review agent failed on task ${t.n} round ${round}` })
     lastReviewBase = fp.head
-    const notAddressed = openFindings.filter((f, i) => !rr.verdicts.some(vd => (vd.n === i + 1 || vd.title === f.title) && vd.verdict === 'ADDRESSED'))
+    const notAddressed = openFindings.filter((f, i) => !rr.verdicts.some(vd => vd.n === i + 1 && vd.verdict === 'ADDRESSED'))
     for (const f of rr.newFindings.filter(f => f.severity === 'minor')) deferredMinors.push(`Task ${t.n} (fix ${round}): ${f.title}`)
     openFindings = [...notAddressed, ...rr.newFindings.filter(f => f.severity !== 'minor')]
   }
@@ -382,6 +382,18 @@ Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the 
 }
 
 phase('Final')
+
+// Whole-project verification the plan named — run and independently checked
+// here, not delegated prose inside another agent's prompt (see verify() in
+// the task loop, which requires the same zero-exit contract).
+const verifyAll = (roundLabel) => agent(`Run this exact command in the repository root and report honestly:\n\n    ${setup.verificationAll}\n\nReturn passed=true only on a zero exit code, with the last ~30 lines of output as "tail".`,
+  { label: roundLabel, phase: 'Final', effort: 'low', schema: VERIFY_SCHEMA })
+
+if (setup.verificationAll) {
+  const va = await verifyAll('final:verifyAll')
+  if (!va || !va.passed) return out({ status: 'blocked', blocked: 'whole-project verification failed: ' + (va ? va.tail : 'agent error') })
+}
+
 const finalReview = await workflow('gor-review', {
   mode: 'final', base: initialBase, planPath,
   deferredMinors, parked: parkedAll,
@@ -418,24 +430,50 @@ Global constraints:\n${setup.constraints}
 ${setup.verificationAll ? `Then run: ${setup.verificationAll} — it must pass.` : ''}
 You never dispatch subagents. Full report → ${waveReport}. Return the structured result.`,
     { label: 'final:fixwave', phase: 'Final', schema: IMPL_SCHEMA })
-  if (!wave) return out({ status: 'error', error: 'final fixwave agent failed' })
+
+  // A wave that never ran, or reports it could not complete, has changed
+  // nothing trustworthy — skip packaging/re-review and stop, same as the
+  // per-task loop's handling of these two statuses.
+  if (!wave || wave.status === 'NEEDS_CONTEXT' || wave.status === 'BLOCKED') {
+    return out({
+      status: 'blocked',
+      blocked: 'final fix wave did not complete — ' + (wave ? `${wave.status} — ${(wave.concerns ?? []).join('; ') || wave.summary}` : 'agent error'),
+      finalReview: {
+        status: finalReview.status, codexRan: finalReview.codexRan ?? false,
+        gorRan: finalReview.gorRan ?? false, residualFindings: finalOpen,
+        conflicts: finalReview.conflicts ?? [],
+      },
+    })
+  }
+  if (wave.status === 'DONE_WITH_CONCERNS' && (wave.concerns ?? []).length > 0) {
+    for (const c of wave.concerns) deferredMinors.push(`Final fix wave concern: ${c}`)
+  }
+
   const fp = await agent(`Run these commands in the repository root — ${SCRIPTS_NOTE} — and return the results:
 1. ${SCRIPTS}/sdd-snapshot "${planPath}"  — printed tree SHA is "head".
 2. ${SCRIPTS}/review-package "${planPath}" ${waveBase} <head>  — printed path is "packagePath"; read the stat section of the file review-package wrote and report loc = total insertions + deletions from it.`,
     { label: 'final:package', phase: 'Final', effort: 'low', schema: PACKAGE_SCHEMA })
   if (fp && !SHA_SHAPE.test(fp.head)) return out({ status: 'error', error: 'agent returned a malformed tree SHA' })
   if (fp && !PATH_SHAPE.test(fp.packagePath)) return out({ status: 'error', error: 'agent returned a malformed path' })
-  const rr = (wave && fp) ? await agent(reReviewPrompt(finalOpen, planPath, waveReport, fp.packagePath), {
+  const rr = fp ? await agent(reReviewPrompt(finalOpen, planPath, waveReport, fp.packagePath), {
     label: 'final:rereview', phase: 'Final', agentType: 'gor-mobile-code-reviewer', schema: REREVIEW_SCHEMA,
   }) : null
   const residual = rr
-    ? [...finalOpen.filter((f, i) => !rr.verdicts.some(vd => (vd.n === i + 1 || vd.title === f.title) && vd.verdict === 'ADDRESSED')), ...rr.newFindings.filter(f => f.severity !== 'minor')]
+    ? [...finalOpen.filter((f, i) => !rr.verdicts.some(vd => vd.n === i + 1 && vd.verdict === 'ADDRESSED')), ...rr.newFindings.filter(f => f.severity !== 'minor')]
     : finalOpen
   finalOpen = residual
+
+  if (setup.verificationAll) {
+    const va2 = await verifyAll('final:verifyAll2')
+    if (!va2 || !va2.passed) return out({ status: 'blocked', blocked: 'whole-project verification failed: ' + (va2 ? va2.tail : 'agent error') })
+  }
 }
 
+// 'done' only with an empty residual set — a caller reading top-level status
+// must never see 'done' while findings from the final gate are still open.
 return out({
-  status: 'done',
+  status: finalOpen.length > 0 ? 'blocked' : 'done',
+  ...(finalOpen.length > 0 ? { blocked: `final review found ${finalOpen.length} unresolved finding(s): ${finalOpen.map(f => f.title).join('; ')}` } : {}),
   finalReview: {
     status: finalReview.status, codexRan: finalReview.codexRan ?? false,
     gorRan: finalReview.gorRan ?? false, residualFindings: finalOpen,

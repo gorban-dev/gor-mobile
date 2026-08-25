@@ -94,4 +94,26 @@ queries over `Grep` when distilling stack traces or chasing call chains:
 Pass these instructions to the Sonnet evidence-gathering subagent so it
 uses `ast-index` (read-only) instead of `Grep` whenever applicable.
 
+### Runtime evidence first — debroid (when the bug reproduces on a device)
+
+When the failure reproduces on a connected device/emulator with a debuggable
+build AND the `debroid` CLI is installed (check: `which debroid`; the
+`debroid-cli` skill in this repo's skills dir carries the full command
+reference), gather RUNTIME evidence before forming hypotheses from static
+reads:
+
+1. `debroid launch <app_id>` (or `attach` to a running process).
+2. Trap the failure: `debroid catch-exception` for crashes,
+   `debroid break <session> <file> <line>` for wrong-value bugs.
+3. Inspect the trapped state: `debroid pause-state`, `debroid inspect` —
+   the variable values at the failure point are the ground truth static
+   reading only guesses at.
+4. Test a hypothesis in place with `debroid set-var` + `resume` before
+   writing any fix: if mutating the suspect value fixes the behavior, the
+   hypothesis is confirmed.
+
+Every debroid command returns strict JSON — quote the relevant fields in the
+evidence log. No debroid / no device / release-only build → the static path
+below stands unchanged.
+
 <!-- END gor-mobile overlay -->

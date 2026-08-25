@@ -38,6 +38,7 @@ import { statusLineState } from "../helpers/settings-statusline.js";
 import { codexStatusLineState } from "../helpers/codex-statusline.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
+import { DEBROID_CONTRACT, DEBROID_INSTALL_CMD, debroidContract, debroidPath } from "../helpers/debroid.js";
 import { runAstIndexUpdate } from "../helpers/ast-index-freshness.js";
 import { readJsonSafe } from "../helpers/paths.js";
 import {
@@ -344,6 +345,10 @@ function warnIfDisableWorkflows(file: string, scope: string): void {
 }
 
 async function checkClaudeWorkflowsSupport(): Promise<void> {
+  if (!which("claude")) {
+    log.info("claude CLI not on PATH — workflows check skipped (Codex-only machine?)");
+    return;
+  }
   const res = await execa("claude", ["--version"], { reject: false });
   const m = /(\d+)\.(\d+)\.(\d+)/.exec(res.stdout ?? "");
   if (res.exitCode !== 0 || !m) {
@@ -521,6 +526,17 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
     log.info(
       "  → install: brew tap defendend/ast-index && brew install ast-index"
     );
+  }
+  reportDep("debroid", debroidPath(), false);
+  if (debroidPath()) {
+    const dc = await debroidContract();
+    if (dc.missing.length > 0) {
+      log.warn(`debroid missing contract commands: ${dc.missing.join(", ")} — update via '${DEBROID_INSTALL_CMD}'`);
+    } else {
+      log.ok(`debroid contract OK (${DEBROID_CONTRACT.length} commands)`);
+    }
+  } else {
+    log.info("  → debroid = runtime Android debugging for agents (optional) — run 'gor-mobile setup'");
   }
   reportDep("jq", which("jq"), false);
   if (!which("jq")) {
