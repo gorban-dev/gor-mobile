@@ -288,6 +288,14 @@ function hasManagedHooksInFile(hooksFile) {
 }
 
 // src/targets.ts
+var WORKFLOW_SUPERSEDED_SKILLS = [
+  "subagent-driven-development",
+  "executing-plans",
+  "requesting-code-review",
+  "receiving-code-review",
+  "verification-before-completion",
+  "dispatching-parallel-agents"
+];
 var TARGETS = {
   claude: {
     id: "claude",
@@ -337,6 +345,7 @@ function projectClaudeSpec(root) {
     skillsDir: join3(home, "skills"),
     agentsDir: join3(home, "agents"),
     workflowsDir: join3(home, "workflows"),
+    excludeSkills: WORKFLOW_SUPERSEDED_SKILLS,
     instructionsFile: "",
     instructionsSnippet: "claude-md-snippet.md",
     hooksFile: join3(home, "settings.local.json"),
@@ -1239,6 +1248,7 @@ function installSkills(target) {
   for (const name of readdirSync3(skillsDir)) {
     const srcDir = join6(skillsDir, name);
     if (!statSync2(srcDir).isDirectory()) continue;
+    if (target.excludeSkills?.includes(name)) continue;
     const dstDir = join6(target.skillsDir, `gor-mobile-${name}`);
     cpSync2(srcDir, dstDir, { recursive: true });
     const skillMd = join6(dstDir, "SKILL.md");
