@@ -16,7 +16,7 @@ import { androidCliPath } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
 import { resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
 import { applyEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
-import { installAgents, installSkills } from "../helpers/install-assets.js";
+import { installAgents, installSkills, installWorkflows } from "../helpers/install-assets.js";
 import {
   cleanLegacyProjectMcp,
   LEGACY_PROJECT_MCP_FILE,
@@ -43,11 +43,15 @@ import {
 import { readManifest } from "../helpers/rules-pack.js";
 import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
+  applyWorkflowSizeGuideline,
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
   enableClearContextOnPlanAccept,
+  ensurePermissionAllow,
   installAstIndexGuardHook,
   installSessionStartHook,
-  installUserPromptSubmitHook
+  installUserPromptSubmitHook,
+  WORKFLOW_PERMISSION_ENTRIES,
+  WORKFLOW_SIZE_GUIDELINE
 } from "../helpers/settings-merge.js";
 import { projectClaudeSpec } from "../targets.js";
 import { confirmStep } from "../ui/confirm-step.js";
@@ -218,6 +222,8 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     for (const line of [
       `install skills → ${spec.skillsDir}`,
       `install agents → ${spec.agentsDir}`,
+      `install workflows → ${spec.workflowsDir}`,
+      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist → ${spec.hooksFile}`,
       `merge SessionStart + UserPromptSubmit + PreToolUse → ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` +
         (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
@@ -254,6 +260,14 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
 
   const agents = installAgents(spec);
   log.ok(`${agents.length} review agents → ${spec.agentsDir}`);
+
+  const workflows = installWorkflows(spec);
+  log.ok(`${workflows.length} workflows → ${spec.workflowsDir}`);
+
+  const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
+  if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
+  const addedPerms = ensurePermissionAllow(spec.hooksFile, WORKFLOW_PERMISSION_ENTRIES);
+  if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length} (workflow agents run unprompted)`);
 
   const extraPlugins = (opts.plugins ?? "")
     .split(",")
@@ -325,7 +339,12 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     version: GOR_MOBILE_VERSION,
     installed_at: opts.now ?? marker.installed_at ?? new Date().toISOString().slice(0, 10),
     managed_plugins: managedPlugins,
-    managed_settings: managedSettings,
+    managed_settings: sizeSet
+      ? [...new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])]
+      : managedSettings,
+    managed_permissions: [
+      ...new Set([...(marker.managed_permissions ?? []), ...addedPerms])
+    ],
     managed_mcp: managedMcp,
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };

@@ -188,6 +188,33 @@ function removeClearContextOnPlanAccept(file) {
   delete settings[CLEAR_CONTEXT_ON_PLAN_ACCEPT];
   writeJson(file, settings);
 }
+var WORKFLOW_PERMISSION_ENTRIES = [
+  "Bash(git diff:*)",
+  "Bash(git status:*)",
+  "Bash(git rev-parse:*)",
+  "Bash(git symbolic-ref:*)",
+  "Bash(git log:*)",
+  "Bash(ls:*)",
+  "Bash(node:*)"
+];
+var WORKFLOW_SIZE_GUIDELINE = "workflowSizeGuideline";
+function applyWorkflowSizeGuideline(file) {
+  const settings = ensureSettingsFile(file);
+  if (typeof settings[WORKFLOW_SIZE_GUIDELINE] === "string") return false;
+  settings[WORKFLOW_SIZE_GUIDELINE] = "large";
+  writeJson(file, settings);
+  return true;
+}
+function ensurePermissionAllow(file, entries) {
+  const settings = ensureSettingsFile(file);
+  settings.permissions = settings.permissions ?? {};
+  const allow = settings.permissions.allow ?? [];
+  const added = entries.filter((e) => !allow.includes(e));
+  if (added.length === 0) return [];
+  settings.permissions.allow = [...allow, ...added];
+  writeJson(file, settings);
+  return added;
+}
 function countManagedHooks(hookType, target) {
   const settings = readJsonSafe(target.hooksFile, {});
   const entries = settings.hooks?.[hookType] ?? [];
@@ -1190,6 +1217,25 @@ function installAgents(target) {
     const to = join5(target.agentsDir, name);
     copyFileSync(from, to);
     chmodSync(to, 420);
+    copied.push(name);
+  }
+  return copied;
+}
+function installWorkflows(target) {
+  if (!target.workflowsDir) return [];
+  const src = join5(gorMobileRoot(), "templates", "workflows");
+  if (!existsSync8(src)) return [];
+  ensureDir(target.workflowsDir);
+  for (const entry of readdirSync2(target.workflowsDir)) {
+    if (entry.startsWith("gor-") && entry.endsWith(".js")) {
+      rmSync2(join5(target.workflowsDir, entry), { force: true });
+    }
+  }
+  const copied = [];
+  for (const name of readdirSync2(src)) {
+    if (!name.endsWith(".js")) continue;
+    copyFileSync(join5(src, name), join5(target.workflowsDir, name));
+    chmodSync(join5(target.workflowsDir, name), 420);
     copied.push(name);
   }
   return copied;
@@ -2505,6 +2551,8 @@ async function cmdInit(opts = {}) {
     for (const line of [
       `install skills \u2192 ${spec.skillsDir}`,
       `install agents \u2192 ${spec.agentsDir}`,
+      `install workflows \u2192 ${spec.workflowsDir}`,
+      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist \u2192 ${spec.hooksFile}`,
       `merge SessionStart + UserPromptSubmit + PreToolUse \u2192 ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` + (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
       `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
@@ -2531,6 +2579,12 @@ async function cmdInit(opts = {}) {
   }
   const agents = installAgents(spec);
   log.ok(`${agents.length} review agents \u2192 ${spec.agentsDir}`);
+  const workflows = installWorkflows(spec);
+  log.ok(`${workflows.length} workflows \u2192 ${spec.workflowsDir}`);
+  const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
+  if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
+  const addedPerms = ensurePermissionAllow(spec.hooksFile, WORKFLOW_PERMISSION_ENTRIES);
+  if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length} (workflow agents run unprompted)`);
   const extraPlugins = (opts.plugins ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const managedPlugins = applyEnabledPlugins(spec.hooksFile, extraPlugins, [SUPERPOWERS_KEY]);
   log.ok(
@@ -2578,7 +2632,10 @@ async function cmdInit(opts = {}) {
     version: GOR_MOBILE_VERSION,
     installed_at: opts.now ?? marker.installed_at ?? (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
     managed_plugins: managedPlugins,
-    managed_settings: managedSettings,
+    managed_settings: sizeSet ? [.../* @__PURE__ */ new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])] : managedSettings,
+    managed_permissions: [
+      .../* @__PURE__ */ new Set([...marker.managed_permissions ?? [], ...addedPerms])
+    ],
     managed_mcp: managedMcp,
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };
