@@ -21,7 +21,8 @@ import {
   cleanupLegacyCommands,
   copyHookTemplates,
   installAgents,
-  installSkills
+  installSkills,
+  installWorkflows
 } from "../helpers/install-assets.js";
 import {
   cleanLegacyProjectMcp,
@@ -39,11 +40,15 @@ import {
 } from "../helpers/project.js";
 import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
+  applyWorkflowSizeGuideline,
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
   enableClearContextOnPlanAccept,
+  ensurePermissionAllow,
   installAstIndexGuardHook,
   installSessionStartHook,
-  installUserPromptSubmitHook
+  installUserPromptSubmitHook,
+  WORKFLOW_PERMISSION_ENTRIES,
+  WORKFLOW_SIZE_GUIDELINE
 } from "../helpers/settings-merge.js";
 import { installStatusLine, statusLineState } from "../helpers/settings-statusline.js";
 import {
@@ -95,6 +100,14 @@ async function repairProject(root: string): Promise<void> {
   const agents = installAgents(spec);
   log.ok(`Agents refreshed (${agents.length} in ${spec.agentsDir})`);
 
+  const workflows = installWorkflows(spec);
+  log.ok(`Workflows refreshed (${workflows.length} in ${spec.workflowsDir})`);
+
+  const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
+  if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
+  const addedPerms = ensurePermissionAllow(spec.hooksFile, WORKFLOW_PERMISSION_ENTRIES);
+  if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length}`);
+
   const android = await provisionProjectAndroidSkill(spec.skillsDir);
   if (android.installed) log.ok(`android-cli skill refreshed → ${spec.skillsDir}/android-cli/`);
   else if (!android.ran) log.info("android CLI not on PATH — skipped android-cli skill");
@@ -143,7 +156,12 @@ async function repairProject(root: string): Promise<void> {
   writeProjectMarker(root, {
     ...marker,
     version: GOR_MOBILE_VERSION,
-    managed_settings: managedSettings,
+    managed_settings: sizeSet
+      ? [...new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])]
+      : managedSettings,
+    managed_permissions: [
+      ...new Set([...(marker.managed_permissions ?? []), ...addedPerms])
+    ],
     managed_mcp: mcpRes.written
       ? [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
       : (marker.managed_mcp ?? []),

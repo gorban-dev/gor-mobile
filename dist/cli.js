@@ -3236,6 +3236,12 @@ async function repairProject(root) {
   log.ok(`Skills refreshed (${skills.installed.length} gor-mobile-* dirs \u2192 ${spec.skillsDir})`);
   const agents = installAgents(spec);
   log.ok(`Agents refreshed (${agents.length} in ${spec.agentsDir})`);
+  const workflows = installWorkflows(spec);
+  log.ok(`Workflows refreshed (${workflows.length} in ${spec.workflowsDir})`);
+  const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
+  if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
+  const addedPerms = ensurePermissionAllow(spec.hooksFile, WORKFLOW_PERMISSION_ENTRIES);
+  if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length}`);
   const android = await provisionProjectAndroidSkill(spec.skillsDir);
   if (android.installed) log.ok(`android-cli skill refreshed \u2192 ${spec.skillsDir}/android-cli/`);
   else if (!android.ran) log.info("android CLI not on PATH \u2014 skipped android-cli skill");
@@ -3272,7 +3278,10 @@ async function repairProject(root) {
   writeProjectMarker(root, {
     ...marker,
     version: GOR_MOBILE_VERSION,
-    managed_settings: managedSettings,
+    managed_settings: sizeSet ? [.../* @__PURE__ */ new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])] : managedSettings,
+    managed_permissions: [
+      .../* @__PURE__ */ new Set([...marker.managed_permissions ?? [], ...addedPerms])
+    ],
     managed_mcp: mcpRes.written ? [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])] : marker.managed_mcp ?? [],
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   });
