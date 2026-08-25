@@ -139,4 +139,18 @@ dozens of mockups with little usable signal. If the ticket already describes
 the screen sufficiently in text, do not descend into Figma for pixel details —
 spend the tokens on the docs-first API research instead.
 
+### Override (Claude only): no spec-approval gate — the pipeline is the net
+
+On Claude, the body's step 8 ("User reviews written spec") and its User
+Review Gate are REMOVED: after the design sections are approved in dialogue
+(step 5 stays — that approval is the human decision point), write the spec,
+run the self-review, and invoke writing-plans immediately. Do not ask the
+user to review the spec file. The plan is likewise written without an
+approval pause; the single human stop of the whole chain is the
+plan-approval dialog at the writing-plans handoff (ExitPlanMode), and the
+deterministic `/gor-execute` pipeline (spec-compliance review per task,
+final `/gor-review` gate) is the safety net behind it.
+
+On Codex (no workflows) the body's gates stay exactly as written.
+
 <!-- END gor-mobile overlay -->
