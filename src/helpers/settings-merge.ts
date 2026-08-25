@@ -160,6 +160,65 @@ export function removeClearContextOnPlanAccept(file: string): void {
   writeJson(file, settings);
 }
 
+// Workflow agents run in acceptEdits and inherit the session allowlist; a Bash
+// call outside it stalls the run on a permission prompt. These entries cover
+// the gor-review scope/review agents. `Bash(node:*)` is deliberately broad:
+// the Codex companion path embeds a plugin version, so a narrower prefix rule
+// cannot be written once.
+export const WORKFLOW_PERMISSION_ENTRIES = [
+  "Bash(git diff:*)",
+  "Bash(git status:*)",
+  "Bash(git rev-parse:*)",
+  "Bash(git symbolic-ref:*)",
+  "Bash(git log:*)",
+  "Bash(ls:*)",
+  "Bash(node:*)"
+];
+
+// The default size guideline (medium, ≤15 agents) does not survive a full
+// gor-execute run; the key is honored from any settings file since CC 2.1.219.
+export const WORKFLOW_SIZE_GUIDELINE = "workflowSizeGuideline";
+
+/** Returns true if this run set the key (false = user already chose a value). */
+export function applyWorkflowSizeGuideline(file: string): boolean {
+  const settings = ensureSettingsFile(file);
+  if (typeof settings[WORKFLOW_SIZE_GUIDELINE] === "string") return false;
+  settings[WORKFLOW_SIZE_GUIDELINE] = "large";
+  writeJson(file, settings);
+  return true;
+}
+
+export function removeWorkflowSizeGuideline(file: string): void {
+  if (!existsSync(file)) return;
+  const settings = readJsonSafe<ManagedSettings>(file, {});
+  if (!(WORKFLOW_SIZE_GUIDELINE in settings)) return;
+  delete settings[WORKFLOW_SIZE_GUIDELINE];
+  writeJson(file, settings);
+}
+
+/** Merge entries into permissions.allow; returns the ones actually added. */
+export function ensurePermissionAllow(file: string, entries: string[]): string[] {
+  const settings = ensureSettingsFile(file);
+  settings.permissions = settings.permissions ?? {};
+  const allow = settings.permissions.allow ?? [];
+  const added = entries.filter((e) => !allow.includes(e));
+  if (added.length === 0) return [];
+  settings.permissions.allow = [...allow, ...added];
+  writeJson(file, settings);
+  return added;
+}
+
+export function removePermissionAllow(file: string, entries: string[]): void {
+  if (!existsSync(file) || entries.length === 0) return;
+  const settings = readJsonSafe<ManagedSettings>(file, {});
+  const allow = settings.permissions?.allow;
+  if (!allow) return;
+  const remaining = allow.filter((e) => !entries.includes(e));
+  if (remaining.length === allow.length) return;
+  settings.permissions!.allow = remaining;
+  writeJson(file, settings);
+}
+
 export function countManagedHooks(hookType: HookType, target: TargetSpec): number {
   const settings = readJsonSafe<ManagedSettings>(target.hooksFile, {});
   const entries = settings.hooks?.[hookType] ?? [];
