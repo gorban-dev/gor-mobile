@@ -28,7 +28,12 @@ import {
   legacyProjectMcpServers,
   localMcpState
 } from "../helpers/mcp-register.js";
-import { countManagedHooks, WORKFLOW_PERMISSION_ENTRIES } from "../helpers/settings-merge.js";
+import {
+  codexCompanionAllowEntry,
+  countManagedHooks,
+  sddScriptsAllowEntry,
+  WORKFLOW_PERMISSION_ENTRIES
+} from "../helpers/settings-merge.js";
 import { statusLineState } from "../helpers/settings-statusline.js";
 import { codexStatusLineState } from "../helpers/codex-statusline.js";
 import { androidCliPath, which } from "../helpers/deps.js";
@@ -391,11 +396,16 @@ function checkWorkflows(target: TargetSpec): void {
   }
   const settings = readJsonSafe<ManagedSettings>(target.hooksFile, {});
   const allow = settings.permissions?.allow ?? [];
-  const missing = WORKFLOW_PERMISSION_ENTRIES.filter((e) => !allow.includes(e));
+  const expected = [...WORKFLOW_PERMISSION_ENTRIES, sddScriptsAllowEntry()];
+  const missing = expected.filter((e) => !allow.includes(e));
   if (missing.length > 0) {
     log.warn(`workflow allowlist incomplete (${missing.length} missing) — run 'gor-mobile repair'`);
   } else {
     log.ok("workflow permission allowlist present");
+  }
+  const codexEntry = codexCompanionAllowEntry();
+  if (codexEntry && !allow.includes(codexEntry)) {
+    log.warn("codex companion allowlist entry stale or missing (plugin updated?) — run 'gor-mobile repair'");
   }
 }
 

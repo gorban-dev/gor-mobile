@@ -45,12 +45,14 @@ import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
   applyWorkflowSizeGuideline,
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
-  codexCompanionAllowEntry,
+  dynamicWorkflowAllowEntries,
   enableClearContextOnPlanAccept,
   ensurePermissionAllow,
   installAstIndexGuardHook,
   installSessionStartHook,
   installUserPromptSubmitHook,
+  removePermissionAllow,
+  STALE_PERMISSION_ENTRIES,
   WORKFLOW_PERMISSION_ENTRIES,
   WORKFLOW_SIZE_GUIDELINE
 } from "../helpers/settings-merge.js";
@@ -267,10 +269,15 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
 
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
   if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
-  const codexEntry = codexCompanionAllowEntry();
-  const permissionEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...(codexEntry ? [codexEntry] : [])];
-  const addedPerms = ensurePermissionAllow(spec.hooksFile, permissionEntries);
+  const allowEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...dynamicWorkflowAllowEntries()];
+  const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length} (workflow agents run unprompted)`);
+
+  const staleOwned = STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e));
+  if (staleOwned.length > 0) {
+    removePermissionAllow(spec.hooksFile, staleOwned);
+    log.ok(`Scrubbed stale permission entr${staleOwned.length === 1 ? "y" : "ies"}: ${staleOwned.join(", ")}`);
+  }
 
   const extraPlugins = (opts.plugins ?? "")
     .split(",")
@@ -346,7 +353,10 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       ? [...new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])]
       : managedSettings,
     managed_permissions: [
-      ...new Set([...(marker.managed_permissions ?? []), ...addedPerms])
+      ...new Set([
+        ...(marker.managed_permissions ?? []).filter((e) => !staleOwned.includes(e)),
+        ...addedPerms
+      ])
     ],
     managed_workflows: workflows,
     managed_mcp: managedMcp,

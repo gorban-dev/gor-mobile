@@ -173,7 +173,8 @@ export const WORKFLOW_PERMISSION_ENTRIES = [
   "Bash(git rev-parse:*)",
   "Bash(git symbolic-ref:*)",
   "Bash(git log:*)",
-  "Bash(ls:*)"
+  "Bash(ls:*)",
+  "Bash(./gradlew:*)"
 ];
 
 /**
@@ -205,6 +206,23 @@ export function codexCompanionAllowEntry(): string | null {
   }
   return newest ? `Bash(node ${newest.scriptPath}:*)` : null;
 }
+
+/** gor-execute's agents invoke the SDD scripts by absolute path. */
+export function sddScriptsAllowEntry(): string {
+  return `Bash(${join(GOR_MOBILE_HOME, "scripts")}/:*)`;
+}
+
+/** Entries whose exact text depends on this machine — resolved at install time. */
+export function dynamicWorkflowAllowEntries(): string[] {
+  const entries = [sddScriptsAllowEntry()];
+  const codex = codexCompanionAllowEntry();
+  if (codex) entries.push(codex);
+  return entries;
+}
+
+// Entries earlier dev builds wrote that current builds must scrub (only when
+// the marker proves we wrote them).
+export const STALE_PERMISSION_ENTRIES = ["Bash(node:*)"];
 
 // The default size guideline (medium, ≤15 agents) does not survive a full
 // gor-execute run; the key is honored from any settings file since CC 2.1.219.

@@ -197,7 +197,8 @@ var WORKFLOW_PERMISSION_ENTRIES = [
   "Bash(git rev-parse:*)",
   "Bash(git symbolic-ref:*)",
   "Bash(git log:*)",
-  "Bash(ls:*)"
+  "Bash(ls:*)",
+  "Bash(./gradlew:*)"
 ];
 function codexCompanionAllowEntry() {
   const codexDir = join2(HOME, ".claude", "plugins", "cache", "openai-codex", "codex");
@@ -222,6 +223,16 @@ function codexCompanionAllowEntry() {
   }
   return newest ? `Bash(node ${newest.scriptPath}:*)` : null;
 }
+function sddScriptsAllowEntry() {
+  return `Bash(${join2(GOR_MOBILE_HOME, "scripts")}/:*)`;
+}
+function dynamicWorkflowAllowEntries() {
+  const entries = [sddScriptsAllowEntry()];
+  const codex = codexCompanionAllowEntry();
+  if (codex) entries.push(codex);
+  return entries;
+}
+var STALE_PERMISSION_ENTRIES = ["Bash(node:*)"];
 var WORKFLOW_SIZE_GUIDELINE = "workflowSizeGuideline";
 function applyWorkflowSizeGuideline(file) {
   const settings = ensureSettingsFile(file);
@@ -2645,10 +2656,14 @@ async function cmdInit(opts = {}) {
   log.ok(`${workflows.length} workflows \u2192 ${spec.workflowsDir}`);
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
   if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
-  const codexEntry = codexCompanionAllowEntry();
-  const permissionEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...codexEntry ? [codexEntry] : []];
-  const addedPerms = ensurePermissionAllow(spec.hooksFile, permissionEntries);
+  const allowEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...dynamicWorkflowAllowEntries()];
+  const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length} (workflow agents run unprompted)`);
+  const staleOwned = STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e));
+  if (staleOwned.length > 0) {
+    removePermissionAllow(spec.hooksFile, staleOwned);
+    log.ok(`Scrubbed stale permission entr${staleOwned.length === 1 ? "y" : "ies"}: ${staleOwned.join(", ")}`);
+  }
   const extraPlugins = (opts.plugins ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const managedPlugins = applyEnabledPlugins(spec.hooksFile, extraPlugins, [SUPERPOWERS_KEY]);
   log.ok(
@@ -2698,7 +2713,10 @@ async function cmdInit(opts = {}) {
     managed_plugins: managedPlugins,
     managed_settings: sizeSet ? [.../* @__PURE__ */ new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])] : managedSettings,
     managed_permissions: [
-      .../* @__PURE__ */ new Set([...marker.managed_permissions ?? [], ...addedPerms])
+      .../* @__PURE__ */ new Set([
+        ...(marker.managed_permissions ?? []).filter((e) => !staleOwned.includes(e)),
+        ...addedPerms
+      ])
     ],
     managed_workflows: workflows,
     managed_mcp: managedMcp,
@@ -3186,11 +3204,16 @@ function checkWorkflows(target) {
   }
   const settings = readJsonSafe(target.hooksFile, {});
   const allow = settings.permissions?.allow ?? [];
-  const missing = WORKFLOW_PERMISSION_ENTRIES.filter((e) => !allow.includes(e));
+  const expected = [...WORKFLOW_PERMISSION_ENTRIES, sddScriptsAllowEntry()];
+  const missing = expected.filter((e) => !allow.includes(e));
   if (missing.length > 0) {
     log.warn(`workflow allowlist incomplete (${missing.length} missing) \u2014 run 'gor-mobile repair'`);
   } else {
     log.ok("workflow permission allowlist present");
+  }
+  const codexEntry = codexCompanionAllowEntry();
+  if (codexEntry && !allow.includes(codexEntry)) {
+    log.warn("codex companion allowlist entry stale or missing (plugin updated?) \u2014 run 'gor-mobile repair'");
   }
 }
 function checkTarget(target) {
@@ -3374,6 +3397,7 @@ function refreshHooks(target) {
 }
 async function repairProject(root) {
   const spec = projectClaudeSpec(root);
+  const marker = readProjectMarker(root);
   log.step(`Repairing project (${spec.home})`);
   refreshHooks(spec);
   const skills = installSkills(spec);
@@ -3388,17 +3412,20 @@ async function repairProject(root) {
   log.ok(`Workflows refreshed (${workflows.length} in ${spec.workflowsDir})`);
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
   if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
-  const codexEntry = codexCompanionAllowEntry();
-  const permissionEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...codexEntry ? [codexEntry] : []];
-  const addedPerms = ensurePermissionAllow(spec.hooksFile, permissionEntries);
+  const allowEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...dynamicWorkflowAllowEntries()];
+  const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length}`);
+  const staleOwned = STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e));
+  if (staleOwned.length > 0) {
+    removePermissionAllow(spec.hooksFile, staleOwned);
+    log.ok(`Scrubbed stale permission entr${staleOwned.length === 1 ? "y" : "ies"}: ${staleOwned.join(", ")}`);
+  }
   const android = await provisionProjectAndroidSkill(spec.skillsDir);
   if (android.installed) log.ok(`android-cli skill refreshed \u2192 ${spec.skillsDir}/android-cli/`);
   else if (!android.ran) log.info("android CLI not on PATH \u2014 skipped android-cli skill");
   else log.warn(`android-cli skill not placed: ${android.error ?? "stock skill missing"}`);
   applyEnabledPlugins(spec.hooksFile, [], [SUPERPOWERS_KEY]);
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
-  const marker = readProjectMarker(root);
   const mcpRes = registerLocalMcp(root, marker.managed_mcp ?? []);
   if (mcpRes.written) {
     log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed \u2192 ${mcpRes.path} (local scope)`);
@@ -3430,7 +3457,10 @@ async function repairProject(root) {
     version: GOR_MOBILE_VERSION,
     managed_settings: sizeSet ? [.../* @__PURE__ */ new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])] : managedSettings,
     managed_permissions: [
-      .../* @__PURE__ */ new Set([...marker.managed_permissions ?? [], ...addedPerms])
+      .../* @__PURE__ */ new Set([
+        ...(marker.managed_permissions ?? []).filter((e) => !staleOwned.includes(e)),
+        ...addedPerms
+      ])
     ],
     managed_workflows: workflows,
     managed_mcp: mcpRes.written ? [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])] : marker.managed_mcp ?? [],
