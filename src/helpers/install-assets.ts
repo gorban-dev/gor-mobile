@@ -150,13 +150,16 @@ export function installAgents(target: TargetSpec): string[] {
   return copied;
 }
 
-// Ours are gor-*.js. The shipped set (readdir of templates/workflows) is both
-// the copy filter and what the pre-copy pass removes below — that pass only
-// overwrites filenames copyFileSync is about to write anyway, it is not
-// stale cleanup: a workflow renamed or dropped from templates/workflows stays
-// on disk here and is only removed via the uninstall/repair marker-based
-// migration path (see CLAUDE.md's "Templates" section on renames).
-export function installWorkflows(target: TargetSpec): string[] {
+// Ours are gor-*.js. The shipped set (readdir of templates/workflows) is the
+// copy filter; `owned` (the caller's marker.managed_workflows) gates whether
+// an existing file with a shipped name gets overwritten — a name we did not
+// previously install is a user's own file and is left alone. A workflow
+// renamed or dropped from templates/workflows is not swept here either way:
+// init/repair union the old marker's managed_workflows into the new one
+// instead of overwriting it, so the marker keeps remembering it, and that
+// union is the actual rename-cleanup path (see CLAUDE.md's "Templates"
+// section on renames) — not a pass in this function.
+export function installWorkflows(target: TargetSpec, owned: string[] = []): string[] {
   if (!target.workflowsDir) return [];
   const src = join(gorMobileRoot(), "templates", "workflows");
   if (!existsSync(src)) return [];
@@ -164,15 +167,15 @@ export function installWorkflows(target: TargetSpec): string[] {
     (name) => name.startsWith("gor-") && name.endsWith(".js")
   );
   ensureDir(target.workflowsDir);
-  for (const entry of readdirSync(target.workflowsDir)) {
-    if (shipped.includes(entry)) {
-      rmSync(join(target.workflowsDir, entry), { force: true });
-    }
-  }
   const copied: string[] = [];
   for (const name of shipped) {
-    copyFileSync(join(src, name), join(target.workflowsDir, name));
-    chmodSync(join(target.workflowsDir, name), 0o644);
+    const dst = join(target.workflowsDir, name);
+    if (existsSync(dst) && !owned.includes(name)) {
+      console.warn(`[gor-mobile] kept user workflow ${name} — not overwriting an unowned file`);
+      continue;
+    }
+    copyFileSync(join(src, name), dst);
+    chmodSync(dst, 0o644);
     copied.push(name);
   }
   return copied;

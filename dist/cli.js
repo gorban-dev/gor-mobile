@@ -1321,7 +1321,7 @@ function installAgents(target) {
   }
   return copied;
 }
-function installWorkflows(target) {
+function installWorkflows(target, owned = []) {
   if (!target.workflowsDir) return [];
   const src = join7(gorMobileRoot(), "templates", "workflows");
   if (!existsSync8(src)) return [];
@@ -1329,15 +1329,15 @@ function installWorkflows(target) {
     (name) => name.startsWith("gor-") && name.endsWith(".js")
   );
   ensureDir(target.workflowsDir);
-  for (const entry of readdirSync3(target.workflowsDir)) {
-    if (shipped.includes(entry)) {
-      rmSync2(join7(target.workflowsDir, entry), { force: true });
-    }
-  }
   const copied = [];
   for (const name of shipped) {
-    copyFileSync(join7(src, name), join7(target.workflowsDir, name));
-    chmodSync(join7(target.workflowsDir, name), 420);
+    const dst = join7(target.workflowsDir, name);
+    if (existsSync8(dst) && !owned.includes(name)) {
+      console.warn(`[gor-mobile] kept user workflow ${name} \u2014 not overwriting an unowned file`);
+      continue;
+    }
+    copyFileSync(join7(src, name), dst);
+    chmodSync(dst, 420);
     copied.push(name);
   }
   return copied;
@@ -2712,7 +2712,7 @@ async function cmdInit(opts = {}) {
       `install skills \u2192 ${spec.skillsDir}`,
       `install agents \u2192 ${spec.agentsDir}`,
       `install workflows \u2192 ${spec.workflowsDir}`,
-      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls, gradle, SDD scripts, codex companion) \u2192 ${spec.hooksFile}`,
+      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls, gradle, android CLI, SDD scripts + codex companion) \u2192 ${spec.hooksFile}`,
       `merge SessionStart + UserPromptSubmit + PreToolUse \u2192 ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` + (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
       `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
@@ -2739,7 +2739,7 @@ async function cmdInit(opts = {}) {
   }
   const agents = installAgents(spec);
   log.ok(`${agents.length} review agents \u2192 ${spec.agentsDir}`);
-  const workflows = installWorkflows(spec);
+  const workflows = installWorkflows(spec, marker.managed_workflows ?? []);
   log.ok(`${workflows.length} workflows \u2192 ${spec.workflowsDir}`);
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
   if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
@@ -2813,7 +2813,7 @@ async function cmdInit(opts = {}) {
         ...addedPerms
       ])
     ],
-    managed_workflows: workflows,
+    managed_workflows: [.../* @__PURE__ */ new Set([...marker.managed_workflows ?? [], ...workflows])],
     managed_mcp: managedMcp,
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };
@@ -3250,6 +3250,10 @@ function warnIfDisableWorkflows(file, scope) {
   }
 }
 async function checkClaudeWorkflowsSupport() {
+  if (!which("claude")) {
+    log.info("claude CLI not on PATH \u2014 workflows check skipped (Codex-only machine?)");
+    return;
+  }
   const res = await execa9("claude", ["--version"], { reject: false });
   const m = /(\d+)\.(\d+)\.(\d+)/.exec(res.stdout ?? "");
   if (res.exitCode !== 0 || !m) {
@@ -3515,7 +3519,7 @@ async function repairProject(root) {
   log.ok(`Skills refreshed (${skills.installed.length} gor-mobile-* dirs \u2192 ${spec.skillsDir})`);
   const agents = installAgents(spec);
   log.ok(`Agents refreshed (${agents.length} in ${spec.agentsDir})`);
-  const workflows = installWorkflows(spec);
+  const workflows = installWorkflows(spec, marker.managed_workflows ?? []);
   log.ok(`Workflows refreshed (${workflows.length} in ${spec.workflowsDir})`);
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
   if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
@@ -3577,7 +3581,7 @@ async function repairProject(root) {
         ...addedPerms
       ])
     ],
-    managed_workflows: workflows,
+    managed_workflows: [.../* @__PURE__ */ new Set([...marker.managed_workflows ?? [], ...workflows])],
     managed_mcp: mcpRes.written ? [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])] : marker.managed_mcp ?? [],
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   });

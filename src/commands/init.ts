@@ -228,7 +228,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       `install skills → ${spec.skillsDir}`,
       `install agents → ${spec.agentsDir}`,
       `install workflows → ${spec.workflowsDir}`,
-      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls, gradle, SDD scripts, codex companion) → ${spec.hooksFile}`,
+      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls, gradle, android CLI, SDD scripts + codex companion) → ${spec.hooksFile}`,
       `merge SessionStart + UserPromptSubmit + PreToolUse → ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` +
         (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
@@ -266,7 +266,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   const agents = installAgents(spec);
   log.ok(`${agents.length} review agents → ${spec.agentsDir}`);
 
-  const workflows = installWorkflows(spec);
+  const workflows = installWorkflows(spec, marker.managed_workflows ?? []);
   log.ok(`${workflows.length} workflows → ${spec.workflowsDir}`);
 
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
@@ -369,7 +369,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
         ...addedPerms
       ])
     ],
-    managed_workflows: workflows,
+    managed_workflows: [...new Set([...(marker.managed_workflows ?? []), ...workflows])],
     managed_mcp: managedMcp,
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };

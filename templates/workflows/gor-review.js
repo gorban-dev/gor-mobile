@@ -85,6 +85,15 @@ if (!scope.baseRef) return { status: 'error', error: 'base ref not resolved — 
 if (!BASE_REF_SHAPE.test(scope.baseRef)) return { status: 'error', error: 'base ref contains unsupported characters — pass a plain ref via base=<ref>' }
 if (scope.emptyDiff) return { status: 'clean', baseRef: scope.baseRef, summary: `no changes vs ${scope.baseRef} — nothing to review` }
 
+// codexCompanion is interpolated unquoted into a shell command below — reject
+// a shape that doesn't match the expected script path rather than trust a
+// confused or prompt-injected scope agent's output.
+const CODEX_COMPANION_SHAPE = /^[\w./-]+\/codex-companion\.mjs$/
+if (scope.codexCompanion && !CODEX_COMPANION_SHAPE.test(scope.codexCompanion)) {
+  log('codex companion path failed validation — skipping Codex pass')
+  scope.codexCompanion = null
+}
+
 // Routing is code, not prose. Our reviewer escalates on size, risk surface,
 // an explicit ask, or final mode; Codex goes adversarial ONLY on risk surface
 // or an explicit ask — LOC alone must not buy the most expensive Codex mode.

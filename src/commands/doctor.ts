@@ -345,6 +345,10 @@ function warnIfDisableWorkflows(file: string, scope: string): void {
 }
 
 async function checkClaudeWorkflowsSupport(): Promise<void> {
+  if (!which("claude")) {
+    log.info("claude CLI not on PATH — workflows check skipped (Codex-only machine?)");
+    return;
+  }
   const res = await execa("claude", ["--version"], { reject: false });
   const m = /(\d+)\.(\d+)\.(\d+)/.exec(res.stdout ?? "");
   if (res.exitCode !== 0 || !m) {
