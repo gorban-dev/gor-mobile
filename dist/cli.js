@@ -1000,7 +1000,7 @@ function debroidPath() {
 }
 async function debroidContract() {
   if (!debroidPath()) return { present: false, missing: [] };
-  const res = await execa3("debroid", ["--help"], { reject: false });
+  const res = await execa3("debroid", ["--help"], { reject: false, timeout: 5e3 });
   const text = `${res.stdout ?? ""}
 ${res.stderr ?? ""}`;
   const missing = DEBROID_CONTRACT.filter((c) => !text.includes(c));

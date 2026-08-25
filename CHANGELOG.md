@@ -38,6 +38,20 @@ existing installs will not have the workflows, the permission allowlist,
   to the workflows instead of the removed skills. `gor-mobile repair` removes
   the six from existing Claude installs.
 
+- **`debroid` integration** (optional runtime Android debugger —
+  https://github.com/PatilShreyas/debroid): `doctor` detects the binary and
+  checks its command contract (`launch`, `attach`, `break`,
+  `catch-exception`, `pause-state`, `inspect`, `set-var`, `resume`) the same
+  way it validates the android CLI — a capability contract, not a version
+  pin. `setup` gains a consent-gated install step (off by default, `--yes`
+  never installs unattended) that offers the official install script when
+  the binary is missing. `init`/`repair` copy debroid's own
+  `~/.debroid/skills/debroid-cli` skill into the project's skills dir when
+  present. The `systematic-debugging` skill gains a runtime-evidence phase:
+  when a bug reproduces on a device/emulator and debroid is installed, gather
+  breakpoint/exception-trap/variable-mutation evidence before falling back to
+  the static-reading path.
+
 ## 0.3.6 — 2026-08-04
 
 Run `gor-mobile repair` in each repo — it moves the MCP registration out of the

@@ -28,7 +28,7 @@ export function debroidPath(): string | null {
 /** present=false → binary absent (missing is meaningless then). */
 export async function debroidContract(): Promise<{ present: boolean; missing: string[] }> {
   if (!debroidPath()) return { present: false, missing: [] };
-  const res = await execa("debroid", ["--help"], { reject: false });
+  const res = await execa("debroid", ["--help"], { reject: false, timeout: 5000 });
   const text = `${res.stdout ?? ""}\n${res.stderr ?? ""}`;
   const missing = DEBROID_CONTRACT.filter((c) => !text.includes(c));
   return { present: true, missing };
