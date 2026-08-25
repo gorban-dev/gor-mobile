@@ -22,6 +22,7 @@ import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-
 import { ANDROID_CONTRACT } from "../android-contract.js";
 import { codexMcpState } from "../helpers/codex-mcp.js";
 import { KEY_SOURCE_LABEL, resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
+import { SDD_SCRIPT_NAMES } from "../helpers/install-assets.js";
 import {
   LEGACY_PROJECT_MCP_FILE,
   legacyProjectMcpServers,
@@ -153,6 +154,17 @@ function checkHookTemplates(): void {
     }
   }
   if (ok) log.ok(`Hook scripts present (${GOR_MOBILE_TEMPLATES_DIR})`);
+}
+
+function checkSddScripts(): void {
+  let ok = true;
+  for (const name of SDD_SCRIPT_NAMES) {
+    if (!existsSync(join(GOR_MOBILE_HOME, "scripts", name))) {
+      ok = false;
+      log.warn(`SDD script missing: scripts/${name} — run 'gor-mobile setup'`);
+    }
+  }
+  if (ok) log.ok(`SDD scripts present (${GOR_MOBILE_HOME}/scripts)`);
 }
 
 async function verboseHookEmulation(target: TargetSpec): Promise<void> {
@@ -516,6 +528,7 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
 
   log.step("Machine (~/.gor-mobile)");
   checkHookTemplates();
+  checkSddScripts();
   checkRulesPack();
   checkFile(GOR_MOBILE_CONFIG, "config.json");
 

@@ -1284,6 +1284,22 @@ function installWorkflows(target) {
   }
   return copied;
 }
+var SDD_SCRIPT_NAMES = ["sdd-workspace", "task-brief", "sdd-snapshot", "review-package"];
+function installSddScripts() {
+  const src = join6(gorMobileRoot(), "templates", "skills", "subagent-driven-development", "scripts");
+  if (!existsSync8(src)) return [];
+  const dst = join6(GOR_MOBILE_HOME, "scripts");
+  ensureDir(dst);
+  const copied = [];
+  for (const name of SDD_SCRIPT_NAMES) {
+    const from = join6(src, name);
+    if (!existsSync8(from)) continue;
+    copyFileSync(from, join6(dst, name));
+    chmodSync(join6(dst, name), 493);
+    copied.push(name);
+  }
+  return copied;
+}
 function cleanupLegacyCommands(commandsDir) {
   if (!existsSync8(commandsDir)) return [];
   const legacy = [
@@ -1915,6 +1931,8 @@ async function stepRules(ctx) {
   progressItem(2, 3, "save config", "ok", GOR_MOBILE_RULES_DIR);
   copyHookTemplates();
   progressItem(3, 3, "hook scripts", "ok", "~/.gor-mobile/templates");
+  const sddScripts = installSddScripts();
+  if (sddScripts.length > 0) log.ok(`SDD scripts \u2192 ~/.gor-mobile/scripts (${sddScripts.length})`);
 }
 async function stepClaudeStatusLine(ctx) {
   if (ctx.opts.dryRun || ctx.opts.yes || !isTuiOn()) return;
@@ -2960,6 +2978,16 @@ function checkHookTemplates() {
   }
   if (ok) log.ok(`Hook scripts present (${GOR_MOBILE_TEMPLATES_DIR})`);
 }
+function checkSddScripts() {
+  let ok = true;
+  for (const name of SDD_SCRIPT_NAMES) {
+    if (!existsSync21(join16(GOR_MOBILE_HOME, "scripts", name))) {
+      ok = false;
+      log.warn(`SDD script missing: scripts/${name} \u2014 run 'gor-mobile setup'`);
+    }
+  }
+  if (ok) log.ok(`SDD scripts present (${GOR_MOBILE_HOME}/scripts)`);
+}
 async function verboseHookEmulation(target) {
   const hooks = [
     ["session-start-hook.sh", "SessionStart"],
@@ -3285,6 +3313,7 @@ async function cmdDoctor(opts = {}) {
   }
   log.step("Machine (~/.gor-mobile)");
   checkHookTemplates();
+  checkSddScripts();
   checkRulesPack();
   checkFile(GOR_MOBILE_CONFIG, "config.json");
   const emulationTargets = [];
@@ -3442,6 +3471,8 @@ async function repairCodex(target) {
 async function cmdRepair(opts = {}) {
   copyHookTemplates();
   log.ok("Hook scripts refreshed \u2192 ~/.gor-mobile/templates");
+  const sddScripts = installSddScripts();
+  if (sddScripts.length > 0) log.ok(`SDD scripts \u2192 ~/.gor-mobile/scripts (${sddScripts.length})`);
   for (const f of cleanupLegacyCommands(CLAUDE_COMMANDS_DIR)) log.ok(`Removed legacy command ${f}`);
   for (const f of cleanupLegacyAgents()) log.ok(`Removed legacy agent ${f}`);
   const sl = statusLineState();

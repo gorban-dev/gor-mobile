@@ -21,6 +21,7 @@ import {
   cleanupLegacyCommands,
   copyHookTemplates,
   installAgents,
+  installSddScripts,
   installSkills,
   installWorkflows
 } from "../helpers/install-assets.js";
@@ -225,6 +226,10 @@ export async function cmdRepair(
   // leftovers from ~/.claude that never carried a managed marker.
   copyHookTemplates();
   log.ok("Hook scripts refreshed → ~/.gor-mobile/templates");
+
+  const sddScripts = installSddScripts();
+  if (sddScripts.length > 0) log.ok(`SDD scripts → ~/.gor-mobile/scripts (${sddScripts.length})`);
+
   for (const f of cleanupLegacyCommands(CLAUDE_COMMANDS_DIR)) log.ok(`Removed legacy command ${f}`);
   for (const f of cleanupLegacyAgents()) log.ok(`Removed legacy agent ${f}`);
 

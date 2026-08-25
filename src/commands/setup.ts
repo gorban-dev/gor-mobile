@@ -34,7 +34,12 @@ import {
   printDevKnowledgeGuide,
   resolveDevKnowledgeKey
 } from "../helpers/dev-knowledge.js";
-import { copyHookTemplates, installAgents, installSkills } from "../helpers/install-assets.js";
+import {
+  copyHookTemplates,
+  installAgents,
+  installSddScripts,
+  installSkills
+} from "../helpers/install-assets.js";
 import { legacyClaudeFootprint } from "../helpers/legacy.js";
 import {
   cloneOrPull,
@@ -260,6 +265,9 @@ async function stepRules(ctx: SetupCtx): Promise<void> {
 
   copyHookTemplates();
   progressItem(3, 3, "hook scripts", "ok", "~/.gor-mobile/templates");
+
+  const sddScripts = installSddScripts();
+  if (sddScripts.length > 0) log.ok(`SDD scripts → ~/.gor-mobile/scripts (${sddScripts.length})`);
 }
 
 async function stepClaudeStatusLine(ctx: SetupCtx): Promise<void> {

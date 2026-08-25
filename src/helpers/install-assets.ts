@@ -12,6 +12,7 @@ import {
 import { basename, join } from "node:path";
 import {
   CLAUDE_AGENTS_DIR,
+  GOR_MOBILE_HOME,
   GOR_MOBILE_TEMPLATES_DIR,
   gorMobileRoot
 } from "../constants.js";
@@ -169,6 +170,26 @@ export function installWorkflows(target: TargetSpec): string[] {
   for (const name of shipped) {
     copyFileSync(join(src, name), join(target.workflowsDir, name));
     chmodSync(join(target.workflowsDir, name), 0o644);
+    copied.push(name);
+  }
+  return copied;
+}
+
+// gor-execute's agents call these by absolute path; the skill copies under
+// templates/skills/ stay untouched (Codex installs keep reading them).
+export const SDD_SCRIPT_NAMES = ["sdd-workspace", "task-brief", "sdd-snapshot", "review-package"];
+
+export function installSddScripts(): string[] {
+  const src = join(gorMobileRoot(), "templates", "skills", "subagent-driven-development", "scripts");
+  if (!existsSync(src)) return [];
+  const dst = join(GOR_MOBILE_HOME, "scripts");
+  ensureDir(dst);
+  const copied: string[] = [];
+  for (const name of SDD_SCRIPT_NAMES) {
+    const from = join(src, name);
+    if (!existsSync(from)) continue;
+    copyFileSync(from, join(dst, name));
+    chmodSync(join(dst, name), 0o755);
     copied.push(name);
   }
   return copied;
