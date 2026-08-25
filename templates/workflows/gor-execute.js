@@ -26,7 +26,14 @@ const out = (extra) => ({ tasksDone: taskResults.length, taskResults, deferredMi
 
 if (!planPath) return out({ status: 'error', error: 'usage: /gor-execute <plan-file>' })
 
-const SCRIPTS = '"${GOR_MOBILE_HOME:-$HOME/.gor-mobile}/scripts"'
+const SCRIPTS = '~/.gor-mobile/scripts'
+// The installed Bash allow entry (sddScriptsAllowEntry) is the literal
+// resolved absolute path with no quotes — a command starting with a quote or
+// an unexpanded shell parameter expansion cannot prefix-match it and the
+// agent stalls on a permission prompt. Every prompt that runs a script below
+// carries this same instruction so agents resolve ~ themselves before
+// invoking, rather than handing the literal text to Bash.
+const SCRIPTS_NOTE = 'expand ~ to the absolute home directory and invoke by absolute path, without quotes (if GOR_MOBILE_HOME is set in the environment, use $GOR_MOBILE_HOME/scripts instead)'
 
 phase('Setup')
 
@@ -42,7 +49,7 @@ const SETUP_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['n', 'title', 'files', 'layers', 'conformsTo', 'shapePerUser', 'category', 'verification'],
+        required: ['n', 'title', 'files', 'layers', 'conformsTo', 'shapePerUser', 'category', 'security', 'verification'],
         properties: {
           n: { type: 'number' },
           title: { type: 'string' },
@@ -60,7 +67,7 @@ const SETUP_SCHEMA = {
 }
 
 const setup = await agent(`You are the setup parser for a plan execution run in this repository.
-1. Run ${SCRIPTS}/sdd-workspace "${planPath}" and record the printed workspace path.
+1. Run ${SCRIPTS}/sdd-workspace "${planPath}" — ${SCRIPTS_NOTE} — and record the printed workspace path.
 2. Read the plan file at ${planPath}. Extract: the path of the spec it names
    (Spec: line), the Global Constraints section verbatim, and every task.
 3. Per task determine: number and title; the exact file paths it creates or
@@ -94,6 +101,10 @@ if (artifactDefects.length > 0) {
 const PREP_SCHEMA = {
   type: 'object', required: ['base', 'briefPath'],
   properties: { base: { type: 'string' }, briefPath: { type: 'string' } },
+}
+const SNAPSHOT_SCHEMA = {
+  type: 'object', required: ['base'],
+  properties: { base: { type: 'string' } },
 }
 const IMPL_SCHEMA = {
   type: 'object', required: ['status', 'summary'],
@@ -221,8 +232,10 @@ Read: the task brief at ${briefPath}; the implementer report (with its fix
 appendix) at ${reportPath}; the fix diff at ${packagePath}.
 
 Verdict each finding ADDRESSED or NOT ADDRESSED ("attempted" is not
-addressed). Inspect ONLY the fix diff for new breakage — out-of-scope
-observations do not belong in newFindings. Return the structured result only.`
+addressed). Copy each verdict's title VERBATIM from the findings list above —
+a paraphrased title counts as no verdict. Inspect ONLY the fix diff for new
+breakage — out-of-scope observations do not belong in newFindings. Return the
+structured result only.`
 }
 
 phase('Tasks')
@@ -231,7 +244,7 @@ for (const t of setup.tasks) {
   const label = `t${t.n}`
   const reportPath = `${setup.workspace}/task-${t.n}-report.md`
 
-  const prep = await agent(`Run these two commands in the repository root and return the results:
+  const prep = await agent(`Run these two commands in the repository root — ${SCRIPTS_NOTE} — and return the results:
 1. ${SCRIPTS}/sdd-snapshot "${planPath}"  — its printed tree SHA is "base".
 2. ${SCRIPTS}/task-brief "${planPath}" ${t.n}  — its printed file path is "briefPath".`,
     { label: `${label}:prep`, phase: 'Tasks', effort: 'low', schema: PREP_SCHEMA })
@@ -265,12 +278,13 @@ for (const t of setup.tasks) {
         { label: roundLabel, phase: 'Tasks', effort: 'low', schema: VERIFY_SCHEMA })
     : Promise.resolve({ passed: true, tail: '(no verification command in plan)' })
 
-  const pack = async (fromSha, roundLabel) => agent(`Run these commands in the repository root and return the results:
+  const pack = async (fromSha, roundLabel) => agent(`Run these commands in the repository root — ${SCRIPTS_NOTE} — and return the results:
 1. ${SCRIPTS}/sdd-snapshot "${planPath}"  — printed tree SHA is "head".
-2. ${SCRIPTS}/review-package "${planPath}" ${fromSha} <head>  — printed file path is "packagePath"; also report "loc" = total insertions+deletions shown in its stat section.`,
+2. ${SCRIPTS}/review-package "${planPath}" ${fromSha} <head>  — printed file path is "packagePath"; read the stat section of the file review-package wrote and report loc = total insertions + deletions from it.`,
     { label: roundLabel, phase: 'Tasks', effort: 'low', schema: PACKAGE_SCHEMA })
 
   let v = await verify(`${label}:verify`)
+  if (t.verification && !v) return out({ status: 'error', error: `verification agent failed on task ${t.n}` })
   let openFindings = (v && !v.passed)
     ? [{ severity: 'critical', title: 'verification failed', detail: v.tail }]
     : []
@@ -326,6 +340,7 @@ Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the 
       { label: `${label}:fix${round}`, phase: 'Tasks', model: fixModel, agentType: 'general-purpose', schema: IMPL_SCHEMA })
     if (!fix) return out({ status: 'error', error: `fix agent failed on task ${t.n} round ${round}` })
     v = await verify(`${label}:verify${round}`)
+    if (t.verification && !v) return out({ status: 'error', error: `verification agent failed on task ${t.n}` })
     if (v && !v.passed) {
       openFindings = [
         { severity: 'critical', title: 'verification failed', detail: v.tail },
@@ -357,16 +372,31 @@ const finalReview = await workflow('gor-review', {
   mode: 'final', base: initialBase, planPath,
   deferredMinors, parked: parkedAll,
 })
-let finalOpen = finalReview && finalReview.status === 'reviewed'
+// A null or errored nested review is a hard stop, not a quiet 'done' — the
+// advertised final gate must actually have run for the session to trust it.
+if (!finalReview || finalReview.status === 'error') {
+  return out({
+    status: 'blocked',
+    blocked: 'final review failed — run /gor-review standalone, then address its findings',
+    finalReview: { status: 'error', residualFindings: [] },
+  })
+}
+let finalOpen = finalReview.status === 'reviewed'
   ? finalReview.findings.filter(f => f.severity !== 'minor')
   : []
-if (finalReview && finalReview.status === 'reviewed') {
+if (finalReview.status === 'reviewed') {
   for (const f of finalReview.findings.filter(f => f.severity === 'minor')) deferredMinors.push(`Final review: ${f.title}`)
 }
 
 // One fix wave, one scoped re-review — residuals surface to the session.
 if (finalOpen.length > 0) {
   const waveReport = `${setup.workspace}/final-fix-report.md`
+  // Snapshot BEFORE the wave runs so the final package below covers only the
+  // wave's own diff, not the whole plan implementation since initialBase.
+  const snap = await agent(`Run ${SCRIPTS}/sdd-snapshot "${planPath}" in the repository root — ${SCRIPTS_NOTE} — and return its printed tree SHA as "base".`,
+    { label: 'final:snapshot', phase: 'Final', effort: 'low', schema: SNAPSHOT_SCHEMA })
+  if (!snap) return out({ status: 'error', error: 'final snapshot agent failed' })
+  const waveBase = snap.base
   const wave = await agent(`You are the fix-wave implementer for the final review of the plan at ${planPath} in this repository. Fix ALL of these findings in the working tree (no commits):
 ${finalOpen.map(f => `- [${f.severity}] ${f.title}${f.file ? ' (' + f.file + ')' : ''}: ${f.detail}`).join('\n')}
 Global constraints:\n${setup.constraints}
@@ -374,9 +404,9 @@ ${setup.verificationAll ? `Then run: ${setup.verificationAll} — it must pass.`
 You never dispatch subagents. Full report → ${waveReport}. Return the structured result.`,
     { label: 'final:fixwave', phase: 'Final', schema: IMPL_SCHEMA })
   if (!wave) return out({ status: 'error', error: 'final fixwave agent failed' })
-  const fp = await agent(`Run these commands in the repository root and return the results:
+  const fp = await agent(`Run these commands in the repository root — ${SCRIPTS_NOTE} — and return the results:
 1. ${SCRIPTS}/sdd-snapshot "${planPath}"  — printed tree SHA is "head".
-2. ${SCRIPTS}/review-package "${planPath}" ${initialBase} <head>  — printed path is "packagePath"; "loc" = insertions+deletions.`,
+2. ${SCRIPTS}/review-package "${planPath}" ${waveBase} <head>  — printed path is "packagePath"; read the stat section of the file review-package wrote and report loc = total insertions + deletions from it.`,
     { label: 'final:package', phase: 'Final', effort: 'low', schema: PACKAGE_SCHEMA })
   const rr = (wave && fp) ? await agent(reReviewPrompt(finalOpen, planPath, waveReport, fp.packagePath), {
     label: 'final:rereview', phase: 'Final', agentType: 'gor-mobile-code-reviewer', schema: REREVIEW_SCHEMA,
@@ -389,9 +419,9 @@ You never dispatch subagents. Full report → ${waveReport}. Return the structur
 
 return out({
   status: 'done',
-  finalReview: finalReview ? {
+  finalReview: {
     status: finalReview.status, codexRan: finalReview.codexRan ?? false,
     gorRan: finalReview.gorRan ?? false, residualFindings: finalOpen,
     conflicts: finalReview.conflicts ?? [],
-  } : { status: 'error', residualFindings: [] },
+  },
 })

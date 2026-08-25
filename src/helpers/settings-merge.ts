@@ -207,6 +207,19 @@ export function codexCompanionAllowEntry(): string | null {
   return newest ? `Bash(node ${newest.scriptPath}:*)` : null;
 }
 
+/**
+ * Marker-recorded codex-companion allow entries that no longer match the
+ * current resolution — left behind after a plugin update moves the newest
+ * version's script path. init/repair fold these into the same staleOwned
+ * scrub as STALE_PERMISSION_ENTRIES instead of letting them pile up in
+ * settings.local.json and managed_permissions until uninstall.
+ */
+export function staleCodexCompanionEntries(managed: string[]): string[] {
+  const current = codexCompanionAllowEntry();
+  const pattern = /^Bash\(node .*codex-companion\.mjs:\*\)$/;
+  return managed.filter((e) => pattern.test(e) && e !== current);
+}
+
 /** gor-execute's agents invoke the SDD scripts by absolute path. */
 export function sddScriptsAllowEntry(): string {
   return `Bash(${join(GOR_MOBILE_HOME, "scripts")}/:*)`;

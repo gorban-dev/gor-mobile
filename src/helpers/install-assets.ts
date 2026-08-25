@@ -149,10 +149,12 @@ export function installAgents(target: TargetSpec): string[] {
   return copied;
 }
 
-// Ours are gor-*.js. The shipped set (readdir of templates/workflows) is what
-// the copy filter admits AND what the stale-cleanup pass deletes — a
-// user-authored gor-*.js workflow that gor-mobile never shipped is never
-// touched, in either direction.
+// Ours are gor-*.js. The shipped set (readdir of templates/workflows) is both
+// the copy filter and what the pre-copy pass removes below — that pass only
+// overwrites filenames copyFileSync is about to write anyway, it is not
+// stale cleanup: a workflow renamed or dropped from templates/workflows stays
+// on disk here and is only removed via the uninstall/repair marker-based
+// migration path (see CLAUDE.md's "Templates" section on renames).
 export function installWorkflows(target: TargetSpec): string[] {
   if (!target.workflowsDir) return [];
   const src = join(gorMobileRoot(), "templates", "workflows");

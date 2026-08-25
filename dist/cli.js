@@ -223,6 +223,11 @@ function codexCompanionAllowEntry() {
   }
   return newest ? `Bash(node ${newest.scriptPath}:*)` : null;
 }
+function staleCodexCompanionEntries(managed) {
+  const current = codexCompanionAllowEntry();
+  const pattern = /^Bash\(node .*codex-companion\.mjs:\*\)$/;
+  return managed.filter((e) => pattern.test(e) && e !== current);
+}
 function sddScriptsAllowEntry() {
   return `Bash(${join2(GOR_MOBILE_HOME, "scripts")}/:*)`;
 }
@@ -2659,7 +2664,10 @@ async function cmdInit(opts = {}) {
   const allowEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...dynamicWorkflowAllowEntries()];
   const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length} (workflow agents run unprompted)`);
-  const staleOwned = STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e));
+  const staleOwned = [
+    ...STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e)),
+    ...staleCodexCompanionEntries(marker.managed_permissions ?? [])
+  ];
   if (staleOwned.length > 0) {
     removePermissionAllow(spec.hooksFile, staleOwned);
     log.ok(`Scrubbed stale permission entr${staleOwned.length === 1 ? "y" : "ies"}: ${staleOwned.join(", ")}`);
@@ -3415,7 +3423,10 @@ async function repairProject(root) {
   const allowEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...dynamicWorkflowAllowEntries()];
   const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length}`);
-  const staleOwned = STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e));
+  const staleOwned = [
+    ...STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e)),
+    ...staleCodexCompanionEntries(marker.managed_permissions ?? [])
+  ];
   if (staleOwned.length > 0) {
     removePermissionAllow(spec.hooksFile, staleOwned);
     log.ok(`Scrubbed stale permission entr${staleOwned.length === 1 ? "y" : "ies"}: ${staleOwned.join(", ")}`);
@@ -3627,6 +3638,15 @@ function rmdirIfEmpty(dir) {
   } catch {
   }
 }
+function shippedWorkflowNames() {
+  try {
+    return readdirSync10(join18(gorMobileRoot(), "templates", "workflows")).filter(
+      (name) => name.startsWith("gor-") && name.endsWith(".js")
+    );
+  } catch {
+    return ["gor-review.js", "gor-execute.js"];
+  }
+}
 async function uninstallProject(opts) {
   const root = findProjectRoot() ?? process.cwd();
   if (!hasProjectMarker(root)) {
@@ -3686,8 +3706,9 @@ async function uninstallProject(opts) {
   if (spec.workflowsDir && existsSync22(spec.workflowsDir)) {
     const wfDir = spec.workflowsDir;
     const managedWorkflows = marker.managed_workflows ?? [];
+    const legacyShipped = managedWorkflows.length === 0 ? shippedWorkflowNames() : [];
     for (const entry of readdirSync10(wfDir)) {
-      const owned = managedWorkflows.length > 0 ? managedWorkflows.includes(entry) : entry.startsWith("gor-") && entry.endsWith(".js");
+      const owned = managedWorkflows.length > 0 ? managedWorkflows.includes(entry) : legacyShipped.includes(entry);
       if (owned) rmSync8(join18(wfDir, entry), { force: true });
     }
     rmdirIfEmpty(wfDir);

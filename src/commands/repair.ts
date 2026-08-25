@@ -44,6 +44,7 @@ import {
   applyWorkflowSizeGuideline,
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
   dynamicWorkflowAllowEntries,
+  staleCodexCompanionEntries,
   enableClearContextOnPlanAccept,
   ensurePermissionAllow,
   installAstIndexGuardHook,
@@ -114,7 +115,10 @@ async function repairProject(root: string): Promise<void> {
   const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length}`);
 
-  const staleOwned = STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e));
+  const staleOwned = [
+    ...STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e)),
+    ...staleCodexCompanionEntries(marker.managed_permissions ?? [])
+  ];
   if (staleOwned.length > 0) {
     removePermissionAllow(spec.hooksFile, staleOwned);
     log.ok(`Scrubbed stale permission entr${staleOwned.length === 1 ? "y" : "ies"}: ${staleOwned.join(", ")}`);
