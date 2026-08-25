@@ -253,7 +253,7 @@ for (const t of setup.tasks) {
   if (!impl || impl.status === 'NEEDS_CONTEXT' || impl.status === 'BLOCKED') {
     return out({
       status: 'blocked',
-      blocked: `Task ${t.n} (${t.title}): implementer ${impl ? impl.status : 'failed'} — ${impl ? (impl.concerns ?? []).join('; ') || impl.summary : 'agent error'}. Fix the plan or provide context, then resume this run.`,
+      blocked: `Task ${t.n} (${t.title}): implementer ${impl ? impl.status : 'failed'} — ${impl ? (impl.concerns ?? []).join('; ') || impl.summary : 'agent error'}. Fix the plan or provide context, then RERUN /gor-execute — a resume replays the cached plan parse and will not see plan edits.`,
     })
   }
   if (impl.status === 'DONE_WITH_CONCERNS' && (impl.concerns ?? []).length > 0) {
