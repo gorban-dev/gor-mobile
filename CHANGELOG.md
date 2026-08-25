@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-08-26
 
 Run `gor-mobile repair` in each repo and `gor-mobile setup` on the machine —
 existing installs will not have the workflows, the permission allowlist,
@@ -25,8 +25,8 @@ existing installs will not have the workflows, the permission allowlist,
 - **SDD scripts** (`sdd-workspace`, `sdd-snapshot`, `task-brief`,
   `review-package`) are now installed to `~/.gor-mobile/scripts` by `setup`,
   so `/gor-execute` can call them by absolute path from any repo.
-- The workflow permission allowlist gains `./gradlew` and `android` (device
-  control) and an exact-path rule for the `~/.gor-mobile/scripts` directory,
+- The workflow permission allowlist gains `./gradlew`, `android` (device
+  control), and an exact-path rule for the `~/.gor-mobile/scripts` directory,
   alongside the existing git/ls/codex-companion entries.
 - **Claude project installs no longer ship the six orchestration skills**
   (`subagent-driven-development`, `executing-plans`, `requesting-code-review`,
