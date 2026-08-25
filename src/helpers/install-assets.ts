@@ -148,6 +148,27 @@ export function installAgents(target: TargetSpec): string[] {
   return copied;
 }
 
+export function installWorkflows(target: TargetSpec): string[] {
+  if (!target.workflowsDir) return [];
+  const src = join(gorMobileRoot(), "templates", "workflows");
+  if (!existsSync(src)) return [];
+  ensureDir(target.workflowsDir);
+  // Same self-heal shape as skills: ours are gor-*.js, stale ones go first.
+  for (const entry of readdirSync(target.workflowsDir)) {
+    if (entry.startsWith("gor-") && entry.endsWith(".js")) {
+      rmSync(join(target.workflowsDir, entry), { force: true });
+    }
+  }
+  const copied: string[] = [];
+  for (const name of readdirSync(src)) {
+    if (!name.endsWith(".js")) continue;
+    copyFileSync(join(src, name), join(target.workflowsDir, name));
+    chmodSync(join(target.workflowsDir, name), 0o644);
+    copied.push(name);
+  }
+  return copied;
+}
+
 export function cleanupLegacyCommands(commandsDir: string): string[] {
   if (!existsSync(commandsDir)) return [];
   const legacy = [
