@@ -158,9 +158,9 @@ plan exits through a handoff that offers clearing.
    first option — "Yes, clear context …" (enabled per-repo by `gor-mobile
    init` via `showClearContextOnPlanAccept`) — makes the harness clear the
    planning context exactly once and restart; the SessionStart hook (source
-   `clear`, fresh checkpoint) rehydrates and execution starts at Task 1 via
-   `[[gor-mobile-subagent-driven-development]]` (or
-   `[[gor-mobile-executing-plans]]` if the plan header says inline). A plain
+   `clear`, fresh checkpoint) rehydrates and execution starts by running `/gor-execute <plan-path>`
+   (Codex: `[[gor-mobile-subagent-driven-development]]` or
+   `[[gor-mobile-executing-plans]]` per the plan header, as before). A plain
    "Yes" → same execution, this session, no clearing. "No, keep planning" →
    back to editing.
 3. **Fallback — no plan-mode tools available** (tool absent or the call is
