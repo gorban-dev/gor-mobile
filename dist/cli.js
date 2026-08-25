@@ -1006,6 +1006,9 @@ ${res.stderr ?? ""}`;
   const missing = DEBROID_CONTRACT.filter((c) => !text.includes(c));
   return { present: true, missing };
 }
+function debroidSkillSourceDir() {
+  return join6(HOME, ".debroid", "skills", "debroid-cli");
+}
 
 // src/ui/confirm-step.ts
 import { confirm, isCancel, cancel } from "@clack/prompts";
@@ -2169,7 +2172,7 @@ async function cmdSetup(opts = {}) {
 }
 
 // src/commands/init.ts
-import { existsSync as existsSync18 } from "fs";
+import { cpSync as cpSync4, existsSync as existsSync18 } from "fs";
 import { join as join14 } from "path";
 import pc8 from "picocolors";
 import { cancel as cancel4, isCancel as isCancel4, select as select2 } from "@clack/prompts";
@@ -2787,6 +2790,11 @@ async function cmdInit(opts = {}) {
   if (android.installed) log.ok(`android-cli skill \u2192 ${spec.skillsDir}/android-cli/`);
   else if (!android.ran) log.warn("android CLI not on PATH \u2014 skipped android-cli skill (run 'gor-mobile setup')");
   else log.warn(`android-cli skill not placed: ${android.error ?? "stock skill missing"}`);
+  const debroidSrc = debroidSkillSourceDir();
+  if (existsSync18(join14(debroidSrc, "SKILL.md"))) {
+    cpSync4(debroidSrc, join14(spec.skillsDir, "debroid-cli"), { recursive: true });
+    log.ok(`debroid-cli skill \u2192 ${spec.skillsDir}/debroid-cli/`);
+  }
   if (platform === "android") noteAstIndex(root);
   const stateMigration = migrateStateLayout(root);
   if (stateMigration.migrated.length > 0) {
@@ -3478,6 +3486,7 @@ async function cmdDoctor(opts = {}) {
 }
 
 // src/commands/repair.ts
+import { cpSync as cpSync5, existsSync as existsSync22 } from "fs";
 import { join as join18 } from "path";
 function refreshHooks(target) {
   const ss = installSessionStartHook(target);
@@ -3525,6 +3534,11 @@ async function repairProject(root) {
   if (android.installed) log.ok(`android-cli skill refreshed \u2192 ${spec.skillsDir}/android-cli/`);
   else if (!android.ran) log.info("android CLI not on PATH \u2014 skipped android-cli skill");
   else log.warn(`android-cli skill not placed: ${android.error ?? "stock skill missing"}`);
+  const debroidSrc = debroidSkillSourceDir();
+  if (existsSync22(join18(debroidSrc, "SKILL.md"))) {
+    cpSync5(debroidSrc, join18(spec.skillsDir, "debroid-cli"), { recursive: true });
+    log.ok(`debroid-cli skill \u2192 ${spec.skillsDir}/debroid-cli/`);
+  }
   applyEnabledPlugins(spec.hooksFile, [], [SUPERPOWERS_KEY]);
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
   const mcpRes = registerLocalMcp(root, marker.managed_mcp ?? []);
@@ -3699,7 +3713,7 @@ async function cmdMcp(opts = {}) {
 }
 
 // src/commands/uninstall.ts
-import { existsSync as existsSync22, readdirSync as readdirSync10, rmdirSync, rmSync as rmSync8 } from "fs";
+import { existsSync as existsSync23, readdirSync as readdirSync10, rmdirSync, rmSync as rmSync8 } from "fs";
 import { join as join19 } from "path";
 import { confirm as confirm3, isCancel as isCancel6, select as select3 } from "@clack/prompts";
 var EXCLUDE_ENTRIES2 = [
@@ -3724,7 +3738,7 @@ async function resolveMode(opts) {
 }
 function rmdirIfEmpty(dir) {
   try {
-    if (existsSync22(dir) && readdirSync10(dir).length === 0) rmdirSync(dir);
+    if (existsSync23(dir) && readdirSync10(dir).length === 0) rmdirSync(dir);
   } catch {
   }
 }
@@ -3766,16 +3780,16 @@ async function uninstallProject(opts) {
       legacyMcp.fileDeleted ? `Removed ${LEGACY_PROJECT_MCP_FILE}` : `Dropped ${legacyMcp.removed.join(", ")} from ${LEGACY_PROJECT_MCP_FILE}`
     );
   }
-  if (existsSync22(spec.skillsDir)) {
+  if (existsSync23(spec.skillsDir)) {
     for (const entry of readdirSync10(spec.skillsDir)) {
-      if (entry.startsWith("gor-mobile-") || entry === "android-cli") {
+      if (entry.startsWith("gor-mobile-") || entry === "android-cli" || entry === "debroid-cli") {
         rmSync8(join19(spec.skillsDir, entry), { recursive: true, force: true });
       }
     }
     rmdirIfEmpty(spec.skillsDir);
   }
   log.ok(`Skills removed (${spec.skillsDir})`);
-  if (existsSync22(spec.agentsDir)) {
+  if (existsSync23(spec.agentsDir)) {
     for (const entry of readdirSync10(spec.agentsDir)) {
       if (entry.startsWith("gor-mobile-")) {
         rmSync8(join19(spec.agentsDir, entry), { force: true });
@@ -3784,7 +3798,7 @@ async function uninstallProject(opts) {
     rmdirIfEmpty(spec.agentsDir);
   }
   log.ok(`Agents removed (${spec.agentsDir})`);
-  if (spec.workflowsDir && existsSync22(spec.workflowsDir)) {
+  if (spec.workflowsDir && existsSync23(spec.workflowsDir)) {
     const wfDir = spec.workflowsDir;
     const managedWorkflows = marker.managed_workflows ?? [];
     for (const entry of readdirSync10(wfDir)) {
@@ -3822,11 +3836,11 @@ async function uninstallMachine(opts) {
     teardownUserTarget(target);
   }
   log.step(`Removing ${GOR_MOBILE_HOME} (templates, rules)`);
-  if (existsSync22(GOR_MOBILE_HOME)) {
+  if (existsSync23(GOR_MOBILE_HOME)) {
     rmSync8(GOR_MOBILE_HOME, { recursive: true, force: true });
   }
   log.step(`Removing ${GOR_MOBILE_CONFIG}`);
-  if (existsSync22(GOR_MOBILE_CONFIG)) rmSync8(GOR_MOBILE_CONFIG);
+  if (existsSync23(GOR_MOBILE_CONFIG)) rmSync8(GOR_MOBILE_CONFIG);
   rmdirIfEmpty(GOR_MOBILE_CONFIG_DIR);
   log.ok("gor-mobile artifacts removed");
   const cli = androidCliPath();
@@ -3856,14 +3870,14 @@ async function cmdUninstall(opts = {}) {
 }
 
 // src/commands/rules.ts
-import { existsSync as existsSync23, rmSync as rmSync9 } from "fs";
+import { existsSync as existsSync24, rmSync as rmSync9 } from "fs";
 async function rulesList() {
-  if (!existsSync23(GOR_MOBILE_RULES_DIR)) {
+  if (!existsSync24(GOR_MOBILE_RULES_DIR)) {
     log.warn("No rules pack installed. Run: gor-mobile rules use <url>");
     return;
   }
   const m = readManifest();
-  const cfg = existsSync23(GOR_MOBILE_CONFIG) ? readConfig2() : {};
+  const cfg = existsSync24(GOR_MOBILE_CONFIG) ? readConfig2() : {};
   const { branch, rev } = await gitBranchAndRev();
   console.log("Installed pack:");
   console.log(`  name:    ${m?.name ?? "?"}`);
@@ -3882,14 +3896,14 @@ async function rulesUse(target) {
     return;
   }
   const backup = `${GOR_MOBILE_RULES_DIR}.bak`;
-  if (existsSync23(GOR_MOBILE_RULES_DIR)) {
+  if (existsSync24(GOR_MOBILE_RULES_DIR)) {
     log.info(`Backing up existing pack to ${backup}`);
-    if (existsSync23(backup)) rmSync9(backup, { recursive: true, force: true });
+    if (existsSync24(backup)) rmSync9(backup, { recursive: true, force: true });
     const { renameSync: renameSync2 } = await import("fs");
     renameSync2(GOR_MOBILE_RULES_DIR, backup);
   }
   try {
-    if (existsSync23(target)) {
+    if (existsSync24(target)) {
       log.info(`Copying local pack from ${target}`);
       copyFromLocal(target);
     } else {
@@ -3898,10 +3912,10 @@ async function rulesUse(target) {
     }
   } catch (err) {
     log.err(`Install failed \u2014 restoring backup: ${err.message}`);
-    if (existsSync23(GOR_MOBILE_RULES_DIR)) {
+    if (existsSync24(GOR_MOBILE_RULES_DIR)) {
       rmSync9(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
     }
-    if (existsSync23(backup)) {
+    if (existsSync24(backup)) {
       const { renameSync: renameSync2 } = await import("fs");
       renameSync2(backup, GOR_MOBILE_RULES_DIR);
     }
@@ -3910,7 +3924,7 @@ async function rulesUse(target) {
   }
   saveConfig(target);
   log.ok(`Rules pack installed at ${GOR_MOBILE_RULES_DIR}`);
-  if (existsSync23(backup)) rmSync9(backup, { recursive: true, force: true });
+  if (existsSync24(backup)) rmSync9(backup, { recursive: true, force: true });
   const res = validateManifest();
   if (!res.ok) {
     for (const e of res.errors) log.err(e);
@@ -3974,7 +3988,7 @@ async function cmdDocs(query) {
 }
 
 // src/commands/self-update.ts
-import { existsSync as existsSync24 } from "fs";
+import { existsSync as existsSync25 } from "fs";
 import { join as join20 } from "path";
 import { execa as execa11 } from "execa";
 function noteMigration() {
@@ -3984,7 +3998,7 @@ function noteMigration() {
 }
 async function cmdSelfUpdate() {
   const root = gorMobileRoot();
-  if (existsSync24(join20(root, ".git"))) {
+  if (existsSync25(join20(root, ".git"))) {
     log.step(`git pull in ${root}`);
     await execa11("git", ["-C", root, "pull", "--ff-only"], { stdio: "inherit" });
     log.step("npm install");
@@ -4010,7 +4024,7 @@ async function cmdSelfUpdate() {
 }
 
 // src/commands/android.ts
-import { existsSync as existsSync25 } from "fs";
+import { existsSync as existsSync26 } from "fs";
 import { execa as execa12 } from "execa";
 async function cmdAndroid(args) {
   const cli = androidCliPath();
@@ -4019,7 +4033,7 @@ async function cmdAndroid(args) {
     process.exit(res.exitCode ?? 0);
   }
   const first = args[0];
-  if (first && ["build", "assemble", "assembleDebug", "assembleRelease"].includes(first) && existsSync25("./gradlew")) {
+  if (first && ["build", "assemble", "assembleDebug", "assembleRelease"].includes(first) && existsSync26("./gradlew")) {
     log.info(`Falling back to ./gradlew ${first}`);
     const res = await execa12("./gradlew", [first], { stdio: "inherit", reject: false });
     process.exit(res.exitCode ?? 0);
@@ -4034,11 +4048,11 @@ async function cmdAndroid(args) {
 }
 
 // src/commands/android-skills.ts
-import { existsSync as existsSync26 } from "fs";
+import { existsSync as existsSync27 } from "fs";
 import { join as join21 } from "path";
 import { cancel as cancel5, isCancel as isCancel7, multiselect, spinner } from "@clack/prompts";
 function isInstalled(name) {
-  return existsSync26(join21(CLAUDE_SKILLS_DIR, name, "SKILL.md"));
+  return existsSync27(join21(CLAUDE_SKILLS_DIR, name, "SKILL.md"));
 }
 async function cmdAndroidSkills() {
   if (!androidCliPath()) {
@@ -4106,12 +4120,12 @@ async function cmdAndroidSkills() {
 }
 
 // src/commands/update.ts
-import { existsSync as existsSync27 } from "fs";
+import { existsSync as existsSync28 } from "fs";
 import { join as join22 } from "path";
 import { execa as execa13 } from "execa";
 async function cmdUpdate() {
   log.step("Updating rules pack");
-  if (existsSync27(join22(GOR_MOBILE_RULES_DIR, ".git"))) {
+  if (existsSync28(join22(GOR_MOBILE_RULES_DIR, ".git"))) {
     const res = await execa13(
       "git",
       ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"],

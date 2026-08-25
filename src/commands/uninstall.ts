@@ -135,7 +135,7 @@ async function uninstallProject(opts: UninstallOptions): Promise<void> {
 
   if (existsSync(spec.skillsDir)) {
     for (const entry of readdirSync(spec.skillsDir)) {
-      if (entry.startsWith("gor-mobile-") || entry === "android-cli") {
+      if (entry.startsWith("gor-mobile-") || entry === "android-cli" || entry === "debroid-cli") {
         rmSync(join(spec.skillsDir, entry), { recursive: true, force: true });
       }
     }

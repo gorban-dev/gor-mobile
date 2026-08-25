@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { cpSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import pc from "picocolors";
 import { cancel, isCancel, select } from "@clack/prompts";
@@ -14,6 +14,7 @@ import {
 import { provisionProjectAndroidSkill } from "../helpers/android-cli.js";
 import { androidCliPath } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
+import { debroidSkillSourceDir } from "../helpers/debroid.js";
 import { resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
 import { applyEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
 import { installAgents, installSkills, installWorkflows } from "../helpers/install-assets.js";
@@ -339,6 +340,12 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   if (android.installed) log.ok(`android-cli skill → ${spec.skillsDir}/android-cli/`);
   else if (!android.ran) log.warn("android CLI not on PATH — skipped android-cli skill (run 'gor-mobile setup')");
   else log.warn(`android-cli skill not placed: ${android.error ?? "stock skill missing"}`);
+
+  const debroidSrc = debroidSkillSourceDir();
+  if (existsSync(join(debroidSrc, "SKILL.md"))) {
+    cpSync(debroidSrc, join(spec.skillsDir, "debroid-cli"), { recursive: true });
+    log.ok(`debroid-cli skill → ${spec.skillsDir}/debroid-cli/`);
+  }
 
   if (platform === "android") noteAstIndex(root);
 
