@@ -26,7 +26,7 @@ const out = (extra) => ({ tasksDone: taskResults.length, taskResults, deferredMi
 
 if (!planPath) return out({ status: 'error', error: 'usage: /gor-execute <plan-file>' })
 
-const SCRIPTS = '"$HOME/.gor-mobile/scripts"'
+const SCRIPTS = '"${GOR_MOBILE_HOME:-$HOME/.gor-mobile}/scripts"'
 
 phase('Setup')
 

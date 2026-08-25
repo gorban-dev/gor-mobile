@@ -226,7 +226,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       `install skills → ${spec.skillsDir}`,
       `install agents → ${spec.agentsDir}`,
       `install workflows → ${spec.workflowsDir}`,
-      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls + codex companion) → ${spec.hooksFile}`,
+      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls, gradle, SDD scripts, codex companion) → ${spec.hooksFile}`,
       `merge SessionStart + UserPromptSubmit + PreToolUse → ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` +
         (opts.plugins ? ` (+enable ${opts.plugins})` : ""),

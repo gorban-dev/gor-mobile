@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-Run `gor-mobile repair` in each repo — existing installs will not have the
-workflow, the permission allowlist, or `workflowSizeGuideline` until repair
-runs.
+Run `gor-mobile repair` in each repo and `gor-mobile setup` on the machine —
+existing installs will not have the workflows, the permission allowlist,
+`workflowSizeGuideline`, or the SDD scripts until both run.
 
 - **`/gor-review` workflow**: a two-pass code review (gor-mobile reviewer +
   Codex, in parallel) installed by `init` into `<repo>/.claude/workflows/`.
@@ -17,6 +17,17 @@ runs.
   prompt. `doctor` checks the Claude Code version floor (≥ 2.1.154), the
   workflow files, and the allowlist; `uninstall --project` removes exactly
   what it installed.
+
+- **`/gor-execute <plan>` workflow**: the deterministic plan executor —
+  per-task implement → verify → combined review → fix-loop (cap 5) →
+  breaker, with a nested `/gor-review` run as the final gate. Installed
+  alongside `/gor-review` in `<repo>/.claude/workflows/`.
+- **SDD scripts** (`sdd-workspace`, `sdd-snapshot`, `task-brief`,
+  `review-package`) are now installed to `~/.gor-mobile/scripts` by `setup`,
+  so `/gor-execute` can call them by absolute path from any repo.
+- The workflow permission allowlist gains `./gradlew` and an exact-path rule
+  for the `~/.gor-mobile/scripts` directory, alongside the existing
+  git/ls/codex-companion entries.
 
 ## 0.3.6 — 2026-08-04
 

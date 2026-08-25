@@ -2625,7 +2625,7 @@ async function cmdInit(opts = {}) {
       `install skills \u2192 ${spec.skillsDir}`,
       `install agents \u2192 ${spec.agentsDir}`,
       `install workflows \u2192 ${spec.workflowsDir}`,
-      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls + codex companion) \u2192 ${spec.hooksFile}`,
+      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls, gradle, SDD scripts, codex companion) \u2192 ${spec.hooksFile}`,
       `merge SessionStart + UserPromptSubmit + PreToolUse \u2192 ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` + (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
       `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
