@@ -8,8 +8,9 @@ is an Android/Kotlin codebase.
 ### No test steps by default (run this FIRST)
 
 Do NOT emit test steps. Plan each task around the implementation plus its
-verification step (`[[gor-mobile-verification-before-completion]]`, on-device
-per `[[gor-mobile-using-android-cli]]` where relevant) — never a "write the
+verification step — the task's Gradle/compile/on-device check (on-device
+per `[[gor-mobile-using-android-cli]]` where relevant; Codex:
+`[[gor-mobile-verification-before-completion]]`) — never a "write the
 failing test" step.
 
 The one exception is an **explicit user request** for tests. If the user asked
@@ -134,8 +135,8 @@ with the task's verification step (Gradle test / compile / on-device check).
 
 ### Override: Execution Handoff — the clear-context seam (MANDATORY)
 
-The body's Execution Handoff is **replaced**. Never end planning with the
-body's two-option "Which approach?" prose. The plan→execute boundary is the
+The body's Execution Handoff (which now just names `/gor-execute`) is
+**replaced** by this fuller sequence. The plan→execute boundary is the
 cleanest point to shed context — spec, plan, and checkpoint on disk are
 complete ground truth; the planning transcript is dead weight — so **every**
 plan exits through a handoff that offers clearing.
@@ -158,8 +159,9 @@ plan exits through a handoff that offers clearing.
    first option — "Yes, clear context …" (enabled per-repo by `gor-mobile
    init` via `showClearContextOnPlanAccept`) — makes the harness clear the
    planning context exactly once and restart; the SessionStart hook (source
-   `clear`, fresh checkpoint) rehydrates and execution starts by running `/gor-execute <plan-path>`
-   (Codex: `[[gor-mobile-subagent-driven-development]]` or
+   `clear`, fresh checkpoint) rehydrates and execution starts by running
+   `/gor-execute <plan-path>` (Codex:
+   `[[gor-mobile-subagent-driven-development]]` or
    `[[gor-mobile-executing-plans]]` per the plan header, as before). A plain
    "Yes" → same execution, this session, no clearing. "No, keep planning" →
    back to editing.
@@ -180,10 +182,9 @@ into `ExitPlanMode`, and make writing the plan file + checkpoint the plan's
 step 0, executed first thing after the handoff lands (post-clear the seeded
 plan text carries everything needed to do that).
 
-> **Red Flag — STOP.** Emitting the body's "Which approach?" question, ending
-> planning with prose, or skipping the handoff because the plan "looks short"
-> or the session "feels light". Checkpoint first, then the plan-approval
-> dialog (or its fallback) on every plan — the user decides whether to clear,
-> not you.
+> **Red Flag — STOP.** Ending planning with prose instead of the handoff
+> seam, or skipping the handoff because the plan "looks short" or the
+> session "feels light". Checkpoint first, then the plan-approval dialog (or
+> its fallback) on every plan — the user decides whether to clear, not you.
 
 <!-- END gor-mobile overlay -->
