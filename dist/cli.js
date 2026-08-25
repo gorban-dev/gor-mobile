@@ -251,6 +251,7 @@ function projectClaudeSpec(root) {
     home,
     skillsDir: join2(home, "skills"),
     agentsDir: join2(home, "agents"),
+    workflowsDir: join2(home, "workflows"),
     instructionsFile: "",
     instructionsSnippet: "claude-md-snippet.md",
     hooksFile: join2(home, "settings.local.json"),

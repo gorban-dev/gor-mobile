@@ -35,6 +35,8 @@ export interface TargetSpec {
   home: string;
   skillsDir: string;
   agentsDir: string;
+  /** Claude Code workflows dir (<repo>/.claude/workflows) — project scope only. */
+  workflowsDir?: string;
   /** global-instructions markdown file (CLAUDE.md / AGENTS.md). */
   instructionsFile: string;
   /** templates/ filename of the managed-section body for this target. */
@@ -106,6 +108,7 @@ export function projectClaudeSpec(root: string): TargetSpec {
     home,
     skillsDir: join(home, "skills"),
     agentsDir: join(home, "agents"),
+    workflowsDir: join(home, "workflows"),
     instructionsFile: "",
     instructionsSnippet: "claude-md-snippet.md",
     hooksFile: join(home, "settings.local.json"),
