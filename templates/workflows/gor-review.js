@@ -75,8 +75,9 @@ structured result.
 5. Rules: read $HOME/.gor-mobile/rules/manifest.json → .sections; return the
    absolute paths of the core and architecture section files in rulesFiles
    (missing manifest → []).
-6. Codex: run \`ls -t $HOME/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs 2>/dev/null | head -1\`;
-   codexCompanion = that path, or null if empty.`
+6. Codex: run \`ls -t $HOME/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs 2>/dev/null\`
+   and take the FIRST line of the output yourself; codexCompanion = that
+   path, or null if the output is empty.`
 
 const scope = await agent(scopePrompt, { label: 'scope', effort: 'low', schema: SCOPE_SCHEMA })
 if (!scope) return { status: 'error', error: 'scope agent failed — rerun /gor-review' }
@@ -147,15 +148,18 @@ Do not re-run tests or builds — your job is code-level inspection.
 Severity policy: critical = must fix now, important = fix before proceeding,
 minor = note. Return the structured result only.`
 
-// scope.codexCompanion is an unquoted absolute path so the command line
-// starts with the literal text `node <abs-path>` — matching
-// codexCompanionAllowEntry()'s exact-path allow entry, which carries no
-// quotes either. Quoting it here would break that prefix match.
-const codexCmd = codexAdversarial
-  ? `node ${scope.codexCompanion} adversarial-review "--wait${codexScope === 'working-tree' ? '' : ' --base ' + scope.baseRef}${focus ? ' ' + focus : ''}"`
-  : `node ${scope.codexCompanion} review "--wait${codexScope === 'working-tree' ? '' : ' --base ' + scope.baseRef}"`
+// Built only when the companion exists — scope.codexCompanion is an unquoted
+// absolute path so the command line starts with the literal text
+// `node <abs-path>`, matching codexCompanionAllowEntry()'s exact-path allow
+// entry, which carries no quotes either. Quoting it here would break that
+// prefix match.
+const codexCmd = scope.codexCompanion
+  ? (codexAdversarial
+      ? `node ${scope.codexCompanion} adversarial-review "--wait${codexScope === 'working-tree' ? '' : ' --base ' + scope.baseRef}${focus ? ' ' + focus : ''}"`
+      : `node ${scope.codexCompanion} review "--wait${codexScope === 'working-tree' ? '' : ' --base ' + scope.baseRef}"`)
+  : null
 
-const codexPrompt = `Run this exact command in the repository root and wait for
+const codexPrompt = codexCmd ? `Run this exact command in the repository root and wait for
 it to finish (it can take many minutes — do not abort it):
 
     ${codexCmd}
@@ -163,7 +167,7 @@ it to finish (it can take many minutes — do not abort it):
 Return ran=true and the full report it prints, verbatim, in "report". If the
 command fails because the codex CLI is not installed or not ready, return
 ran=false with the error message in "error" — that is a valid outcome, not a
-failure to retry.`
+failure to retry.` : null
 
 phase('Review')
 const [gor, codex] = await parallel([
@@ -173,7 +177,7 @@ const [gor, codex] = await parallel([
     agentType: deepPass ? 'gor-mobile-code-reviewer-deep' : 'gor-mobile-code-reviewer',
     schema: REVIEW_SCHEMA,
   }),
-  () => scope.codexCompanion
+  () => codexPrompt
     ? agent(codexPrompt, { label: 'review:codex', phase: 'Review', effort: 'low', schema: CODEX_SCHEMA })
     : Promise.resolve(null),
 ])
@@ -213,7 +217,7 @@ Report A (gor-mobile reviewer, structured):
 ${JSON.stringify(gor ?? { strengths: [], findings: [] }, null, 2)}
 
 Report B (Codex, prose — extract its findings and severities):
-Report B's coverage: ${codexScope === 'working-tree' ? 'uncommitted changes only — a subset of Report A' : 'branch diff vs base'}.
+Report B's coverage: ${codexScope === 'working-tree' ? 'uncommitted changes only — a subset of Report A' : 'branch diff vs base'}.${finalMode && scope.treeDirty ? ' The tree may contain pre-existing changes outside the plan — discard Report B findings on files Report A does not cover.' : ''}
 ${codex.report}`
 
 const merged = await agent(mergePrompt, { label: 'merge', effort: 'low', schema: MERGE_SCHEMA })

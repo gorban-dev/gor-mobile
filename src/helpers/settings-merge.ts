@@ -174,7 +174,9 @@ export const WORKFLOW_PERMISSION_ENTRIES = [
   "Bash(git symbolic-ref:*)",
   "Bash(git log:*)",
   "Bash(ls:*)",
-  "Bash(./gradlew:*)"
+  "Bash(./gradlew:*)",
+  // on-device verification via the android CLI must run unprompted
+  "Bash(android:*)"
 ];
 
 /**
