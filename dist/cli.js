@@ -6,6 +6,7 @@ import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 var GOR_MOBILE_VERSION = "0.3.6";
+var WORKFLOWS_MIN_CLAUDE_VERSION = "2.1.154";
 var HOME = homedir();
 var GOR_MOBILE_HOME = process.env.GOR_MOBILE_HOME ?? join(HOME, ".gor-mobile");
 var GOR_MOBILE_RULES_DIR = join(GOR_MOBILE_HOME, "rules");
@@ -3065,6 +3066,47 @@ function verboseContractLint(target) {
   if (stray.length === 0) log.ok(`bridge skill \u2194 contract in sync (${mentioned.size} cmds referenced)`);
   else log.warn(`bridge skill references commands NOT in contract: ${stray.join(", ")}`);
 }
+async function checkClaudeWorkflowsSupport() {
+  const res = await execa8("claude", ["--version"], { reject: false });
+  const m = /(\d+)\.(\d+)\.(\d+)/.exec(res.stdout ?? "");
+  if (res.exitCode !== 0 || !m) {
+    log.warn("claude CLI version unreadable \u2014 cannot verify workflows support");
+    return;
+  }
+  const [maj, min, pat] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const [fMaj, fMin, fPat] = WORKFLOWS_MIN_CLAUDE_VERSION.split(".").map(Number);
+  const below = maj !== fMaj ? maj < fMaj : min !== fMin ? min < fMin : pat < fPat;
+  if (below) {
+    log.warn(`Claude Code v${m[0]} < ${WORKFLOWS_MIN_CLAUDE_VERSION} \u2014 /gor-review workflow will not load`);
+  } else {
+    log.ok(`Claude Code v${m[0]} supports workflows (\u2265 ${WORKFLOWS_MIN_CLAUDE_VERSION})`);
+  }
+  const userSettings = readJsonSafe(CLAUDE_SETTINGS, {});
+  if (userSettings["disableWorkflows"] === true) {
+    log.warn(`disableWorkflows=true in ${CLAUDE_SETTINGS} \u2014 workflows are OFF for this user`);
+  }
+}
+function checkWorkflows(target) {
+  if (!target.workflowsDir) return;
+  for (const name of ["gor-review.js"]) {
+    const p = join15(target.workflowsDir, name);
+    if (!existsSync21(p)) {
+      log.warn(`workflow ${name} missing \u2014 run 'gor-mobile repair'`);
+      continue;
+    }
+    const head = readFileSync10(p, "utf8").slice(0, 2048);
+    if (/export const meta = \{/.test(head)) log.ok(`workflow ${name} installed`);
+    else log.warn(`workflow ${name} has no meta header \u2014 run 'gor-mobile repair'`);
+  }
+  const settings = readJsonSafe(target.hooksFile, {});
+  const allow = settings.permissions?.allow ?? [];
+  const missing = WORKFLOW_PERMISSION_ENTRIES.filter((e) => !allow.includes(e));
+  if (missing.length > 0) {
+    log.warn(`workflow allowlist incomplete (${missing.length} missing) \u2014 run 'gor-mobile repair'`);
+  } else {
+    log.ok("workflow permission allowlist present");
+  }
+}
 function checkTarget(target) {
   checkFile(target.hooksFile, target.hooksKind === "codex-hooks-json" ? "hooks.json" : "settings file");
   checkHooks(target);
@@ -3089,6 +3131,7 @@ function checkTarget(target) {
   if (target.instructionsFile) checkInstructionsSection(target);
   if (target.statusLineKind === "claude-command") checkStatusLine();
   else if (target.statusLineKind === "codex-config") checkCodexStatusLine();
+  checkWorkflows(target);
 }
 function checkProject(root) {
   const marker = readProjectMarker(root);
@@ -3175,6 +3218,7 @@ async function cmdDoctor(opts = {}) {
       "  \u2192 jq powers the status line AND the ast-index guard hook (guard fails open without it) \u2014 brew install jq"
     );
   }
+  await checkClaudeWorkflowsSupport();
   const dk = resolveDevKnowledgeKey();
   if (dk.key) {
     log.ok(`Developer Knowledge API key \u2192 ${KEY_SOURCE_LABEL[dk.source]}`);

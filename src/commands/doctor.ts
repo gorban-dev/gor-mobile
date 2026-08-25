@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { execa } from "execa";
 import {
   CLAUDE_JSON,
+  CLAUDE_SETTINGS,
   DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_CONFIG,
   GOR_MOBILE_HOME,
@@ -12,7 +13,8 @@ import {
   GOR_MOBILE_VERSION,
   LEGACY_PROJECT_MARKER_NAME,
   PROJECT_MARKER_NAME,
-  SECTION_BEGIN
+  SECTION_BEGIN,
+  WORKFLOWS_MIN_CLAUDE_VERSION
 } from "../constants.js";
 import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-cli.js";
 import { ANDROID_CONTRACT } from "../android-contract.js";
@@ -23,12 +25,13 @@ import {
   legacyProjectMcpServers,
   localMcpState
 } from "../helpers/mcp-register.js";
-import { countManagedHooks } from "../helpers/settings-merge.js";
+import { countManagedHooks, WORKFLOW_PERMISSION_ENTRIES } from "../helpers/settings-merge.js";
 import { statusLineState } from "../helpers/settings-statusline.js";
 import { codexStatusLineState } from "../helpers/codex-statusline.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
 import { runAstIndexUpdate } from "../helpers/ast-index-freshness.js";
+import { readJsonSafe } from "../helpers/paths.js";
 import {
   findProjectRoot,
   legacyProjectMarkerPath,
@@ -42,6 +45,7 @@ import {
   projectClaudeSpec,
   type TargetSpec
 } from "../targets.js";
+import type { ManagedSettings } from "../types.js";
 import { log } from "../ui/log.js";
 
 interface DoctorOptions {
@@ -302,6 +306,50 @@ function verboseContractLint(target: TargetSpec): void {
   else log.warn(`bridge skill references commands NOT in contract: ${stray.join(", ")}`);
 }
 
+async function checkClaudeWorkflowsSupport(): Promise<void> {
+  const res = await execa("claude", ["--version"], { reject: false });
+  const m = /(\d+)\.(\d+)\.(\d+)/.exec(res.stdout ?? "");
+  if (res.exitCode !== 0 || !m) {
+    log.warn("claude CLI version unreadable — cannot verify workflows support");
+    return;
+  }
+  const [maj, min, pat] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const [fMaj, fMin, fPat] = WORKFLOWS_MIN_CLAUDE_VERSION.split(".").map(Number);
+  const below =
+    maj !== fMaj ? maj < fMaj! : min !== fMin ? min < fMin! : pat < fPat!;
+  if (below) {
+    log.warn(`Claude Code v${m[0]} < ${WORKFLOWS_MIN_CLAUDE_VERSION} — /gor-review workflow will not load`);
+  } else {
+    log.ok(`Claude Code v${m[0]} supports workflows (≥ ${WORKFLOWS_MIN_CLAUDE_VERSION})`);
+  }
+  const userSettings = readJsonSafe<Record<string, unknown>>(CLAUDE_SETTINGS, {});
+  if (userSettings["disableWorkflows"] === true) {
+    log.warn(`disableWorkflows=true in ${CLAUDE_SETTINGS} — workflows are OFF for this user`);
+  }
+}
+
+function checkWorkflows(target: TargetSpec): void {
+  if (!target.workflowsDir) return;
+  for (const name of ["gor-review.js"]) {
+    const p = join(target.workflowsDir, name);
+    if (!existsSync(p)) {
+      log.warn(`workflow ${name} missing — run 'gor-mobile repair'`);
+      continue;
+    }
+    const head = readFileSync(p, "utf8").slice(0, 2048);
+    if (/export const meta = \{/.test(head)) log.ok(`workflow ${name} installed`);
+    else log.warn(`workflow ${name} has no meta header — run 'gor-mobile repair'`);
+  }
+  const settings = readJsonSafe<ManagedSettings>(target.hooksFile, {});
+  const allow = settings.permissions?.allow ?? [];
+  const missing = WORKFLOW_PERMISSION_ENTRIES.filter((e) => !allow.includes(e));
+  if (missing.length > 0) {
+    log.warn(`workflow allowlist incomplete (${missing.length} missing) — run 'gor-mobile repair'`);
+  } else {
+    log.ok("workflow permission allowlist present");
+  }
+}
+
 // Skills/agents/hooks integrity for one target. Skips the managed-instructions
 // and status-line checks when the target does not carry them (project Claude).
 function checkTarget(target: TargetSpec): void {
@@ -328,6 +376,7 @@ function checkTarget(target: TargetSpec): void {
   if (target.instructionsFile) checkInstructionsSection(target);
   if (target.statusLineKind === "claude-command") checkStatusLine();
   else if (target.statusLineKind === "codex-config") checkCodexStatusLine();
+  checkWorkflows(target);
 }
 
 function checkProject(root: string): TargetSpec {
@@ -420,6 +469,7 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
       "  → jq powers the status line AND the ast-index guard hook (guard fails open without it) — brew install jq"
     );
   }
+  await checkClaudeWorkflowsSupport();
   const dk = resolveDevKnowledgeKey();
   if (dk.key) {
     log.ok(`Developer Knowledge API key → ${KEY_SOURCE_LABEL[dk.source]}`);
