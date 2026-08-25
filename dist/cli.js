@@ -198,7 +198,9 @@ var WORKFLOW_PERMISSION_ENTRIES = [
   "Bash(git symbolic-ref:*)",
   "Bash(git log:*)",
   "Bash(ls:*)",
-  "Bash(./gradlew:*)"
+  "Bash(./gradlew:*)",
+  // on-device verification via the android CLI must run unprompted
+  "Bash(android:*)"
 ];
 function codexCompanionAllowEntry() {
   const codexDir = join2(HOME, ".claude", "plugins", "cache", "openai-codex", "codex");
@@ -288,6 +290,14 @@ function hasManagedHooksInFile(hooksFile) {
 }
 
 // src/targets.ts
+var WORKFLOW_SUPERSEDED_SKILLS = [
+  "subagent-driven-development",
+  "executing-plans",
+  "requesting-code-review",
+  "receiving-code-review",
+  "verification-before-completion",
+  "dispatching-parallel-agents"
+];
 var TARGETS = {
   claude: {
     id: "claude",
@@ -337,6 +347,7 @@ function projectClaudeSpec(root) {
     skillsDir: join3(home, "skills"),
     agentsDir: join3(home, "agents"),
     workflowsDir: join3(home, "workflows"),
+    excludeSkills: WORKFLOW_SUPERSEDED_SKILLS,
     instructionsFile: "",
     instructionsSnippet: "claude-md-snippet.md",
     hooksFile: join3(home, "settings.local.json"),
@@ -1239,6 +1250,7 @@ function installSkills(target) {
   for (const name of readdirSync3(skillsDir)) {
     const srcDir = join6(skillsDir, name);
     if (!statSync2(srcDir).isDirectory()) continue;
+    if (target.excludeSkills?.includes(name)) continue;
     const dstDir = join6(target.skillsDir, `gor-mobile-${name}`);
     cpSync2(srcDir, dstDir, { recursive: true });
     const skillMd = join6(dstDir, "SKILL.md");
@@ -3195,7 +3207,7 @@ function expectedWorkflows() {
       (name) => name.startsWith("gor-") && name.endsWith(".js")
     );
   } catch {
-    return ["gor-review.js"];
+    return ["gor-review.js", "gor-execute.js"];
   }
 }
 function checkWorkflows(target) {
@@ -3638,15 +3650,6 @@ function rmdirIfEmpty(dir) {
   } catch {
   }
 }
-function shippedWorkflowNames() {
-  try {
-    return readdirSync10(join18(gorMobileRoot(), "templates", "workflows")).filter(
-      (name) => name.startsWith("gor-") && name.endsWith(".js")
-    );
-  } catch {
-    return ["gor-review.js", "gor-execute.js"];
-  }
-}
 async function uninstallProject(opts) {
   const root = findProjectRoot() ?? process.cwd();
   if (!hasProjectMarker(root)) {
@@ -3706,10 +3709,8 @@ async function uninstallProject(opts) {
   if (spec.workflowsDir && existsSync22(spec.workflowsDir)) {
     const wfDir = spec.workflowsDir;
     const managedWorkflows = marker.managed_workflows ?? [];
-    const legacyShipped = managedWorkflows.length === 0 ? shippedWorkflowNames() : [];
     for (const entry of readdirSync10(wfDir)) {
-      const owned = managedWorkflows.length > 0 ? managedWorkflows.includes(entry) : legacyShipped.includes(entry);
-      if (owned) rmSync8(join18(wfDir, entry), { force: true });
+      if (managedWorkflows.includes(entry)) rmSync8(join18(wfDir, entry), { force: true });
     }
     rmdirIfEmpty(wfDir);
     log.ok(`Workflows removed (${wfDir})`);

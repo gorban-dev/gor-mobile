@@ -88,10 +88,11 @@ Installs the workflow into the current repository, locally (nothing committed):
 
 ```
 <repo>/
-  .claude/skills/gor-mobile-*/     # 14 skills (superpowers transforms + overlays)
+  .claude/skills/gor-mobile-*/     # 8 skills (orchestration moved to workflows)
   .claude/skills/android-cli/      # stock Google skill (from `android init`)
   .claude/agents/gor-mobile-code-reviewer{,-deep}.md
   .claude/workflows/gor-review.js  # /gor-review: two-pass review (gor-mobile reviewer + Codex, parallel)
+  .claude/workflows/gor-execute.js # /gor-execute: plan executor — per-task review/fix-loop + nested final gor-review
   .claude/settings.local.json      # SessionStart + UserPromptSubmit + PreToolUse hooks
                                    # + enabledPlugins: superpowers disabled for this repo
                                    # + showClearContextOnPlanAccept: plan-approval clear-context option

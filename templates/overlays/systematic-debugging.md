@@ -31,10 +31,10 @@ Load `core` + `debug-*` sections from `$HOME/.gor-mobile/rules/` via
 - **Phase 4 — reproduce + fix.** The body's Phase 4 Step 1 ("Create Failing
   Test Case — MUST have before fixing") is **overridden**: do NOT write a test
   by default. Reproduce the bug however is cheapest (a manual repro, a log, a
-  throwaway script), fix the root cause, and confirm the fix via
-  `[[gor-mobile-verification-before-completion]]` (on-device per
-  `[[gor-mobile-using-android-cli]]` where the effect is only observable
-  there). Write a regression test **only if the user explicitly asks** for one.
+  throwaway script), fix the root cause, and verify the fix via the task's
+  Gradle/on-device check (per `[[gor-mobile-using-android-cli]]` where
+  relevant; Codex: `[[gor-mobile-verification-before-completion]]`). Write a
+  regression test **only if the user explicitly asks** for one.
 
   > **Red Flag — STOP.** Creating a `*Test*` file, or going "I'll go
   > test-first," because "the debugging skill said MUST create a failing test."

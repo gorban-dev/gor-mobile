@@ -378,7 +378,7 @@ function expectedWorkflows(): string[] {
       (name) => name.startsWith("gor-") && name.endsWith(".js")
     );
   } catch {
-    return ["gor-review.js"];
+    return ["gor-review.js", "gor-execute.js"];
   }
 }
 

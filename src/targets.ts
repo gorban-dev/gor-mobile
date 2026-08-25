@@ -27,6 +27,18 @@ export type AndroidAgentFlag = "claude-code" | "codex";
 // scripts). codex-config: built-in `tui.status_line` item list in config.toml.
 export type StatusLineKind = "claude-command" | "codex-config";
 
+// Orchestration skills whose job moved into the gor-execute / gor-review
+// workflows. Claude project installs skip them; Codex (no workflows) keeps
+// the full set.
+export const WORKFLOW_SUPERSEDED_SKILLS = [
+  "subagent-driven-development",
+  "executing-plans",
+  "requesting-code-review",
+  "receiving-code-review",
+  "verification-before-completion",
+  "dispatching-parallel-agents"
+];
+
 export interface TargetSpec {
   id: TargetId;
   label: string;
@@ -37,6 +49,8 @@ export interface TargetSpec {
   agentsDir: string;
   /** Claude Code workflows dir (<repo>/.claude/workflows) — project scope only. */
   workflowsDir?: string;
+  /** templates/skills/ entries NOT installed for this target. */
+  excludeSkills?: string[];
   /** global-instructions markdown file (CLAUDE.md / AGENTS.md). */
   instructionsFile: string;
   /** templates/ filename of the managed-section body for this target. */
@@ -109,6 +123,7 @@ export function projectClaudeSpec(root: string): TargetSpec {
     skillsDir: join(home, "skills"),
     agentsDir: join(home, "agents"),
     workflowsDir: join(home, "workflows"),
+    excludeSkills: WORKFLOW_SUPERSEDED_SKILLS,
     instructionsFile: "",
     instructionsSnippet: "claude-md-snippet.md",
     hooksFile: join(home, "settings.local.json"),

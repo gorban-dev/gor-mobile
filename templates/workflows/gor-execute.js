@@ -25,15 +25,23 @@ let initialBase = null
 const out = (extra) => ({ tasksDone: taskResults.length, taskResults, deferredMinors, parked: parkedAll, ...extra })
 
 if (!planPath) return out({ status: 'error', error: 'usage: /gor-execute <plan-file>' })
+if (!/^[\w./-]+$/.test(planPath)) return out({ status: 'error', error: 'plan path contains unsupported characters' })
+
+// Every agent-returned tree SHA and path below is interpolated into a later
+// prompt that names a Bash command an agent will run under the sdd-scripts
+// allow entry — validate shape before reuse so a hostile/confused agent
+// result cannot smuggle shell metacharacters into that command.
+const SHA_SHAPE = /^[0-9a-f]{7,64}$/
+const PATH_SHAPE = /^[\w./ -]+$/
 
 const SCRIPTS = '~/.gor-mobile/scripts'
 // The installed Bash allow entry (sddScriptsAllowEntry) is the literal
-// resolved absolute path with no quotes — a command starting with a quote or
-// an unexpanded shell parameter expansion cannot prefix-match it and the
-// agent stalls on a permission prompt. Every prompt that runs a script below
-// carries this same instruction so agents resolve ~ themselves before
-// invoking, rather than handing the literal text to Bash.
-const SCRIPTS_NOTE = 'expand ~ to the absolute home directory and invoke by absolute path, without quotes (if GOR_MOBILE_HOME is set in the environment, use $GOR_MOBILE_HOME/scripts instead)'
+// resolved absolute path with no quotes — a command starting with a quote
+// cannot prefix-match it and the agent stalls on a permission prompt. Every
+// prompt that runs a script below carries this same instruction so agents
+// resolve ~ themselves before invoking, rather than handing the literal text
+// to Bash.
+const SCRIPTS_NOTE = 'expand ~ to the absolute home directory and invoke by absolute path, without quotes'
 
 phase('Setup')
 
@@ -146,8 +154,8 @@ const REREVIEW_SCHEMA = {
     verdicts: {
       type: 'array',
       items: {
-        type: 'object', required: ['title', 'verdict'],
-        properties: { title: { type: 'string' }, verdict: { enum: ['ADDRESSED', 'NOT_ADDRESSED'] } },
+        type: 'object', required: ['n', 'title', 'verdict'],
+        properties: { n: { type: 'number' }, title: { type: 'string' }, verdict: { enum: ['ADDRESSED', 'NOT_ADDRESSED'] } },
       },
     },
     newFindings: { type: 'array', items: FINDING, description: 'new breakage introduced by the fix diff itself, nothing else' },
@@ -226,16 +234,16 @@ result only.`
 
 function reReviewPrompt(findings, briefPath, reportPath, packagePath) {
   return `You are the scoped re-reviewer for a fix round. Findings that were to be fixed:
-${findings.map(f => `- [${f.severity}] ${f.title}: ${f.detail}`).join('\n')}
+${findings.map((f, i) => `${i + 1}. [${f.severity}] ${f.title}: ${f.detail}`).join('\n')}
 
 Read: the task brief at ${briefPath}; the implementer report (with its fix
 appendix) at ${reportPath}; the fix diff at ${packagePath}.
 
 Verdict each finding ADDRESSED or NOT ADDRESSED ("attempted" is not
-addressed). Copy each verdict's title VERBATIM from the findings list above —
-a paraphrased title counts as no verdict. Inspect ONLY the fix diff for new
-breakage — out-of-scope observations do not belong in newFindings. Return the
-structured result only.`
+addressed). Echo each verdict's n exactly as numbered above, and copy its
+title VERBATIM from the findings list — a paraphrased title counts as no
+verdict. Inspect ONLY the fix diff for new breakage — out-of-scope
+observations do not belong in newFindings. Return the structured result only.`
 }
 
 phase('Tasks')
@@ -249,6 +257,8 @@ for (const t of setup.tasks) {
 2. ${SCRIPTS}/task-brief "${planPath}" ${t.n}  — its printed file path is "briefPath".`,
     { label: `${label}:prep`, phase: 'Tasks', effort: 'low', schema: PREP_SCHEMA })
   if (!prep) return out({ status: 'error', error: `prep agent failed on task ${t.n}` })
+  if (!SHA_SHAPE.test(prep.base)) return out({ status: 'error', error: 'agent returned a malformed tree SHA' })
+  if (!PATH_SHAPE.test(prep.briefPath)) return out({ status: 'error', error: 'agent returned a malformed path' })
   if (!initialBase) initialBase = prep.base
 
   const implModel = implModelFor(t)
@@ -300,6 +310,8 @@ for (const t of setup.tasks) {
     if (openFindings.length === 0 && !reviewed) {
       const p = await pack(prep.base, `${label}:package`)
       if (!p) return out({ status: 'error', error: `package agent failed on task ${t.n}` })
+      if (!SHA_SHAPE.test(p.head)) return out({ status: 'error', error: 'agent returned a malformed tree SHA' })
+      if (!PATH_SHAPE.test(p.packagePath)) return out({ status: 'error', error: 'agent returned a malformed path' })
       const deep = t.security || p.loc > 400
       const reduced = t.category === 'non-behavioral' && !deep
       const review = await agent(reviewPrompt(t, prep.briefPath, reportPath, p.packagePath, reduced), {
@@ -351,13 +363,15 @@ Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the 
     if (!reviewed) { openFindings = []; continue }
     const fp = await pack(lastReviewBase, `${label}:package${round}`)
     if (!fp) return out({ status: 'error', error: `package agent failed on task ${t.n} round ${round}` })
+    if (!SHA_SHAPE.test(fp.head)) return out({ status: 'error', error: 'agent returned a malformed tree SHA' })
+    if (!PATH_SHAPE.test(fp.packagePath)) return out({ status: 'error', error: 'agent returned a malformed path' })
     const rr = await agent(reReviewPrompt(openFindings, prep.briefPath, reportPath, fp.packagePath), {
       label: `${label}:rereview${round}`, phase: 'Tasks',
       agentType: 'gor-mobile-code-reviewer', schema: REREVIEW_SCHEMA,
     })
     if (!rr) return out({ status: 'error', error: `re-review agent failed on task ${t.n} round ${round}` })
     lastReviewBase = fp.head
-    const notAddressed = openFindings.filter(f => !rr.verdicts.some(vd => vd.title === f.title && vd.verdict === 'ADDRESSED'))
+    const notAddressed = openFindings.filter((f, i) => !rr.verdicts.some(vd => (vd.n === i + 1 || vd.title === f.title) && vd.verdict === 'ADDRESSED'))
     for (const f of rr.newFindings.filter(f => f.severity === 'minor')) deferredMinors.push(`Task ${t.n} (fix ${round}): ${f.title}`)
     openFindings = [...notAddressed, ...rr.newFindings.filter(f => f.severity !== 'minor')]
   }
@@ -396,6 +410,7 @@ if (finalOpen.length > 0) {
   const snap = await agent(`Run ${SCRIPTS}/sdd-snapshot "${planPath}" in the repository root — ${SCRIPTS_NOTE} — and return its printed tree SHA as "base".`,
     { label: 'final:snapshot', phase: 'Final', effort: 'low', schema: SNAPSHOT_SCHEMA })
   if (!snap) return out({ status: 'error', error: 'final snapshot agent failed' })
+  if (!SHA_SHAPE.test(snap.base)) return out({ status: 'error', error: 'agent returned a malformed tree SHA' })
   const waveBase = snap.base
   const wave = await agent(`You are the fix-wave implementer for the final review of the plan at ${planPath} in this repository. Fix ALL of these findings in the working tree (no commits):
 ${finalOpen.map(f => `- [${f.severity}] ${f.title}${f.file ? ' (' + f.file + ')' : ''}: ${f.detail}`).join('\n')}
@@ -408,11 +423,13 @@ You never dispatch subagents. Full report → ${waveReport}. Return the structur
 1. ${SCRIPTS}/sdd-snapshot "${planPath}"  — printed tree SHA is "head".
 2. ${SCRIPTS}/review-package "${planPath}" ${waveBase} <head>  — printed path is "packagePath"; read the stat section of the file review-package wrote and report loc = total insertions + deletions from it.`,
     { label: 'final:package', phase: 'Final', effort: 'low', schema: PACKAGE_SCHEMA })
+  if (fp && !SHA_SHAPE.test(fp.head)) return out({ status: 'error', error: 'agent returned a malformed tree SHA' })
+  if (fp && !PATH_SHAPE.test(fp.packagePath)) return out({ status: 'error', error: 'agent returned a malformed path' })
   const rr = (wave && fp) ? await agent(reReviewPrompt(finalOpen, planPath, waveReport, fp.packagePath), {
     label: 'final:rereview', phase: 'Final', agentType: 'gor-mobile-code-reviewer', schema: REREVIEW_SCHEMA,
   }) : null
   const residual = rr
-    ? [...finalOpen.filter(f => !rr.verdicts.some(vd => vd.title === f.title && vd.verdict === 'ADDRESSED')), ...rr.newFindings.filter(f => f.severity !== 'minor')]
+    ? [...finalOpen.filter((f, i) => !rr.verdicts.some(vd => (vd.n === i + 1 || vd.title === f.title) && vd.verdict === 'ADDRESSED')), ...rr.newFindings.filter(f => f.severity !== 'minor')]
     : finalOpen
   finalOpen = residual
 }

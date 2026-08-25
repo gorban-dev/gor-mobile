@@ -51,9 +51,11 @@ record what you used:
    only the source shows that; the prose does not.)
 
 This ladder is the **single source of truth** for API ground-truth. The
-`brainstorming`, `writing-plans`, and `subagent-driven-development` overlays
-gate on it per phase, and the spec-/plan-document review prompts verify the
-citations — they reference this section rather than restating the ladder.
+`brainstorming` and `writing-plans` overlays plus the `/gor-execute`
+workflow's implementer prompts (Codex: the `subagent-driven-development`
+overlay, as before) gate on it per phase, and the spec-/plan-document review
+prompts verify the citations — they reference this section rather than
+restating the ladder.
 
 ### Red Flags — STOP
 

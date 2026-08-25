@@ -103,6 +103,7 @@ export function installSkills(target: TargetSpec): InstallSkillsResult {
   for (const name of readdirSync(skillsDir)) {
     const srcDir = join(skillsDir, name);
     if (!statSync(srcDir).isDirectory()) continue;
+    if (target.excludeSkills?.includes(name)) continue;
     const dstDir = join(target.skillsDir, `gor-mobile-${name}`);
     cpSync(srcDir, dstDir, { recursive: true });
     const skillMd = join(dstDir, "SKILL.md");

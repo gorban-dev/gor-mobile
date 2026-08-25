@@ -28,6 +28,15 @@ existing installs will not have the workflows, the permission allowlist,
 - The workflow permission allowlist gains `./gradlew` and an exact-path rule
   for the `~/.gor-mobile/scripts` directory, alongside the existing
   git/ls/codex-companion entries.
+- **Claude project installs no longer ship the six orchestration skills**
+  (`subagent-driven-development`, `executing-plans`, `requesting-code-review`,
+  `receiving-code-review`, `verification-before-completion`,
+  `dispatching-parallel-agents`) — superseded by `/gor-execute` and
+  `/gor-review`. Codex installs keep the full set. The brainstorm → spec →
+  plan chain loses its spec-approval pause on Claude (single human stop =
+  plan approval); the prompt-submit reminder routes review/execute requests
+  to the workflows instead of the removed skills. `gor-mobile repair` removes
+  the six from existing Claude installs.
 
 ## 0.3.6 — 2026-08-04
 
