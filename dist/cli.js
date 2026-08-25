@@ -205,6 +205,13 @@ function applyWorkflowSizeGuideline(file) {
   writeJson(file, settings);
   return true;
 }
+function removeWorkflowSizeGuideline(file) {
+  if (!existsSync2(file)) return;
+  const settings = readJsonSafe(file, {});
+  if (!(WORKFLOW_SIZE_GUIDELINE in settings)) return;
+  delete settings[WORKFLOW_SIZE_GUIDELINE];
+  writeJson(file, settings);
+}
 function ensurePermissionAllow(file, entries) {
   const settings = ensureSettingsFile(file);
   settings.permissions = settings.permissions ?? {};
@@ -214,6 +221,16 @@ function ensurePermissionAllow(file, entries) {
   settings.permissions.allow = [...allow, ...added];
   writeJson(file, settings);
   return added;
+}
+function removePermissionAllow(file, entries) {
+  if (!existsSync2(file) || entries.length === 0) return;
+  const settings = readJsonSafe(file, {});
+  const allow = settings.permissions?.allow;
+  if (!allow) return;
+  const remaining = allow.filter((e) => !entries.includes(e));
+  if (remaining.length === allow.length) return;
+  settings.permissions.allow = remaining;
+  writeJson(file, settings);
 }
 function countManagedHooks(hookType, target) {
   const settings = readJsonSafe(target.hooksFile, {});
@@ -3500,6 +3517,20 @@ async function uninstallProject(opts) {
     rmdirIfEmpty(spec.agentsDir);
   }
   log.ok(`Agents removed (${spec.agentsDir})`);
+  if (spec.workflowsDir && existsSync22(spec.workflowsDir)) {
+    const wfDir = spec.workflowsDir;
+    for (const entry of readdirSync9(wfDir)) {
+      if (entry.startsWith("gor-") && entry.endsWith(".js")) {
+        rmSync8(join17(wfDir, entry), { force: true });
+      }
+    }
+    rmdirIfEmpty(wfDir);
+    log.ok(`Workflows removed (${wfDir})`);
+  }
+  if ((marker.managed_settings ?? []).includes(WORKFLOW_SIZE_GUIDELINE)) {
+    removeWorkflowSizeGuideline(spec.hooksFile);
+  }
+  removePermissionAllow(spec.hooksFile, marker.managed_permissions ?? []);
   rmSync8(projectMarkerPath(root), { force: true });
   rmSync8(legacyProjectMarkerPath(root), { force: true });
   rmdirIfEmpty(join17(root, PROJECT_STATE_DIR));

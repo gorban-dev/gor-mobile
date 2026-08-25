@@ -31,8 +31,11 @@ import {
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
   removeAstIndexGuardHook,
   removeClearContextOnPlanAccept,
+  removePermissionAllow,
   removeSessionStartHook,
-  removeUserPromptSubmitHook
+  removeUserPromptSubmitHook,
+  removeWorkflowSizeGuideline,
+  WORKFLOW_SIZE_GUIDELINE
 } from "../helpers/settings-merge.js";
 import { teardownUserTarget } from "../helpers/teardown.js";
 import {
@@ -149,6 +152,21 @@ async function uninstallProject(opts: UninstallOptions): Promise<void> {
     rmdirIfEmpty(spec.agentsDir);
   }
   log.ok(`Agents removed (${spec.agentsDir})`);
+
+  if (spec.workflowsDir && existsSync(spec.workflowsDir)) {
+    const wfDir = spec.workflowsDir;
+    for (const entry of readdirSync(wfDir)) {
+      if (entry.startsWith("gor-") && entry.endsWith(".js")) {
+        rmSync(join(wfDir, entry), { force: true });
+      }
+    }
+    rmdirIfEmpty(wfDir);
+    log.ok(`Workflows removed (${wfDir})`);
+  }
+  if ((marker.managed_settings ?? []).includes(WORKFLOW_SIZE_GUIDELINE)) {
+    removeWorkflowSizeGuideline(spec.hooksFile);
+  }
+  removePermissionAllow(spec.hooksFile, marker.managed_permissions ?? []);
 
   // Plan artifacts under .gor-mobile/ are the user's working files — only the
   // marker goes, and the directory itself only if nothing else is left.
