@@ -27,6 +27,10 @@ export interface ProjectMarker {
   managed_plugins?: string[];
   /** top-level settings.local.json keys that init turned on (for uninstall). */
   managed_settings?: string[];
+  /** permissions.allow entries in settings.local.json that init wrote (for uninstall). */
+  managed_permissions?: string[];
+  /** workflow filenames in .claude/workflows that init/repair installed (for uninstall). */
+  managed_workflows?: string[];
   /** MCP server names in .mcp.json that init wrote (for uninstall). */
   managed_mcp?: string[];
   /** Session-start retention sweep threshold for .gor-mobile plan artifacts

@@ -19,6 +19,7 @@ export interface StatusLineEntry {
 export interface ManagedSettings {
   hooks?: Record<string, HookEntry[]>;
   statusLine?: StatusLineEntry;
+  permissions?: { allow?: string[] };
   [key: string]: unknown;
 }
 

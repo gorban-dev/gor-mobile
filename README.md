@@ -91,9 +91,11 @@ Installs the workflow into the current repository, locally (nothing committed):
   .claude/skills/gor-mobile-*/     # 14 skills (superpowers transforms + overlays)
   .claude/skills/android-cli/      # stock Google skill (from `android init`)
   .claude/agents/gor-mobile-code-reviewer{,-deep}.md
+  .claude/workflows/gor-review.js  # /gor-review: two-pass review (gor-mobile reviewer + Codex, parallel)
   .claude/settings.local.json      # SessionStart + UserPromptSubmit + PreToolUse hooks
                                    # + enabledPlugins: superpowers disabled for this repo
                                    # + showClearContextOnPlanAccept: plan-approval clear-context option
+                                   # + workflowSizeGuideline=large + workflow permission allowlist
   .gor-mobile/marker.json          # marker: platform, version, install date
   .gor-mobile/plans|specs|state/   # plan artifacts (created by the skills, TTL-swept)
 ```
@@ -102,6 +104,7 @@ Installs the workflow into the current repository, locally (nothing committed):
 - No `CLAUDE.md` managed section: the former workflow pointers are injected by the SessionStart hook, keyed on the `.gor-mobile/marker.json` marker (walk up from cwd). A repo with no marker injects nothing.
 - `superpowers@claude-plugins-official` is disabled in `settings.local.json` so the bundled upstream skills don't duplicate the `gor-mobile-*` copies. `--plugins figma,swagger-android,…` additionally enables named plugins for the repo.
 - `showClearContextOnPlanAccept` is enabled in `settings.local.json`: the writing-plans handoff exits through the plan-approval dialog, whose first option ("Yes, clear context") clears the planning context exactly once; the SessionStart hook then rehydrates execution from the `.gor-mobile/state/<plan>/progress.md` checkpoint (legacy flat `*.progress.md` files are still picked up). Tracked in `.gor-mobile/marker.json` `managed_settings`, removed on `uninstall --project` unless it was already on. Without plan-mode tools the skill falls back to a two-option dialog + manual `/clear` (Codex: `/compact`).
+- **`/gor-review`** — run it standalone in a repo with a diff for a two-pass code review: the `gor-mobile-code-reviewer` agent and Codex (when installed) review in parallel, then a merge pass dedups findings and surfaces genuine disagreements as conflicts instead of dropping either side. Escalates to the deep reviewer / Codex adversarial mode on diff size, a touched security surface, or an explicit `deep` argument. `init` writes `workflowSizeGuideline=large` and a workflow permission allowlist (`git diff/status/rev-parse/symbolic-ref/log`, `ls`, plus an exact-path `node` rule for the installed Codex companion script) to `settings.local.json` so the workflow's own agents never stall on a permission prompt. Requires Claude Code ≥ 2.1.154 for the workflow to load (`doctor` checks the version).
 - `.claude/` and `.gor-mobile/` are added to `.git/info/exclude` (local ignore — no repo diff). If the folder is not a git repo, `init` offers `git init`; declining falls back to a committed `.gitignore` with a warning.
 - Plan artifacts (`.gor-mobile/plans|specs|state`) have a retention TTL: the SessionStart hook deletes anything untouched for `artifact_ttl_days` (`.gor-mobile/marker.json`, default 30; `0` disables). Freshness is linked per plan — an active plan keeps its spec and workspace alive. `doctor` shows the inventory and the TTL in effect.
 - **Greenfield**: in an empty folder with no build markers, `init` asks the platform (Android / iOS) instead of guessing, then points you at `claude` to scaffold the project.

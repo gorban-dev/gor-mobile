@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
-import { GOR_MOBILE_HOME, MANAGED_TAG } from "../constants.js";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { GOR_MOBILE_HOME, HOME, MANAGED_TAG } from "../constants.js";
 import type { HookEntry, ManagedSettings } from "../types.js";
 import type { TargetSpec } from "../targets.js";
 import { ensureParentDir, readJsonSafe, writeJson } from "./paths.js";
@@ -157,6 +158,95 @@ export function removeClearContextOnPlanAccept(file: string): void {
   const settings = readJsonSafe<ManagedSettings>(file, {});
   if (!(CLEAR_CONTEXT_ON_PLAN_ACCEPT in settings)) return;
   delete settings[CLEAR_CONTEXT_ON_PLAN_ACCEPT];
+  writeJson(file, settings);
+}
+
+// Workflow agents run in acceptEdits and inherit the session allowlist; a Bash
+// call outside it stalls the run on a permission prompt. These entries cover
+// the gor-review scope/review agents. `node` is deliberately NOT allowed
+// broadly (that would grant unprompted arbitrary code execution to every
+// session in the repo) — see codexCompanionAllowEntry() for the exact-path
+// rule scoped to the installed Codex companion script.
+export const WORKFLOW_PERMISSION_ENTRIES = [
+  "Bash(git diff:*)",
+  "Bash(git status:*)",
+  "Bash(git rev-parse:*)",
+  "Bash(git symbolic-ref:*)",
+  "Bash(git log:*)",
+  "Bash(ls:*)"
+];
+
+/**
+ * Resolve the newest installed Codex companion script and return an exact-path
+ * Bash allow entry for it (`Bash(node <abs-path>:*)`), or null when the plugin
+ * is not installed. No shell involved (plain fs readdir + mtime sort), unlike
+ * the `ls -t ... | head -1` the workflow's own scope agent runs at review time.
+ */
+export function codexCompanionAllowEntry(): string | null {
+  const codexDir = join(HOME, ".claude", "plugins", "cache", "openai-codex", "codex");
+  if (!existsSync(codexDir)) return null;
+  let versions: string[];
+  try {
+    versions = readdirSync(codexDir);
+  } catch {
+    return null;
+  }
+  let newest: { scriptPath: string; mtimeMs: number } | null = null;
+  for (const version of versions) {
+    const scriptPath = join(codexDir, version, "scripts", "codex-companion.mjs");
+    if (!existsSync(scriptPath)) continue;
+    let mtimeMs: number;
+    try {
+      mtimeMs = statSync(scriptPath).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (!newest || mtimeMs > newest.mtimeMs) newest = { scriptPath, mtimeMs };
+  }
+  return newest ? `Bash(node ${newest.scriptPath}:*)` : null;
+}
+
+// The default size guideline (medium, ≤15 agents) does not survive a full
+// gor-execute run; the key is honored from any settings file since CC 2.1.219.
+export const WORKFLOW_SIZE_GUIDELINE = "workflowSizeGuideline";
+
+/** Returns true if this run set the key (false = user already chose a value). */
+export function applyWorkflowSizeGuideline(file: string): boolean {
+  const settings = ensureSettingsFile(file);
+  if (typeof settings[WORKFLOW_SIZE_GUIDELINE] === "string") return false;
+  settings[WORKFLOW_SIZE_GUIDELINE] = "large";
+  writeJson(file, settings);
+  return true;
+}
+
+export function removeWorkflowSizeGuideline(file: string): void {
+  if (!existsSync(file)) return;
+  const settings = readJsonSafe<ManagedSettings>(file, {});
+  if (!(WORKFLOW_SIZE_GUIDELINE in settings)) return;
+  delete settings[WORKFLOW_SIZE_GUIDELINE];
+  writeJson(file, settings);
+}
+
+/** Merge entries into permissions.allow; returns the ones actually added. */
+export function ensurePermissionAllow(file: string, entries: string[]): string[] {
+  const settings = ensureSettingsFile(file);
+  settings.permissions = settings.permissions ?? {};
+  const allow = settings.permissions.allow ?? [];
+  const added = entries.filter((e) => !allow.includes(e));
+  if (added.length === 0) return [];
+  settings.permissions.allow = [...allow, ...added];
+  writeJson(file, settings);
+  return added;
+}
+
+export function removePermissionAllow(file: string, entries: string[]): void {
+  if (!existsSync(file) || entries.length === 0) return;
+  const settings = readJsonSafe<ManagedSettings>(file, {});
+  const allow = settings.permissions?.allow;
+  if (!allow) return;
+  const remaining = allow.filter((e) => !entries.includes(e));
+  if (remaining.length === allow.length) return;
+  settings.permissions!.allow = remaining;
   writeJson(file, settings);
 }
 

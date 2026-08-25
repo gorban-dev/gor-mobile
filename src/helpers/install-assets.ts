@@ -148,6 +148,32 @@ export function installAgents(target: TargetSpec): string[] {
   return copied;
 }
 
+// Ours are gor-*.js. The shipped set (readdir of templates/workflows) is what
+// the copy filter admits AND what the stale-cleanup pass deletes — a
+// user-authored gor-*.js workflow that gor-mobile never shipped is never
+// touched, in either direction.
+export function installWorkflows(target: TargetSpec): string[] {
+  if (!target.workflowsDir) return [];
+  const src = join(gorMobileRoot(), "templates", "workflows");
+  if (!existsSync(src)) return [];
+  const shipped = readdirSync(src).filter(
+    (name) => name.startsWith("gor-") && name.endsWith(".js")
+  );
+  ensureDir(target.workflowsDir);
+  for (const entry of readdirSync(target.workflowsDir)) {
+    if (shipped.includes(entry)) {
+      rmSync(join(target.workflowsDir, entry), { force: true });
+    }
+  }
+  const copied: string[] = [];
+  for (const name of shipped) {
+    copyFileSync(join(src, name), join(target.workflowsDir, name));
+    chmodSync(join(target.workflowsDir, name), 0o644);
+    copied.push(name);
+  }
+  return copied;
+}
+
 export function cleanupLegacyCommands(commandsDir: string): string[] {
   if (!existsSync(commandsDir)) return [];
   const legacy = [
