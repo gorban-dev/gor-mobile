@@ -22,6 +22,13 @@ const baseOverride = opt.base
 // Strip shell metacharacters — focus is later embedded unquoted-ish inside a
 // double-quoted flag string handed to the codex agent to run.
 const focus = tokens.filter(t => t !== 'deep' && !t.startsWith('base=')).join(' ').replace(/[^\w\s./-]/g, '')
+// baseRef lands in that same double-quoted string; a hostile repo's default
+// branch name (git refnames allow $, backticks, parens) could otherwise smuggle
+// command substitution into the codex agent's shell command.
+const BASE_REF_SHAPE = /^[\w./-]+$/
+if (baseOverride && !BASE_REF_SHAPE.test(baseOverride)) {
+  return { status: 'error', error: 'base ref contains unsupported characters — pass a plain ref via base=<ref>' }
+}
 
 phase('Scope')
 
@@ -74,6 +81,7 @@ structured result.
 const scope = await agent(scopePrompt, { label: 'scope', effort: 'low', schema: SCOPE_SCHEMA })
 if (!scope) return { status: 'error', error: 'scope agent failed — rerun /gor-review' }
 if (!scope.baseRef) return { status: 'error', error: 'base ref not resolved — rerun as: /gor-review base=<branch>' }
+if (!BASE_REF_SHAPE.test(scope.baseRef)) return { status: 'error', error: 'base ref contains unsupported characters — pass a plain ref via base=<ref>' }
 if (scope.emptyDiff) return { status: 'clean', baseRef: scope.baseRef, summary: `no changes vs ${scope.baseRef} — nothing to review` }
 
 // Routing is code, not prose. Our reviewer escalates on size, risk surface,
@@ -139,9 +147,13 @@ Do not re-run tests or builds — your job is code-level inspection.
 Severity policy: critical = must fix now, important = fix before proceeding,
 minor = note. Return the structured result only.`
 
+// scope.codexCompanion is an unquoted absolute path so the command line
+// starts with the literal text `node <abs-path>` — matching
+// codexCompanionAllowEntry()'s exact-path allow entry, which carries no
+// quotes either. Quoting it here would break that prefix match.
 const codexCmd = codexAdversarial
-  ? `node "${scope.codexCompanion}" adversarial-review "--wait${codexScope === 'working-tree' ? '' : ' --base ' + scope.baseRef}${focus ? ' ' + focus : ''}"`
-  : `node "${scope.codexCompanion}" review "--wait${codexScope === 'working-tree' ? '' : ' --base ' + scope.baseRef}"`
+  ? `node ${scope.codexCompanion} adversarial-review "--wait${codexScope === 'working-tree' ? '' : ' --base ' + scope.baseRef}${focus ? ' ' + focus : ''}"`
+  : `node ${scope.codexCompanion} review "--wait${codexScope === 'working-tree' ? '' : ' --base ' + scope.baseRef}"`
 
 const codexPrompt = `Run this exact command in the repository root and wait for
 it to finish (it can take many minutes — do not abort it):

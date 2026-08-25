@@ -197,7 +197,8 @@ var WORKFLOW_PERMISSION_ENTRIES = [
   "Bash(git rev-parse:*)",
   "Bash(git symbolic-ref:*)",
   "Bash(git log:*)",
-  "Bash(ls:*)"
+  "Bash(ls:*)",
+  "Bash(./gradlew:*)"
 ];
 function codexCompanionAllowEntry() {
   const codexDir = join2(HOME, ".claude", "plugins", "cache", "openai-codex", "codex");
@@ -222,6 +223,21 @@ function codexCompanionAllowEntry() {
   }
   return newest ? `Bash(node ${newest.scriptPath}:*)` : null;
 }
+function staleCodexCompanionEntries(managed) {
+  const current = codexCompanionAllowEntry();
+  const pattern = /^Bash\(node .*codex-companion\.mjs:\*\)$/;
+  return managed.filter((e) => pattern.test(e) && e !== current);
+}
+function sddScriptsAllowEntry() {
+  return `Bash(${join2(GOR_MOBILE_HOME, "scripts")}/:*)`;
+}
+function dynamicWorkflowAllowEntries() {
+  const entries = [sddScriptsAllowEntry()];
+  const codex = codexCompanionAllowEntry();
+  if (codex) entries.push(codex);
+  return entries;
+}
+var STALE_PERMISSION_ENTRIES = ["Bash(node:*)"];
 var WORKFLOW_SIZE_GUIDELINE = "workflowSizeGuideline";
 function applyWorkflowSizeGuideline(file) {
   const settings = ensureSettingsFile(file);
@@ -1284,6 +1300,22 @@ function installWorkflows(target) {
   }
   return copied;
 }
+var SDD_SCRIPT_NAMES = ["sdd-workspace", "task-brief", "sdd-snapshot", "review-package"];
+function installSddScripts() {
+  const src = join6(gorMobileRoot(), "templates", "skills", "subagent-driven-development", "scripts");
+  if (!existsSync8(src)) return [];
+  const dst = join6(GOR_MOBILE_HOME, "scripts");
+  ensureDir(dst);
+  const copied = [];
+  for (const name of SDD_SCRIPT_NAMES) {
+    const from = join6(src, name);
+    if (!existsSync8(from)) continue;
+    copyFileSync(from, join6(dst, name));
+    chmodSync(join6(dst, name), 493);
+    copied.push(name);
+  }
+  return copied;
+}
 function cleanupLegacyCommands(commandsDir) {
   if (!existsSync8(commandsDir)) return [];
   const legacy = [
@@ -1915,6 +1947,8 @@ async function stepRules(ctx) {
   progressItem(2, 3, "save config", "ok", GOR_MOBILE_RULES_DIR);
   copyHookTemplates();
   progressItem(3, 3, "hook scripts", "ok", "~/.gor-mobile/templates");
+  const sddScripts = installSddScripts();
+  if (sddScripts.length > 0) log.ok(`SDD scripts \u2192 ~/.gor-mobile/scripts (${sddScripts.length})`);
 }
 async function stepClaudeStatusLine(ctx) {
   if (ctx.opts.dryRun || ctx.opts.yes || !isTuiOn()) return;
@@ -2596,7 +2630,7 @@ async function cmdInit(opts = {}) {
       `install skills \u2192 ${spec.skillsDir}`,
       `install agents \u2192 ${spec.agentsDir}`,
       `install workflows \u2192 ${spec.workflowsDir}`,
-      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls + codex companion) \u2192 ${spec.hooksFile}`,
+      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls, gradle, SDD scripts, codex companion) \u2192 ${spec.hooksFile}`,
       `merge SessionStart + UserPromptSubmit + PreToolUse \u2192 ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` + (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
       `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
@@ -2627,10 +2661,17 @@ async function cmdInit(opts = {}) {
   log.ok(`${workflows.length} workflows \u2192 ${spec.workflowsDir}`);
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
   if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
-  const codexEntry = codexCompanionAllowEntry();
-  const permissionEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...codexEntry ? [codexEntry] : []];
-  const addedPerms = ensurePermissionAllow(spec.hooksFile, permissionEntries);
+  const allowEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...dynamicWorkflowAllowEntries()];
+  const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length} (workflow agents run unprompted)`);
+  const staleOwned = [
+    ...STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e)),
+    ...staleCodexCompanionEntries(marker.managed_permissions ?? [])
+  ];
+  if (staleOwned.length > 0) {
+    removePermissionAllow(spec.hooksFile, staleOwned);
+    log.ok(`Scrubbed stale permission entr${staleOwned.length === 1 ? "y" : "ies"}: ${staleOwned.join(", ")}`);
+  }
   const extraPlugins = (opts.plugins ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const managedPlugins = applyEnabledPlugins(spec.hooksFile, extraPlugins, [SUPERPOWERS_KEY]);
   log.ok(
@@ -2680,7 +2721,10 @@ async function cmdInit(opts = {}) {
     managed_plugins: managedPlugins,
     managed_settings: sizeSet ? [.../* @__PURE__ */ new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])] : managedSettings,
     managed_permissions: [
-      .../* @__PURE__ */ new Set([...marker.managed_permissions ?? [], ...addedPerms])
+      .../* @__PURE__ */ new Set([
+        ...(marker.managed_permissions ?? []).filter((e) => !staleOwned.includes(e)),
+        ...addedPerms
+      ])
     ],
     managed_workflows: workflows,
     managed_mcp: managedMcp,
@@ -2960,6 +3004,16 @@ function checkHookTemplates() {
   }
   if (ok) log.ok(`Hook scripts present (${GOR_MOBILE_TEMPLATES_DIR})`);
 }
+function checkSddScripts() {
+  let ok = true;
+  for (const name of SDD_SCRIPT_NAMES) {
+    if (!existsSync21(join16(GOR_MOBILE_HOME, "scripts", name))) {
+      ok = false;
+      log.warn(`SDD script missing: scripts/${name} \u2014 run 'gor-mobile setup'`);
+    }
+  }
+  if (ok) log.ok(`SDD scripts present (${GOR_MOBILE_HOME}/scripts)`);
+}
 async function verboseHookEmulation(target) {
   const hooks = [
     ["session-start-hook.sh", "SessionStart"],
@@ -3158,11 +3212,16 @@ function checkWorkflows(target) {
   }
   const settings = readJsonSafe(target.hooksFile, {});
   const allow = settings.permissions?.allow ?? [];
-  const missing = WORKFLOW_PERMISSION_ENTRIES.filter((e) => !allow.includes(e));
+  const expected = [...WORKFLOW_PERMISSION_ENTRIES, sddScriptsAllowEntry()];
+  const missing = expected.filter((e) => !allow.includes(e));
   if (missing.length > 0) {
     log.warn(`workflow allowlist incomplete (${missing.length} missing) \u2014 run 'gor-mobile repair'`);
   } else {
     log.ok("workflow permission allowlist present");
+  }
+  const codexEntry = codexCompanionAllowEntry();
+  if (codexEntry && !allow.includes(codexEntry)) {
+    log.warn("codex companion allowlist entry stale or missing (plugin updated?) \u2014 run 'gor-mobile repair'");
   }
 }
 function checkTarget(target) {
@@ -3285,6 +3344,7 @@ async function cmdDoctor(opts = {}) {
   }
   log.step("Machine (~/.gor-mobile)");
   checkHookTemplates();
+  checkSddScripts();
   checkRulesPack();
   checkFile(GOR_MOBILE_CONFIG, "config.json");
   const emulationTargets = [];
@@ -3345,6 +3405,7 @@ function refreshHooks(target) {
 }
 async function repairProject(root) {
   const spec = projectClaudeSpec(root);
+  const marker = readProjectMarker(root);
   log.step(`Repairing project (${spec.home})`);
   refreshHooks(spec);
   const skills = installSkills(spec);
@@ -3359,17 +3420,23 @@ async function repairProject(root) {
   log.ok(`Workflows refreshed (${workflows.length} in ${spec.workflowsDir})`);
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
   if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
-  const codexEntry = codexCompanionAllowEntry();
-  const permissionEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...codexEntry ? [codexEntry] : []];
-  const addedPerms = ensurePermissionAllow(spec.hooksFile, permissionEntries);
+  const allowEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...dynamicWorkflowAllowEntries()];
+  const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length}`);
+  const staleOwned = [
+    ...STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e)),
+    ...staleCodexCompanionEntries(marker.managed_permissions ?? [])
+  ];
+  if (staleOwned.length > 0) {
+    removePermissionAllow(spec.hooksFile, staleOwned);
+    log.ok(`Scrubbed stale permission entr${staleOwned.length === 1 ? "y" : "ies"}: ${staleOwned.join(", ")}`);
+  }
   const android = await provisionProjectAndroidSkill(spec.skillsDir);
   if (android.installed) log.ok(`android-cli skill refreshed \u2192 ${spec.skillsDir}/android-cli/`);
   else if (!android.ran) log.info("android CLI not on PATH \u2014 skipped android-cli skill");
   else log.warn(`android-cli skill not placed: ${android.error ?? "stock skill missing"}`);
   applyEnabledPlugins(spec.hooksFile, [], [SUPERPOWERS_KEY]);
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
-  const marker = readProjectMarker(root);
   const mcpRes = registerLocalMcp(root, marker.managed_mcp ?? []);
   if (mcpRes.written) {
     log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed \u2192 ${mcpRes.path} (local scope)`);
@@ -3401,7 +3468,10 @@ async function repairProject(root) {
     version: GOR_MOBILE_VERSION,
     managed_settings: sizeSet ? [.../* @__PURE__ */ new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])] : managedSettings,
     managed_permissions: [
-      .../* @__PURE__ */ new Set([...marker.managed_permissions ?? [], ...addedPerms])
+      .../* @__PURE__ */ new Set([
+        ...(marker.managed_permissions ?? []).filter((e) => !staleOwned.includes(e)),
+        ...addedPerms
+      ])
     ],
     managed_workflows: workflows,
     managed_mcp: mcpRes.written ? [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])] : marker.managed_mcp ?? [],
@@ -3442,6 +3512,8 @@ async function repairCodex(target) {
 async function cmdRepair(opts = {}) {
   copyHookTemplates();
   log.ok("Hook scripts refreshed \u2192 ~/.gor-mobile/templates");
+  const sddScripts = installSddScripts();
+  if (sddScripts.length > 0) log.ok(`SDD scripts \u2192 ~/.gor-mobile/scripts (${sddScripts.length})`);
   for (const f of cleanupLegacyCommands(CLAUDE_COMMANDS_DIR)) log.ok(`Removed legacy command ${f}`);
   for (const f of cleanupLegacyAgents()) log.ok(`Removed legacy agent ${f}`);
   const sl = statusLineState();
@@ -3566,6 +3638,15 @@ function rmdirIfEmpty(dir) {
   } catch {
   }
 }
+function shippedWorkflowNames() {
+  try {
+    return readdirSync10(join18(gorMobileRoot(), "templates", "workflows")).filter(
+      (name) => name.startsWith("gor-") && name.endsWith(".js")
+    );
+  } catch {
+    return ["gor-review.js", "gor-execute.js"];
+  }
+}
 async function uninstallProject(opts) {
   const root = findProjectRoot() ?? process.cwd();
   if (!hasProjectMarker(root)) {
@@ -3625,8 +3706,9 @@ async function uninstallProject(opts) {
   if (spec.workflowsDir && existsSync22(spec.workflowsDir)) {
     const wfDir = spec.workflowsDir;
     const managedWorkflows = marker.managed_workflows ?? [];
+    const legacyShipped = managedWorkflows.length === 0 ? shippedWorkflowNames() : [];
     for (const entry of readdirSync10(wfDir)) {
-      const owned = managedWorkflows.length > 0 ? managedWorkflows.includes(entry) : entry.startsWith("gor-") && entry.endsWith(".js");
+      const owned = managedWorkflows.length > 0 ? managedWorkflows.includes(entry) : legacyShipped.includes(entry);
       if (owned) rmSync8(join18(wfDir, entry), { force: true });
     }
     rmdirIfEmpty(wfDir);

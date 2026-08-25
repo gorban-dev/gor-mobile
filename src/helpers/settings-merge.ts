@@ -173,7 +173,8 @@ export const WORKFLOW_PERMISSION_ENTRIES = [
   "Bash(git rev-parse:*)",
   "Bash(git symbolic-ref:*)",
   "Bash(git log:*)",
-  "Bash(ls:*)"
+  "Bash(ls:*)",
+  "Bash(./gradlew:*)"
 ];
 
 /**
@@ -205,6 +206,36 @@ export function codexCompanionAllowEntry(): string | null {
   }
   return newest ? `Bash(node ${newest.scriptPath}:*)` : null;
 }
+
+/**
+ * Marker-recorded codex-companion allow entries that no longer match the
+ * current resolution — left behind after a plugin update moves the newest
+ * version's script path. init/repair fold these into the same staleOwned
+ * scrub as STALE_PERMISSION_ENTRIES instead of letting them pile up in
+ * settings.local.json and managed_permissions until uninstall.
+ */
+export function staleCodexCompanionEntries(managed: string[]): string[] {
+  const current = codexCompanionAllowEntry();
+  const pattern = /^Bash\(node .*codex-companion\.mjs:\*\)$/;
+  return managed.filter((e) => pattern.test(e) && e !== current);
+}
+
+/** gor-execute's agents invoke the SDD scripts by absolute path. */
+export function sddScriptsAllowEntry(): string {
+  return `Bash(${join(GOR_MOBILE_HOME, "scripts")}/:*)`;
+}
+
+/** Entries whose exact text depends on this machine — resolved at install time. */
+export function dynamicWorkflowAllowEntries(): string[] {
+  const entries = [sddScriptsAllowEntry()];
+  const codex = codexCompanionAllowEntry();
+  if (codex) entries.push(codex);
+  return entries;
+}
+
+// Entries earlier dev builds wrote that current builds must scrub (only when
+// the marker proves we wrote them).
+export const STALE_PERMISSION_ENTRIES = ["Bash(node:*)"];
 
 // The default size guideline (medium, ≤15 agents) does not survive a full
 // gor-execute run; the key is honored from any settings file since CC 2.1.219.

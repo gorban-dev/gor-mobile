@@ -22,12 +22,18 @@ import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-
 import { ANDROID_CONTRACT } from "../android-contract.js";
 import { codexMcpState } from "../helpers/codex-mcp.js";
 import { KEY_SOURCE_LABEL, resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
+import { SDD_SCRIPT_NAMES } from "../helpers/install-assets.js";
 import {
   LEGACY_PROJECT_MCP_FILE,
   legacyProjectMcpServers,
   localMcpState
 } from "../helpers/mcp-register.js";
-import { countManagedHooks, WORKFLOW_PERMISSION_ENTRIES } from "../helpers/settings-merge.js";
+import {
+  codexCompanionAllowEntry,
+  countManagedHooks,
+  sddScriptsAllowEntry,
+  WORKFLOW_PERMISSION_ENTRIES
+} from "../helpers/settings-merge.js";
 import { statusLineState } from "../helpers/settings-statusline.js";
 import { codexStatusLineState } from "../helpers/codex-statusline.js";
 import { androidCliPath, which } from "../helpers/deps.js";
@@ -153,6 +159,17 @@ function checkHookTemplates(): void {
     }
   }
   if (ok) log.ok(`Hook scripts present (${GOR_MOBILE_TEMPLATES_DIR})`);
+}
+
+function checkSddScripts(): void {
+  let ok = true;
+  for (const name of SDD_SCRIPT_NAMES) {
+    if (!existsSync(join(GOR_MOBILE_HOME, "scripts", name))) {
+      ok = false;
+      log.warn(`SDD script missing: scripts/${name} — run 'gor-mobile setup'`);
+    }
+  }
+  if (ok) log.ok(`SDD scripts present (${GOR_MOBILE_HOME}/scripts)`);
 }
 
 async function verboseHookEmulation(target: TargetSpec): Promise<void> {
@@ -379,11 +396,16 @@ function checkWorkflows(target: TargetSpec): void {
   }
   const settings = readJsonSafe<ManagedSettings>(target.hooksFile, {});
   const allow = settings.permissions?.allow ?? [];
-  const missing = WORKFLOW_PERMISSION_ENTRIES.filter((e) => !allow.includes(e));
+  const expected = [...WORKFLOW_PERMISSION_ENTRIES, sddScriptsAllowEntry()];
+  const missing = expected.filter((e) => !allow.includes(e));
   if (missing.length > 0) {
     log.warn(`workflow allowlist incomplete (${missing.length} missing) — run 'gor-mobile repair'`);
   } else {
     log.ok("workflow permission allowlist present");
+  }
+  const codexEntry = codexCompanionAllowEntry();
+  if (codexEntry && !allow.includes(codexEntry)) {
+    log.warn("codex companion allowlist entry stale or missing (plugin updated?) — run 'gor-mobile repair'");
   }
 }
 
@@ -516,6 +538,7 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
 
   log.step("Machine (~/.gor-mobile)");
   checkHookTemplates();
+  checkSddScripts();
   checkRulesPack();
   checkFile(GOR_MOBILE_CONFIG, "config.json");
 

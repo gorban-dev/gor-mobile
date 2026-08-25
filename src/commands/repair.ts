@@ -21,6 +21,7 @@ import {
   cleanupLegacyCommands,
   copyHookTemplates,
   installAgents,
+  installSddScripts,
   installSkills,
   installWorkflows
 } from "../helpers/install-assets.js";
@@ -42,12 +43,15 @@ import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
   applyWorkflowSizeGuideline,
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
-  codexCompanionAllowEntry,
+  dynamicWorkflowAllowEntries,
+  staleCodexCompanionEntries,
   enableClearContextOnPlanAccept,
   ensurePermissionAllow,
   installAstIndexGuardHook,
   installSessionStartHook,
   installUserPromptSubmitHook,
+  removePermissionAllow,
+  STALE_PERMISSION_ENTRIES,
   WORKFLOW_PERMISSION_ENTRIES,
   WORKFLOW_SIZE_GUIDELINE
 } from "../helpers/settings-merge.js";
@@ -87,6 +91,7 @@ function refreshHooks(target: TargetSpec): void {
 
 async function repairProject(root: string): Promise<void> {
   const spec = projectClaudeSpec(root);
+  const marker = readProjectMarker(root);
   log.step(`Repairing project (${spec.home})`);
 
   refreshHooks(spec);
@@ -106,10 +111,18 @@ async function repairProject(root: string): Promise<void> {
 
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
   if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
-  const codexEntry = codexCompanionAllowEntry();
-  const permissionEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...(codexEntry ? [codexEntry] : [])];
-  const addedPerms = ensurePermissionAllow(spec.hooksFile, permissionEntries);
+  const allowEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...dynamicWorkflowAllowEntries()];
+  const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length}`);
+
+  const staleOwned = [
+    ...STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e)),
+    ...staleCodexCompanionEntries(marker.managed_permissions ?? [])
+  ];
+  if (staleOwned.length > 0) {
+    removePermissionAllow(spec.hooksFile, staleOwned);
+    log.ok(`Scrubbed stale permission entr${staleOwned.length === 1 ? "y" : "ies"}: ${staleOwned.join(", ")}`);
+  }
 
   const android = await provisionProjectAndroidSkill(spec.skillsDir);
   if (android.installed) log.ok(`android-cli skill refreshed → ${spec.skillsDir}/android-cli/`);
@@ -121,7 +134,6 @@ async function repairProject(root: string): Promise<void> {
   applyEnabledPlugins(spec.hooksFile, [], [SUPERPOWERS_KEY]);
   log.ok("Duplicate superpowers plugin kept disabled for this repo");
 
-  const marker = readProjectMarker(root);
   const mcpRes = registerLocalMcp(root, marker.managed_mcp ?? []);
   if (mcpRes.written) {
     log.ok(`${DEV_KNOWLEDGE_MCP_NAME} refreshed → ${mcpRes.path} (local scope)`);
@@ -163,7 +175,10 @@ async function repairProject(root: string): Promise<void> {
       ? [...new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])]
       : managedSettings,
     managed_permissions: [
-      ...new Set([...(marker.managed_permissions ?? []), ...addedPerms])
+      ...new Set([
+        ...(marker.managed_permissions ?? []).filter((e) => !staleOwned.includes(e)),
+        ...addedPerms
+      ])
     ],
     managed_workflows: workflows,
     managed_mcp: mcpRes.written
@@ -225,6 +240,10 @@ export async function cmdRepair(
   // leftovers from ~/.claude that never carried a managed marker.
   copyHookTemplates();
   log.ok("Hook scripts refreshed → ~/.gor-mobile/templates");
+
+  const sddScripts = installSddScripts();
+  if (sddScripts.length > 0) log.ok(`SDD scripts → ~/.gor-mobile/scripts (${sddScripts.length})`);
+
   for (const f of cleanupLegacyCommands(CLAUDE_COMMANDS_DIR)) log.ok(`Removed legacy command ${f}`);
   for (const f of cleanupLegacyAgents()) log.ok(`Removed legacy agent ${f}`);
 

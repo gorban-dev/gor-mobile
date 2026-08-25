@@ -5,6 +5,7 @@ import {
   GOR_MOBILE_CONFIG,
   GOR_MOBILE_CONFIG_DIR,
   GOR_MOBILE_HOME,
+  gorMobileRoot,
   LEGACY_PROJECT_MARKER_NAME,
   PROJECT_MARKER_NAME,
   PROJECT_STATE_DIR
@@ -87,6 +88,22 @@ function rmdirIfEmpty(dir: string): void {
   }
 }
 
+/**
+ * Filenames gor-mobile ships today, for the legacy fallback below (a project
+ * marker written before managed_workflows existed). Deliberately NOT a sweep
+ * of the whole gor-*.js namespace — that would delete a user-authored
+ * workflow that merely shares the prefix.
+ */
+function shippedWorkflowNames(): string[] {
+  try {
+    return readdirSync(join(gorMobileRoot(), "templates", "workflows")).filter(
+      (name) => name.startsWith("gor-") && name.endsWith(".js")
+    );
+  } catch {
+    return ["gor-review.js", "gor-execute.js"];
+  }
+}
+
 async function uninstallProject(opts: UninstallOptions): Promise<void> {
   const root = findProjectRoot() ?? process.cwd();
   if (!hasProjectMarker(root)) {
@@ -156,14 +173,16 @@ async function uninstallProject(opts: UninstallOptions): Promise<void> {
   if (spec.workflowsDir && existsSync(spec.workflowsDir)) {
     const wfDir = spec.workflowsDir;
     const managedWorkflows = marker.managed_workflows ?? [];
+    // Prefer the marker's recorded set (exactly what gor-mobile installed);
+    // an install from before managed_workflows existed falls back to the
+    // shipped-filename set instead of sweeping the whole gor-*.js namespace,
+    // so a user-authored gor-*.js workflow is never touched.
+    const legacyShipped = managedWorkflows.length === 0 ? shippedWorkflowNames() : [];
     for (const entry of readdirSync(wfDir)) {
-      // Prefer the marker's recorded set (exactly what gor-mobile installed);
-      // an install from before managed_workflows existed falls back to the
-      // old gor-*.js prefix sweep so those repos still clean up on uninstall.
       const owned =
         managedWorkflows.length > 0
           ? managedWorkflows.includes(entry)
-          : entry.startsWith("gor-") && entry.endsWith(".js");
+          : legacyShipped.includes(entry);
       if (owned) rmSync(join(wfDir, entry), { force: true });
     }
     rmdirIfEmpty(wfDir);
