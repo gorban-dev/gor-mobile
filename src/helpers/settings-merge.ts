@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
-import { GOR_MOBILE_HOME, MANAGED_TAG } from "../constants.js";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { GOR_MOBILE_HOME, HOME, MANAGED_TAG } from "../constants.js";
 import type { HookEntry, ManagedSettings } from "../types.js";
 import type { TargetSpec } from "../targets.js";
 import { ensureParentDir, readJsonSafe, writeJson } from "./paths.js";
@@ -162,18 +163,48 @@ export function removeClearContextOnPlanAccept(file: string): void {
 
 // Workflow agents run in acceptEdits and inherit the session allowlist; a Bash
 // call outside it stalls the run on a permission prompt. These entries cover
-// the gor-review scope/review agents. `Bash(node:*)` is deliberately broad:
-// the Codex companion path embeds a plugin version, so a narrower prefix rule
-// cannot be written once.
+// the gor-review scope/review agents. `node` is deliberately NOT allowed
+// broadly (that would grant unprompted arbitrary code execution to every
+// session in the repo) — see codexCompanionAllowEntry() for the exact-path
+// rule scoped to the installed Codex companion script.
 export const WORKFLOW_PERMISSION_ENTRIES = [
   "Bash(git diff:*)",
   "Bash(git status:*)",
   "Bash(git rev-parse:*)",
   "Bash(git symbolic-ref:*)",
   "Bash(git log:*)",
-  "Bash(ls:*)",
-  "Bash(node:*)"
+  "Bash(ls:*)"
 ];
+
+/**
+ * Resolve the newest installed Codex companion script and return an exact-path
+ * Bash allow entry for it (`Bash(node <abs-path>:*)`), or null when the plugin
+ * is not installed. No shell involved (plain fs readdir + mtime sort), unlike
+ * the `ls -t ... | head -1` the workflow's own scope agent runs at review time.
+ */
+export function codexCompanionAllowEntry(): string | null {
+  const codexDir = join(HOME, ".claude", "plugins", "cache", "openai-codex", "codex");
+  if (!existsSync(codexDir)) return null;
+  let versions: string[];
+  try {
+    versions = readdirSync(codexDir);
+  } catch {
+    return null;
+  }
+  let newest: { scriptPath: string; mtimeMs: number } | null = null;
+  for (const version of versions) {
+    const scriptPath = join(codexDir, version, "scripts", "codex-companion.mjs");
+    if (!existsSync(scriptPath)) continue;
+    let mtimeMs: number;
+    try {
+      mtimeMs = statSync(scriptPath).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (!newest || mtimeMs > newest.mtimeMs) newest = { scriptPath, mtimeMs };
+  }
+  return newest ? `Bash(node ${newest.scriptPath}:*)` : null;
+}
 
 // The default size guideline (medium, ≤15 agents) does not survive a full
 // gor-execute run; the key is honored from any settings file since CC 2.1.219.

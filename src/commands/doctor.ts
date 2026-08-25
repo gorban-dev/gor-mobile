@@ -14,7 +14,9 @@ import {
   LEGACY_PROJECT_MARKER_NAME,
   PROJECT_MARKER_NAME,
   SECTION_BEGIN,
-  WORKFLOWS_MIN_CLAUDE_VERSION
+  WORKFLOW_SIZE_GUIDELINE_MIN_CLAUDE_VERSION,
+  WORKFLOWS_MIN_CLAUDE_VERSION,
+  gorMobileRoot
 } from "../constants.js";
 import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-cli.js";
 import { ANDROID_CONTRACT } from "../android-contract.js";
@@ -306,6 +308,24 @@ function verboseContractLint(target: TargetSpec): void {
   else log.warn(`bridge skill references commands NOT in contract: ${stray.join(", ")}`);
 }
 
+type SemVer = [number, number, number];
+
+function parseSemVer(text: string): SemVer | null {
+  const m = /(\d+)\.(\d+)\.(\d+)/.exec(text);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+function versionBelow(a: SemVer, b: SemVer): boolean {
+  return a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1] : a[2] < b[2];
+}
+
+function warnIfDisableWorkflows(file: string, scope: string): void {
+  const settings = readJsonSafe<Record<string, unknown>>(file, {});
+  if (settings["disableWorkflows"] === true) {
+    log.warn(`disableWorkflows=true in ${file} — workflows are OFF for ${scope}`);
+  }
+}
+
 async function checkClaudeWorkflowsSupport(): Promise<void> {
   const res = await execa("claude", ["--version"], { reject: false });
   const m = /(\d+)\.(\d+)\.(\d+)/.exec(res.stdout ?? "");
@@ -313,24 +333,41 @@ async function checkClaudeWorkflowsSupport(): Promise<void> {
     log.warn("claude CLI version unreadable — cannot verify workflows support");
     return;
   }
-  const [maj, min, pat] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const [fMaj, fMin, fPat] = WORKFLOWS_MIN_CLAUDE_VERSION.split(".").map(Number);
-  const below =
-    maj !== fMaj ? maj < fMaj! : min !== fMin ? min < fMin! : pat < fPat!;
-  if (below) {
+  const version = parseSemVer(m[0])!;
+  const floor = parseSemVer(WORKFLOWS_MIN_CLAUDE_VERSION)!;
+  if (versionBelow(version, floor)) {
     log.warn(`Claude Code v${m[0]} < ${WORKFLOWS_MIN_CLAUDE_VERSION} — /gor-review workflow will not load`);
   } else {
     log.ok(`Claude Code v${m[0]} supports workflows (≥ ${WORKFLOWS_MIN_CLAUDE_VERSION})`);
+    const guidelineFloor = parseSemVer(WORKFLOW_SIZE_GUIDELINE_MIN_CLAUDE_VERSION)!;
+    if (versionBelow(version, guidelineFloor)) {
+      log.warn(
+        `workflowSizeGuideline is honored only since ${WORKFLOW_SIZE_GUIDELINE_MIN_CLAUDE_VERSION} — the size guideline init wrote is inert on this version`
+      );
+    }
   }
-  const userSettings = readJsonSafe<Record<string, unknown>>(CLAUDE_SETTINGS, {});
-  if (userSettings["disableWorkflows"] === true) {
-    log.warn(`disableWorkflows=true in ${CLAUDE_SETTINGS} — workflows are OFF for this user`);
+  warnIfDisableWorkflows(CLAUDE_SETTINGS, "this user");
+  const root = findProjectRoot();
+  if (root) {
+    warnIfDisableWorkflows(join(root, ".claude", "settings.json"), "this project");
+    warnIfDisableWorkflows(join(root, ".claude", "settings.local.json"), "this project");
+  }
+}
+
+/** Shipped workflow filenames, from the templates dir (fallback for an unreadable dir). */
+function expectedWorkflows(): string[] {
+  try {
+    return readdirSync(join(gorMobileRoot(), "templates", "workflows")).filter(
+      (name) => name.startsWith("gor-") && name.endsWith(".js")
+    );
+  } catch {
+    return ["gor-review.js"];
   }
 }
 
 function checkWorkflows(target: TargetSpec): void {
   if (!target.workflowsDir) return;
-  for (const name of ["gor-review.js"]) {
+  for (const name of expectedWorkflows()) {
     const p = join(target.workflowsDir, name);
     if (!existsSync(p)) {
       log.warn(`workflow ${name} missing — run 'gor-mobile repair'`);

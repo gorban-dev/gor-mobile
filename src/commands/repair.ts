@@ -42,6 +42,7 @@ import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
   applyWorkflowSizeGuideline,
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
+  codexCompanionAllowEntry,
   enableClearContextOnPlanAccept,
   ensurePermissionAllow,
   installAstIndexGuardHook,
@@ -105,7 +106,9 @@ async function repairProject(root: string): Promise<void> {
 
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
   if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
-  const addedPerms = ensurePermissionAllow(spec.hooksFile, WORKFLOW_PERMISSION_ENTRIES);
+  const codexEntry = codexCompanionAllowEntry();
+  const permissionEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...(codexEntry ? [codexEntry] : [])];
+  const addedPerms = ensurePermissionAllow(spec.hooksFile, permissionEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length}`);
 
   const android = await provisionProjectAndroidSkill(spec.skillsDir);
@@ -162,6 +165,7 @@ async function repairProject(root: string): Promise<void> {
     managed_permissions: [
       ...new Set([...(marker.managed_permissions ?? []), ...addedPerms])
     ],
+    managed_workflows: workflows,
     managed_mcp: mcpRes.written
       ? [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
       : (marker.managed_mcp ?? []),

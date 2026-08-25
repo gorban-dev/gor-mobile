@@ -45,6 +45,7 @@ import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
   applyWorkflowSizeGuideline,
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
+  codexCompanionAllowEntry,
   enableClearContextOnPlanAccept,
   ensurePermissionAllow,
   installAstIndexGuardHook,
@@ -223,7 +224,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
       `install skills → ${spec.skillsDir}`,
       `install agents → ${spec.agentsDir}`,
       `install workflows → ${spec.workflowsDir}`,
-      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist → ${spec.hooksFile}`,
+      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls + codex companion) → ${spec.hooksFile}`,
       `merge SessionStart + UserPromptSubmit + PreToolUse → ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` +
         (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
@@ -266,7 +267,9 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
 
   const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
   if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
-  const addedPerms = ensurePermissionAllow(spec.hooksFile, WORKFLOW_PERMISSION_ENTRIES);
+  const codexEntry = codexCompanionAllowEntry();
+  const permissionEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...(codexEntry ? [codexEntry] : [])];
+  const addedPerms = ensurePermissionAllow(spec.hooksFile, permissionEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length} (workflow agents run unprompted)`);
 
   const extraPlugins = (opts.plugins ?? "")
@@ -345,6 +348,7 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     managed_permissions: [
       ...new Set([...(marker.managed_permissions ?? []), ...addedPerms])
     ],
+    managed_workflows: workflows,
     managed_mcp: managedMcp,
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };

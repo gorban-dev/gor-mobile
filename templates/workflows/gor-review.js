@@ -19,7 +19,9 @@ const finalMode = opt.mode === 'final'
 const explicitDeep = tokens.includes('deep')
 const baseOverride = opt.base
   ?? ((tokens.find(t => t.startsWith('base=')) ?? '').slice(5) || null)
-const focus = tokens.filter(t => t !== 'deep' && !t.startsWith('base=')).join(' ')
+// Strip shell metacharacters — focus is later embedded unquoted-ish inside a
+// double-quoted flag string handed to the codex agent to run.
+const focus = tokens.filter(t => t !== 'deep' && !t.startsWith('base=')).join(' ').replace(/[^\w\s./-]/g, '')
 
 phase('Scope')
 
@@ -44,16 +46,21 @@ checks from the repository root (current directory) and return ONLY the
 structured result.
 
 1. Base ref: ${baseOverride ? `use "${baseOverride}" verbatim.` : `try in order
-   until one resolves: \`git symbolic-ref refs/remotes/origin/HEAD\` (strip the
-   refs/remotes/origin/ prefix), then origin/main, then main, then master
-   (verify with \`git rev-parse --verify <ref>\`). If none resolves, return
+   until one resolves: \`git symbolic-ref refs/remotes/origin/HEAD\` (strip
+   only the refs/remotes/ prefix, e.g. refs/remotes/origin/main → origin/main
+   — keep the remote name), then origin/main, then main, then master (verify
+   with \`git rev-parse --verify <ref>\`). If none resolves, return
    baseRef: null.`}
-2. Diff: \`git diff --shortstat <baseRef>\` (no ..HEAD — working tree vs base,
-   committed and uncommitted together). emptyDiff = no output. loc =
-   insertions + deletions. treeDirty = \`git status --porcelain\` non-empty.
-3. Touched files: \`git diff --name-only <baseRef>\`. securityTouched = any
-   touched path or diff hunk concerns security, auth, payments, crypto, IPC,
-   or binder code.
+2. Status: run \`git status --porcelain\` first. treeDirty = non-empty output.
+   untrackedFiles = paths from lines starting with \`??\` (strip the \`?? \`
+   prefix). Diff: \`git diff --shortstat <baseRef>\` (no ..HEAD — working tree
+   vs base, committed and uncommitted together; untracked files never appear
+   in a diff, so they do not add to loc). loc = insertions + deletions from
+   that output. emptyDiff = true only when the diff produced no output AND
+   untrackedFiles is empty.
+3. Touched files: \`git diff --name-only <baseRef>\` PLUS untrackedFiles from
+   step 2 (deduplicated). securityTouched = any touched path or diff hunk
+   concerns security, auth, payments, crypto, IPC, or binder code.
 4. Layers: read $HOME/.gor-mobile/rules/examples/index.json if it exists; map
    touched files to its .layers; for each touched layer pick 1-3 example .kt
    paths (prefer the closest analogue), return them as absolute paths under
@@ -74,6 +81,11 @@ if (scope.emptyDiff) return { status: 'clean', baseRef: scope.baseRef, summary: 
 // or an explicit ask — LOC alone must not buy the most expensive Codex mode.
 const deepPass = finalMode || explicitDeep || scope.loc > 400 || scope.securityTouched
 const codexAdversarial = explicitDeep || scope.securityTouched
+// Codex has no combined mode: with a dirty tree it reviews working-tree
+// changes only (staged+unstaged+untracked), NOT the full branch diff vs base
+// that our own reviewer covers. Recorded so the merge step and the caller
+// know Codex's report may be a strict subset.
+const codexScope = scope.treeDirty ? 'working-tree' : 'branch'
 
 const REVIEW_SCHEMA = {
   type: 'object',
@@ -128,8 +140,8 @@ Severity policy: critical = must fix now, important = fix before proceeding,
 minor = note. Return the structured result only.`
 
 const codexCmd = codexAdversarial
-  ? `node "${scope.codexCompanion}" adversarial-review "--wait${scope.treeDirty ? '' : ' --base ' + scope.baseRef}${focus ? ' ' + focus : ''}"`
-  : `node "${scope.codexCompanion}" review "--wait${scope.treeDirty ? '' : ' --base ' + scope.baseRef}"`
+  ? `node "${scope.codexCompanion}" adversarial-review "--wait${codexScope === 'working-tree' ? '' : ' --base ' + scope.baseRef}${focus ? ' ' + focus : ''}"`
+  : `node "${scope.codexCompanion}" review "--wait${codexScope === 'working-tree' ? '' : ' --base ' + scope.baseRef}"`
 
 const codexPrompt = `Run this exact command in the repository root and wait for
 it to finish (it can take many minutes — do not abort it):
@@ -157,11 +169,13 @@ const [gor, codex] = await parallel([
 const codexRan = Boolean(codex && codex.ran && codex.report)
 if (!gor && !codexRan) return { status: 'error', error: 'both review passes failed — rerun /gor-review' }
 if (codex && codex.ran === false && codex.error) log('Codex present but not ready: ' + codex.error)
+if (!gor && codexRan) log('gor-mobile reviewer pass failed — result is Codex-only')
 
 phase('Merge')
 if (!codexRan) {
   return {
     status: 'reviewed', baseRef: scope.baseRef, deep: deepPass, codexRan: false,
+    gorRan: Boolean(gor), codexScope,
     strengths: gor.strengths, findings: gor.findings, conflicts: [],
   }
 }
@@ -187,16 +201,19 @@ Report A (gor-mobile reviewer, structured):
 ${JSON.stringify(gor ?? { strengths: [], findings: [] }, null, 2)}
 
 Report B (Codex, prose — extract its findings and severities):
+Report B's coverage: ${codexScope === 'working-tree' ? 'uncommitted changes only — a subset of Report A' : 'branch diff vs base'}.
 ${codex.report}`
 
 const merged = await agent(mergePrompt, { label: 'merge', effort: 'low', schema: MERGE_SCHEMA })
 if (!merged) return {
   status: 'reviewed', baseRef: scope.baseRef, deep: deepPass, codexRan: true,
+  gorRan: Boolean(gor), codexScope,
   strengths: gor ? gor.strengths : [], findings: gor ? gor.findings : [],
   conflicts: ['merge agent failed — Codex report returned unmerged'],
   codexReport: codex.report,
 }
 return {
   status: 'reviewed', baseRef: scope.baseRef, deep: deepPass, codexRan: true,
+  gorRan: Boolean(gor), codexScope,
   strengths: merged.strengths, findings: merged.findings, conflicts: merged.conflicts,
 }

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+Run `gor-mobile repair` in each repo — existing installs will not have the
+workflow, the permission allowlist, or `workflowSizeGuideline` until repair
+runs.
+
+- **`/gor-review` workflow**: a two-pass code review (gor-mobile reviewer +
+  Codex, in parallel) installed by `init` into `<repo>/.claude/workflows/`.
+  Routing (deep vs standard, adversarial vs plain) is plain JS on scope
+  metrics — LOC alone never buys the most expensive Codex mode. `init` also
+  writes `workflowSizeGuideline=large` and a workflow permission allowlist
+  (git/status/diff/log/symbolic-ref, `ls`, plus an exact-path `node` rule for
+  the installed Codex companion script when present) to
+  `settings.local.json`, so workflow agents never stall on a permission
+  prompt. `doctor` checks the Claude Code version floor (≥ 2.1.154), the
+  workflow files, and the allowlist; `uninstall --project` removes exactly
+  what it installed.
+
 ## 0.3.6 — 2026-08-04
 
 Run `gor-mobile repair` in each repo — it moves the MCP registration out of the

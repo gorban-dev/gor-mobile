@@ -155,10 +155,16 @@ async function uninstallProject(opts: UninstallOptions): Promise<void> {
 
   if (spec.workflowsDir && existsSync(spec.workflowsDir)) {
     const wfDir = spec.workflowsDir;
+    const managedWorkflows = marker.managed_workflows ?? [];
     for (const entry of readdirSync(wfDir)) {
-      if (entry.startsWith("gor-") && entry.endsWith(".js")) {
-        rmSync(join(wfDir, entry), { force: true });
-      }
+      // Prefer the marker's recorded set (exactly what gor-mobile installed);
+      // an install from before managed_workflows existed falls back to the
+      // old gor-*.js prefix sweep so those repos still clean up on uninstall.
+      const owned =
+        managedWorkflows.length > 0
+          ? managedWorkflows.includes(entry)
+          : entry.startsWith("gor-") && entry.endsWith(".js");
+      if (owned) rmSync(join(wfDir, entry), { force: true });
     }
     rmdirIfEmpty(wfDir);
     log.ok(`Workflows removed (${wfDir})`);
