@@ -1,11 +1,11 @@
 export const meta = {
   name: 'gor-execute',
-  description: 'Deterministic plan executor: implementer, verification, combined review and fix-loop per task; nested gor-review as the final gate',
+  description: 'Deterministic plan executor: compact implement+verify for small tasks, full review pipeline for security/design/wide ones; nested gor-review as the final gate',
   whenToUse: 'Execute an approved implementation plan (docs/plans or .gor-mobile/plans) task by task in a gor-mobile repo',
   phases: [
-    { title: 'Setup', detail: 'workspace, plan parsing, artifact-line validation' },
-    { title: 'Tasks', detail: 'per task: snapshot, implement, verify, review, fix-loop' },
-    { title: 'Final', detail: 'nested gor-review + one fix wave' },
+    { title: 'Setup', detail: 'workspace, plan parsing, artifact-line validation, base snapshot' },
+    { title: 'Tasks', detail: 'compact tasks: implement+verify; security/design/wide tasks: snapshot, implement, verify, review, fix-loop' },
+    { title: 'Final', detail: 'progress log, nested gor-review + one fix wave' },
   ],
 }
 
@@ -174,6 +174,20 @@ const BREAKER_SCHEMA = {
   },
 }
 
+const snap0 = await agent(`Run ${SCRIPTS}/sdd-snapshot "${planPath}" in the repository root — ${SCRIPTS_NOTE} — and return its printed tree SHA as "base".`,
+  { label: 'setup:snapshot', phase: 'Setup', effort: 'low', model: 'haiku', schema: SNAPSHOT_SCHEMA })
+if (!snap0) return out({ status: 'error', error: 'initial snapshot agent failed' })
+if (!SHA_SHAPE.test(snap0.base)) return out({ status: 'error', error: 'agent returned a malformed tree SHA' })
+initialBase = snap0.base
+
+// Small, non-security, non-design tasks skip the per-task review pipeline:
+// each per-task agent pays a ~50k-token session baseline, and the nested
+// final gor-review already covers the whole accumulated diff. Security,
+// design, and wide tasks keep the full pipeline — there an early per-task
+// finding is cheaper than a late fix wave.
+const isCompact = (t) => !t.security && t.category !== 'design' && t.files.length <= 6
+const progressLines = []
+
 const tierUp = (m) => m === 'haiku' ? 'sonnet' : m === 'sonnet' ? undefined : undefined
 const implModelFor = (t) => t.category === 'design' || t.files.length > 6 ? undefined
   : t.category === 'non-behavioral' ? 'haiku' : 'sonnet'
@@ -186,10 +200,15 @@ function refBlock(t) {
   return lines.join('\n')
 }
 
-function implPrompt(t, briefPath, reportPath, extra) {
+// briefRef: a validated brief file path (full pipeline), or null — then the
+// implementer generates and reads the brief itself, so no agent-returned path
+// ever crosses into this prompt (compact path).
+function implPrompt(t, briefRef, reportPath, extra) {
   return `You are the implementer for Task ${t.n} (${t.title}) of the plan at ${planPath} in this repository.
 
-Read this first — it is your requirements, with the exact values to use verbatim: ${briefPath}
+${briefRef
+    ? `Read this first — it is your requirements, with the exact values to use verbatim: ${briefRef}`
+    : `First run ${SCRIPTS}/task-brief "${planPath}" ${t.n} — ${SCRIPTS_NOTE} — then read the file whose path it prints: it is your requirements, with the exact values to use verbatim.`}
 
 Allowed paths — refuse to create or modify anything outside this list:
 ${t.files.map(p => '- ' + p).join('\n')}
@@ -251,47 +270,77 @@ phase('Tasks')
 for (const t of setup.tasks) {
   const label = `t${t.n}`
   const reportPath = `${setup.workspace}/task-${t.n}-report.md`
+  const implModel = implModelFor(t)
+
+  const verify = async (roundLabel) => t.verification
+    ? agent(`Run this exact command in the repository root and report honestly:\n\n    ${t.verification}\n\nReturn passed=true only on a zero exit code, with the last ~30 lines of output as "tail".`,
+        { label: roundLabel, phase: 'Tasks', effort: 'low', model: 'haiku', schema: VERIFY_SCHEMA })
+    : Promise.resolve({ passed: true, tail: '(no verification command in plan)' })
+
+  const runImpl = async (briefRef) => {
+    let impl = await agent(implPrompt(t, briefRef, reportPath),
+      { label: `${label}:impl`, phase: 'Tasks', model: implModel, agentType: 'general-purpose', schema: IMPL_SCHEMA })
+
+    // No mid-run user input exists: one retry with widened context, then a
+    // structured stop the session can act on (fix the plan, resume the run).
+    if (impl && (impl.status === 'NEEDS_CONTEXT' || impl.status === 'BLOCKED')) {
+      log(`task ${t.n}: implementer ${impl.status} — one retry with widened context`)
+      impl = await agent(implPrompt(t, briefRef, reportPath,
+        `A previous attempt returned ${impl.status} (${(impl.concerns ?? []).join('; ') || impl.summary}). Additional context: the full plan is at ${planPath}${setup.specPath ? ', the spec at ' + setup.specPath : ''}; earlier task reports live in ${setup.workspace}/. Resolve what blocked the previous attempt from these sources.`),
+        { label: `${label}:impl-retry`, phase: 'Tasks', model: implModel === 'haiku' ? 'sonnet' : implModel, agentType: 'general-purpose', schema: IMPL_SCHEMA })
+    }
+    return impl
+  }
+  const implBlocked = (impl) => out({
+    status: 'blocked',
+    blocked: `Task ${t.n} (${t.title}): implementer ${impl ? impl.status : 'failed'} — ${impl ? (impl.concerns ?? []).join('; ') || impl.summary : 'agent error'}. Fix the plan or provide context, then RERUN /gor-execute — a resume replays the cached plan parse and will not see plan edits.`,
+  })
+
+  if (isCompact(t)) {
+    const impl = await runImpl(null)
+    if (!impl || impl.status === 'NEEDS_CONTEXT' || impl.status === 'BLOCKED') return implBlocked(impl)
+    if (impl.status === 'DONE_WITH_CONCERNS' && (impl.concerns ?? []).length > 0) {
+      for (const c of impl.concerns) deferredMinors.push(`Task ${t.n} implementer concern: ${c}`)
+    }
+
+    let v = await verify(`${label}:verify`)
+    if (t.verification && !v) return out({ status: 'error', error: `verification agent failed on task ${t.n}` })
+    let round = 0
+    while (t.verification && v && !v.passed && round < 3) {
+      round++
+      const fix = await agent(implPrompt(t, null, reportPath,
+        `Fix round ${round}/3 — the verification command failed; make it pass, changing nothing beyond what that requires. Output tail:\n${v.tail}\nAppend your fix report to the same report file.`),
+        { label: `${label}:fix${round}`, phase: 'Tasks', model: round < 3 ? implModel : tierUp(implModel), agentType: 'general-purpose', schema: IMPL_SCHEMA })
+      if (!fix) return out({ status: 'error', error: `fix agent failed on task ${t.n} round ${round}` })
+      v = await verify(`${label}:verify${round}`)
+      if (!v) return out({ status: 'error', error: `verification agent failed on task ${t.n}` })
+    }
+    if (t.verification && (!v || !v.passed)) {
+      return out({ status: 'blocked', blocked: `Task ${t.n} (${t.title}): verification still failing after ${round} fix round(s): ${v ? v.tail : 'agent error'}` })
+    }
+    taskResults.push({ n: t.n, title: t.title, mode: 'compact', rounds: round, parked: [] })
+    progressLines.push(`Task ${t.n}: complete (compact, ${round} fix rounds) — ${impl.summary}`)
+    continue
+  }
 
   const prep = await agent(`Run these two commands in the repository root — ${SCRIPTS_NOTE} — and return the results:
 1. ${SCRIPTS}/sdd-snapshot "${planPath}"  — its printed tree SHA is "base".
 2. ${SCRIPTS}/task-brief "${planPath}" ${t.n}  — its printed file path is "briefPath".`,
-    { label: `${label}:prep`, phase: 'Tasks', effort: 'low', schema: PREP_SCHEMA })
+    { label: `${label}:prep`, phase: 'Tasks', effort: 'low', model: 'haiku', schema: PREP_SCHEMA })
   if (!prep) return out({ status: 'error', error: `prep agent failed on task ${t.n}` })
   if (!SHA_SHAPE.test(prep.base)) return out({ status: 'error', error: 'agent returned a malformed tree SHA' })
   if (!PATH_SHAPE.test(prep.briefPath)) return out({ status: 'error', error: 'agent returned a malformed path' })
-  if (!initialBase) initialBase = prep.base
 
-  const implModel = implModelFor(t)
-  let impl = await agent(implPrompt(t, prep.briefPath, reportPath),
-    { label: `${label}:impl`, phase: 'Tasks', model: implModel, agentType: 'general-purpose', schema: IMPL_SCHEMA })
-
-  // No mid-run user input exists: one retry with widened context, then a
-  // structured stop the session can act on (fix the plan, resume the run).
-  if (impl && (impl.status === 'NEEDS_CONTEXT' || impl.status === 'BLOCKED')) {
-    log(`task ${t.n}: implementer ${impl.status} — one retry with widened context`)
-    impl = await agent(implPrompt(t, prep.briefPath, reportPath,
-      `A previous attempt returned ${impl.status} (${(impl.concerns ?? []).join('; ') || impl.summary}). Additional context: the full plan is at ${planPath}${setup.specPath ? ', the spec at ' + setup.specPath : ''}; earlier task reports live in ${setup.workspace}/. Resolve what blocked the previous attempt from these sources.`),
-      { label: `${label}:impl-retry`, phase: 'Tasks', model: implModel === 'haiku' ? 'sonnet' : implModel, agentType: 'general-purpose', schema: IMPL_SCHEMA })
-  }
-  if (!impl || impl.status === 'NEEDS_CONTEXT' || impl.status === 'BLOCKED') {
-    return out({
-      status: 'blocked',
-      blocked: `Task ${t.n} (${t.title}): implementer ${impl ? impl.status : 'failed'} — ${impl ? (impl.concerns ?? []).join('; ') || impl.summary : 'agent error'}. Fix the plan or provide context, then RERUN /gor-execute — a resume replays the cached plan parse and will not see plan edits.`,
-    })
-  }
+  const impl = await runImpl(prep.briefPath)
+  if (!impl || impl.status === 'NEEDS_CONTEXT' || impl.status === 'BLOCKED') return implBlocked(impl)
   if (impl.status === 'DONE_WITH_CONCERNS' && (impl.concerns ?? []).length > 0) {
     for (const c of impl.concerns) deferredMinors.push(`Task ${t.n} implementer concern: ${c}`)
   }
 
-  const verify = async (roundLabel) => t.verification
-    ? agent(`Run this exact command in the repository root and report honestly:\n\n    ${t.verification}\n\nReturn passed=true only on a zero exit code, with the last ~30 lines of output as "tail".`,
-        { label: roundLabel, phase: 'Tasks', effort: 'low', schema: VERIFY_SCHEMA })
-    : Promise.resolve({ passed: true, tail: '(no verification command in plan)' })
-
   const pack = async (fromSha, roundLabel) => agent(`Run these commands in the repository root — ${SCRIPTS_NOTE} — and return the results:
 1. ${SCRIPTS}/sdd-snapshot "${planPath}"  — printed tree SHA is "head".
 2. ${SCRIPTS}/review-package "${planPath}" ${fromSha} <head>  — printed file path is "packagePath"; read the stat section of the file review-package wrote and report loc = total insertions + deletions from it.`,
-    { label: roundLabel, phase: 'Tasks', effort: 'low', schema: PACKAGE_SCHEMA })
+    { label: roundLabel, phase: 'Tasks', effort: 'low', model: 'haiku', schema: PACKAGE_SCHEMA })
 
   let v = await verify(`${label}:verify`)
   if (t.verification && !v) return out({ status: 'error', error: `verification agent failed on task ${t.n}` })
@@ -376,18 +425,25 @@ Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the 
     openFindings = [...notAddressed, ...rr.newFindings.filter(f => f.severity !== 'minor')]
   }
 
-  taskResults.push({ n: t.n, title: t.title, rounds: round, parked: taskParked })
-  await agent(`Append one line to ${setup.workspace}/progress.md (create the file if missing): "Task ${t.n}: complete (${round} fix rounds, ${taskParked.length} parked) — ${impl.summary}". Return the word "ok".`,
-    { label: `${label}:checkpoint`, phase: 'Tasks', effort: 'low', model: 'haiku' })
+  taskResults.push({ n: t.n, title: t.title, mode: 'full', rounds: round, parked: taskParked })
+  progressLines.push(`Task ${t.n}: complete (${round} fix rounds, ${taskParked.length} parked) — ${impl.summary}`)
 }
 
 phase('Final')
+
+// One progress writer for the whole run instead of a per-task checkpoint
+// agent — progress.md is a convenience artifact; mid-run state lives in the
+// workflow journal. Non-fatal on failure.
+if (progressLines.length > 0) {
+  await agent(`Append these ${progressLines.length} line(s) verbatim to ${setup.workspace}/progress.md (create the file if missing):\n${progressLines.join('\n')}\nReturn the word "ok".`,
+    { label: 'final:progress', phase: 'Final', effort: 'low', model: 'haiku' })
+}
 
 // Whole-project verification the plan named — run and independently checked
 // here, not delegated prose inside another agent's prompt (see verify() in
 // the task loop, which requires the same zero-exit contract).
 const verifyAll = (roundLabel) => agent(`Run this exact command in the repository root and report honestly:\n\n    ${setup.verificationAll}\n\nReturn passed=true only on a zero exit code, with the last ~30 lines of output as "tail".`,
-  { label: roundLabel, phase: 'Final', effort: 'low', schema: VERIFY_SCHEMA })
+  { label: roundLabel, phase: 'Final', effort: 'low', model: 'haiku', schema: VERIFY_SCHEMA })
 
 if (setup.verificationAll) {
   const va = await verifyAll('final:verifyAll')
@@ -420,7 +476,7 @@ if (finalOpen.length > 0) {
   // Snapshot BEFORE the wave runs so the final package below covers only the
   // wave's own diff, not the whole plan implementation since initialBase.
   const snap = await agent(`Run ${SCRIPTS}/sdd-snapshot "${planPath}" in the repository root — ${SCRIPTS_NOTE} — and return its printed tree SHA as "base".`,
-    { label: 'final:snapshot', phase: 'Final', effort: 'low', schema: SNAPSHOT_SCHEMA })
+    { label: 'final:snapshot', phase: 'Final', effort: 'low', model: 'haiku', schema: SNAPSHOT_SCHEMA })
   if (!snap) return out({ status: 'error', error: 'final snapshot agent failed' })
   if (!SHA_SHAPE.test(snap.base)) return out({ status: 'error', error: 'agent returned a malformed tree SHA' })
   const waveBase = snap.base
@@ -452,7 +508,7 @@ You never dispatch subagents. Full report → ${waveReport}. Return the structur
   const fp = await agent(`Run these commands in the repository root — ${SCRIPTS_NOTE} — and return the results:
 1. ${SCRIPTS}/sdd-snapshot "${planPath}"  — printed tree SHA is "head".
 2. ${SCRIPTS}/review-package "${planPath}" ${waveBase} <head>  — printed path is "packagePath"; read the stat section of the file review-package wrote and report loc = total insertions + deletions from it.`,
-    { label: 'final:package', phase: 'Final', effort: 'low', schema: PACKAGE_SCHEMA })
+    { label: 'final:package', phase: 'Final', effort: 'low', model: 'haiku', schema: PACKAGE_SCHEMA })
   if (fp && !SHA_SHAPE.test(fp.head)) return out({ status: 'error', error: 'agent returned a malformed tree SHA' })
   if (fp && !PATH_SHAPE.test(fp.packagePath)) return out({ status: 'error', error: 'agent returned a malformed path' })
   const rr = fp ? await agent(reReviewPrompt(finalOpen, planPath, waveReport, fp.packagePath), {

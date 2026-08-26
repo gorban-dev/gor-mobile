@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.1 — 2026-08-26
+
+Run `gor-mobile repair` in each repo to pick up the reworked
+`/gor-execute` template.
+
+- **`/gor-execute` token diet.** A dogfood run spent 2.3M tokens / 40 agents
+  on a ±39-line diff — nearly all of it the ~50k-token session baseline every
+  agent pays. Three cuts:
+  - Compact path for small tasks (non-security, non-design, ≤ 6 files): one
+    implementer that reads its own task brief, plus an independent
+    verification run with a fix loop (cap 3). Per-task snapshot, packaging,
+    review, and checkpoint are skipped — the nested final `/gor-review` gate
+    still covers the whole accumulated diff. Security, design, and wide
+    tasks keep the full per-task pipeline.
+  - The per-task `checkpoint` agent (a whole ~35k-token agent to append one
+    progress.md line) is replaced by a single progress writer in Final.
+  - Script-runner agents (prep, verify, package, snapshot) are pinned to
+    Haiku — they run a command and relay output; the session model was paying
+    Fable prices for it.
+
 ## 0.4.0 — 2026-08-26
 
 Run `gor-mobile repair` in each repo and `gor-mobile setup` on the machine —
