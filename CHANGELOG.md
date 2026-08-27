@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.2 — 2026-08-27
 
 Run `gor-mobile repair` in each repo to pick up the reworked `/gor-execute`
 template, the new `gor-mobile-runner` agent, and the updated reviewer agents.
