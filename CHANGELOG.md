@@ -1,5 +1,50 @@
 # Changelog
 
+## Unreleased
+
+Run `gor-mobile repair` in each repo to pick up the reworked `/gor-execute`
+template, the new `gor-mobile-runner` agent, and the updated reviewer agents.
+
+- **`/gor-execute` agent diet, round two.** 0.4.1 cut runner output costs
+  (Haiku), but every remaining agent still paid its ~25–40k-token session
+  baseline — measured at 81% of a real run's context
+  (docs/research/2026-08-27-gor-execute-workflow-token-overhead.md). Round
+  two removes runner agents instead of discounting them:
+  - The setup parser snapshots the base tree itself; implementers generate
+    and read their own task brief on the full path too. The `setup:snapshot`
+    and per-task `prep` agents are gone.
+  - Verify runners snapshot the tree they verified and measure the diff
+    (`git diff --shortstat`), so reviewers and re-reviewers run
+    `review-package` themselves on orchestrator-validated SHAs — the
+    per-task `package` agent is gone. Full-path happy path: 5 agents → 3;
+    fix round: 4 → 3.
+  - Consecutive non-behavioral compact tasks with the same verification
+    command batch into ONE implementer dispatch (upstream superpowers
+    6.3.0 #2078): K micro-tasks cost 2 agents instead of 2K, and a
+    deterministic `git diff --name-only` gate refuses a batch where any
+    task's listed files never got touched.
+  - All mechanical runners use one new `gor-mobile-runner` agent type
+    (Haiku, `Bash, Read, Write` only, one shared schema): identical shape
+    lets sequential runners share a prompt-cache prefix instead of each
+    paying its own cache write.
+  - Final phase: the fix-wave base reuses the last verified snapshot; one
+    post-wave runner combines whole-project verification with the head
+    snapshot; the post-wave re-reviewer packages its own diff
+    (`final:snapshot`/`final:package`/`final:verifyAll2` are gone — a fix
+    wave now costs 3 agents instead of 5).
+  - No-silent-downgrade backstop: file paths matching sensitive surfaces
+    (auth/payment/crypto/keystore/binder/…) force `security` routing in
+    plain JS even when the plan parser missed the flag.
+- **Reviewers never dispatch subagents** (upstream superpowers 6.3.0
+  #2059). All four reviewer agent templates (Claude `.md` + Codex `.toml`)
+  now carry the contract: a reviewer-spawned reviewer duplicates a review
+  seat at full baseline cost and its verdict counts for nothing.
+- **Plan header carries `Spec:` and `Global Constraints`** (upstream
+  superpowers 6.3.0 #2086). The gor-execute setup parser has extracted both
+  since 0.4.0, but the writing-plans template never required them — plans
+  built from the template came through with an empty spec pointer and empty
+  constraints.
+
 ## 0.4.1 — 2026-08-26
 
 Run `gor-mobile repair` in each repo to pick up the reworked
