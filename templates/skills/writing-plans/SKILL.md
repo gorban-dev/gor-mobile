@@ -123,6 +123,12 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 
+**4. Run every verification command.** Not read — RUN, on the current clean tree, before the plan ships. A command that fails on an unmodified tree cannot say anything about a task's diff: the executor reads its failure as broken code and burns fix rounds on code that is fine. Field case: a plan's `xcodebuild -destination 'generic/platform=iOS Simulator'` demanded an architecture slice the project had stopped building three weeks earlier — the executor "fixed" its own correct code three times before testing the baseline. Same for deploy and CLI commands: check the flags against `--help`, because a CLI that rejects an unknown option by printing help and exiting 0 reads as success. A command you could not run is not a verification step — replace it or mark the step manual.
+
+**5. Resolve every path the plan cites.** Reference files, rules files, example files, spec paths: each one either exists on disk right now or does not belong in the plan. A cited path that resolves to nothing sends the implementer looking for a file that was never there.
+
+**6. Anchor every claim about current behavior.** A sentence of the form "today the code does X" (especially one used to justify a task) carries `file:line`, and you opened that file to check. An unverified premise turns into a task that makes the code worse — a plan once justified a new dismiss handler with "the tap path skips OnDismiss", when the file it named already sent OnDismiss unconditionally, so the task would have fired the callback twice.
+
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
 ## Execution Handoff

@@ -34,7 +34,7 @@ docs research or a fresh check per the **Docs-first ground-truth contract** in
 source for behavior). A step that pastes an API signature with no cited source
 (docs reference, `javap` output, or source link) is a plan defect: it invites
 the implementer to code a remembered, possibly-drifted signature. The
-plan-document reviewer verifies this and flags unsourced API signatures.
+Self-Review gate below verifies this and flags unsourced API signatures.
 
 > **Red Flag — STOP.** Emitting "full code" for a task from memory of the API.
 > If you cannot cite where a signature came from for the pinned version, you
@@ -78,10 +78,11 @@ remembered default list):
 
 Never fabricate a citation: an artifact line naming an example file that
 does not exist in the current pack is the same defect class as an unsourced
-API signature. The plan-document reviewer verifies that every layer-touching
-task carries, for each touched layer, one of the three artifact lines and
-that the task's code does not contradict the cited reference. A
-layer-touching task with none is a plan defect.
+API signature. The Self-Review gate below verifies that every layer-touching
+task carries, for each touched layer, one of the three artifact lines, that
+each cited path resolves on disk, and that the task's code does not
+contradict the cited reference. A layer-touching task with none is a plan
+defect.
 
 > **Red Flag — STOP.** A task that designs retry / caching / mapping logic
 > into a datasource when the cited layer example is a one-liner. That plan is
@@ -106,12 +107,47 @@ collection parameters), `state-hoisting.md` (UDF, state down / events up),
 `modifiers-phases.md`, `layout-semantics.md` (measure contract, custom
 Layout, semantics tree). The paths are relative to the installed
 `gor-mobile-compose-internals` skill directory. A `@Composable`-touching task
-with no `Compose rules:` line is a plan defect — the plan-document reviewer
+with no `Compose rules:` line is a plan defect — the Self-Review gate below
 verifies this exactly like the `Conforms to:` lines above.
 
 > **Red Flag — STOP.** Authoring a `@Composable` task step from memory of
 > Compose patterns. The digest and the cited reference files are the ground
 > truth — read them before writing the step's code, and cite what you read.
+
+### Self-Review gate — the plan's own claims are executed, not asserted (MANDATORY)
+
+The body's Self-Review (steps 1-6) is the only reviewer this plan gets: there
+is no separate plan-review agent, and the executor treats the plan as ground
+truth — an implementer follows a step literally and reports broken code when
+the step is what is broken. Run all six steps before the handoff. Steps 4-6
+are where an Android/KMM plan actually fails:
+
+- **Verification commands are RUN, on the clean tree, before the plan ships.**
+  Gradle: `./gradlew <exact task>` — the real module path, not a guess.
+  Deploy: the pipeline from `[[gor-mobile-using-android-cli]]` (gradle build →
+  `android describe` → `android run --apks <path>`) — never an invented flag:
+  `android run` takes `--apks` / `--device` / `--activity` / `--type` /
+  `--install-options` / `--use-delta-install` / `--debug`, and nothing else.
+  Check any flag you did not just read in `--help` against `--help`.
+  iOS/KMM: never `-destination 'generic/platform=iOS Simulator'` (it forces
+  `ARCHS="arm64 x86_64"` while a KMM framework declaring only `iosArm64()` /
+  `iosSimulatorArm64()` has no x86_64 slice), and never a hardcoded
+  `name=iPhone NN` (`name=` without `OS=` means `OS:latest`, which usually
+  resolves to nothing). Resolve a UDID with
+  `xcrun simctl list devices available --json` and cite `-destination
+  'id=<UDID>'`.
+- **Steps are checked against the repo's own hooks.** A `grep`/`rg` for a bare
+  identifier in an ast-index repo is refused by the guard hook — cite
+  `ast-index usages <symbol>` instead, and reserve grep for literals.
+- **Manual steps are labeled.** A step no agent can execute — a store review
+  prompt, a beggar whose trigger is a server-side condition, a real invite
+  send — is marked `Manual (user):`. An unlabeled one becomes an agent's
+  "verified" checkbox over something it never ran.
+
+> **Red Flag — STOP.** Writing a verification command from memory of the
+> toolchain, or copying one from an older plan without running it here. Every
+> command in the plan has been executed once on this repository, or it is not
+> in the plan.
 
 ### Decomposition: sealed / enum + exhaustive `when` is compile-coupled
 

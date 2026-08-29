@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const GOR_MOBILE_VERSION = "0.4.2";
+export const GOR_MOBILE_VERSION = "0.4.3";
 export const GOR_MOBILE_NAME = "gor-mobile";
 
 // Dynamic workflows floor — saved .claude/workflows require this CC version.

@@ -84,6 +84,34 @@ restating the ladder.
 - **Verify (UI, mandatory before "done"):** `android run` to deploy, then
   `android screen capture` (visually examine the PNG), `android layout` for the
   UI tree, `android screen resolve` to map labels to tap coords.
+  - **Gestures — the CLI resolves, `adb` performs.** `android screen` has
+    exactly two subcommands, `capture` and `resolve`; neither taps. The
+    documented pipeline (stock skill, `references/interact.md`) ends in adb:
+
+        android screen capture --annotate --output screen.png
+        adb shell input $(android screen resolve --screenshot screen.png --string "tap #34")
+
+    `resolve` substitutes `#N` with the centre coordinates of the annotated
+    box and prints the string; `adb shell input` executes it. This is the
+    supported path, not a fallback — see the adb exception below. (The stock
+    skill's example writes `--screen`; the real option is `--screenshot`.)
+  - **After deploy, prove the right build is running.** Two checks, both
+    cheap, both catch a deploy that silently did not happen:
+    1. Artifact freshness — the `.apk` that `android describe` points at is
+       newer than the start of this build.
+    2. Foreground package — `adb shell dumpsys activity activities | grep -m1
+       topResumedActivity` shows the variant's `applicationId`. A debug build
+       is a *different package* from release (`…debug` suffix) and both can
+       be installed, logged in, and visually identical; without this check a
+       whole verification pass can run against untouched production code.
+       Record the installed `versionName` (`adb shell dumpsys package <id> |
+       grep versionName`) in the report.
+- **Runtime debugging (`debroid`):** when a bug reproduces on a device and a
+  static read does not explain it, `debroid` (github.com/PatilShreyas/debroid,
+  installed by `gor-mobile setup`) traps and inspects the live process:
+  `launch` / `attach`, `break` / `catch-exception`, `pause-state`, `inspect`,
+  `set-var` + `resume`. Every command returns strict JSON. Full protocol:
+  `[[gor-mobile-systematic-debugging]]` and the `[[debroid-cli]]` skill.
 - **Debug:** `android layout` after each action; `android studio analyze-file`
   and `android studio render-compose-preview` for IDE-level inspection (need a
   running Studio instance).
@@ -97,8 +125,13 @@ do NOT hardcode the list:
 Pick per project (it lists what's actually available via `android skills list`).
 
 ## When `android` is missing or a command fails
-1. Do not silently fall back to `adb`/`./gradlew` for device ops — that breaks
-   the workflow contract. (gradle for *building* is fine — see Execute.)
+1. Do not silently fall back to `adb`/`./gradlew` for what the android CLI
+   itself does — deploy, launch, screenshot, layout dump, target resolution.
+   Two standing exceptions, because the CLI has no command for them:
+   **gestures** (`adb shell input`, fed by `android screen resolve`) and
+   **device-state reads** (`adb shell dumpsys`, `adb logcat`). Using adb there
+   is the contract, not a breach of it. gradle for *building* is likewise fine
+   — see Execute.
 2. Tell the user: «`android` CLI отсутствует или команда недоступна — выполни
    `gor-mobile repair` / `gor-mobile init`».
 3. If a contract command is genuinely absent on a current version, this is a

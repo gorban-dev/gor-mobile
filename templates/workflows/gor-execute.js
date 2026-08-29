@@ -3,7 +3,7 @@ export const meta = {
   description: 'Deterministic plan executor: compact implement+verify for small tasks (same-shape batches in one dispatch), full review pipeline for security/design/wide ones; nested gor-review as the final gate',
   whenToUse: 'Execute an approved implementation plan (docs/plans or .gor-mobile/plans) task by task in a gor-mobile repo',
   phases: [
-    { title: 'Setup', detail: 'workspace, plan parsing, artifact-line validation, base snapshot' },
+    { title: 'Setup', detail: 'workspace, plan parsing, artifact-line validation, base snapshot, baseline pass over the plan verification commands' },
     { title: 'Tasks', detail: 'compact tasks: implement+verify, same-shape batches in one dispatch; security/design/wide tasks: implement, verify+snapshot, review, fix-loop' },
     { title: 'Final', detail: 'progress log, nested gor-review + one fix wave' },
   ],
@@ -16,13 +16,15 @@ const tokens = Array.isArray(args) ? args.map(String)
   : []
 const opt = args && typeof args === 'object' && !Array.isArray(args) ? args : {}
 const planPath = opt.plan ?? tokens.find(t => !t.startsWith('-')) ?? null
+const skipBaseline = opt.noBaseline === true || tokens.includes('--no-baseline')
 
 const deferredMinors = []
 const parkedAll = []
 const taskResults = []
+const unverified = []
 let initialBase = null
 
-const out = (extra) => ({ tasksDone: taskResults.length, taskResults, deferredMinors, parked: parkedAll, ...extra })
+const out = (extra) => ({ tasksDone: taskResults.length, taskResults, deferredMinors, parked: parkedAll, unverified, ...extra })
 
 if (!planPath) return out({ status: 'error', error: 'usage: /gor-execute <plan-file>' })
 if (!/^[\w./-]+$/.test(planPath)) return out({ status: 'error', error: 'plan path contains unsupported characters' })
@@ -41,7 +43,19 @@ const SCRIPTS = '~/.gor-mobile/scripts'
 // prompt that runs a script below carries this same instruction so agents
 // resolve ~ themselves before invoking, rather than handing the literal text
 // to Bash.
-const SCRIPTS_NOTE = 'expand ~ to the absolute home directory and invoke by absolute path, without quotes'
+const SCRIPTS_NOTE = 'expand ~ to the absolute home directory in the SCRIPT path only, and invoke it by absolute path without quotes — every other argument is passed exactly as written, never prefixed with the home directory or any other path'
+
+// A build's exit code is not a verdict: an unresolved xcodebuild destination
+// exits before compiling anything, and a composite pipeline reports the status
+// of its last element, not of the build (field case: three iOS builds reported
+// "exit 0" without ever compiling). Build commands are gated on the log marker
+// instead, and every verification command is forced to run as one command.
+const BUILD_CMD = /(^|[\s;&|(])(\.?\/?gradlew|xcodebuild|swift\s+build)\b/
+const ONE_COMMAND = 'Run it as ONE command — no `;`, no `&&`, no pipe, no background job: a composite reports the status of its last element, not of the command being verified.'
+const REJECTED_FLAG = 'Output that is a usage/help listing ("Usage:", "Unknown option", "Missing required option") is passed=false: a CLI answering with its own help text has not performed the command.'
+const verifyContract = (cmd) => BUILD_CMD.test(cmd)
+  ? `\n   ${ONE_COMMAND} This is a build: report passed=true ONLY if the output contains the marker BUILD SUCCEEDED (xcodebuild) or BUILD SUCCESSFUL (gradle). Output carrying neither marker is passed=false whatever the exit code — an unresolved destination or a rejected flag prints neither. ${REJECTED_FLAG} Report the last ~30 lines of output as "tail".`
+  : `\n   ${ONE_COMMAND} Report passed=true only on a zero exit code, with the last ~30 lines of output as "tail". ${REJECTED_FLAG}`
 
 phase('Setup')
 
@@ -65,6 +79,7 @@ const SETUP_SCHEMA = {
           files: { type: 'array', items: { type: 'string' } },
           layers: { type: 'array', items: { type: 'string' }, description: 'architecture layers the task touches per the rules pack (empty when none/unknown)' },
           conformsTo: { type: 'array', items: { type: 'string' }, description: 'absolute reference-file paths from Conforms to: lines (pack paths resolved under $HOME/.gor-mobile/rules/, project-precedent paths under the repo)' },
+          composeRefs: { type: 'array', items: { type: 'string' }, description: 'absolute paths from the Compose rules: line, resolved against the installed gor-mobile-compose-internals skill directory (empty when the task has no such line)' },
           shapePerUser: { type: ['string', 'null'], description: 'the Shape per user: line verbatim, null if absent' },
           category: { enum: ['behavioral', 'non-behavioral', 'design'] },
           security: { type: 'boolean', description: 'touches security/auth/payments/crypto/IPC/binder' },
@@ -85,7 +100,11 @@ const setup = await agent(`You are the setup parser for a plan execution run in 
    $HOME/.gor-mobile/rules/examples/index.json (empty list if the index is
    missing or nothing matches); reference files from its artifact lines —
    resolve "Conforms to: <pack path>" against $HOME/.gor-mobile/rules/ and
-   "Conforms to (project precedent): <repo path>" against the repo root; any
+   "Conforms to (project precedent): <repo path>" against the repo root; the
+   paths on a "Compose rules:" line against the installed
+   gor-mobile-compose-internals skill directory (<repo>/.claude/skills/
+   gor-mobile-compose-internals/, or $CODEX_HOME/skills/ on Codex) — those
+   are written relative to that skill, NOT to the rules pack; any
    "Shape per user:" line verbatim; its category — 'non-behavioral' for pure
    wiring/DI/resources/flag work with no input-to-output or state logic,
    'design' if the plan marks it as a design decision or human-judgment task,
@@ -100,6 +119,21 @@ if (setup.tasks.length === 0) return out({ status: 'error', error: `no tasks fou
 if (!SHA_SHAPE.test(setup.base)) return out({ status: 'error', error: 'setup returned a malformed tree SHA' })
 if (!PATH_SHAPE.test(setup.workspace)) return out({ status: 'error', error: 'setup returned a malformed workspace path' })
 initialBase = setup.base
+
+// progress.md is the rehydration artifact: a run that stops early is exactly
+// when the session needs it. v0.4.1 collapsed the per-task checkpoint into a
+// single Final-phase writer, so a run that stopped in Tasks wrote nothing at
+// all — every non-normal exit flushes what it has before returning.
+const progressLines = []
+let progressFlushed = 0
+const flushProgress = async () => {
+  const pending = progressLines.slice(progressFlushed)
+  if (pending.length === 0) return
+  progressFlushed = progressLines.length
+  await agent(`Append these ${pending.length} line(s) verbatim to ${setup.workspace}/progress.md (create the file if missing):\n${pending.join('\n')}\nReturn ok=true.`,
+    runnerOpts('progress', 'Tasks'))
+}
+const bail = async (obj) => { await flushProgress(); return out(obj) }
 
 // Artifact-line gate is code, not a reviewer mandate: a layer-touching task
 // with no reference and no user-stated shape is a plan defect — stop before
@@ -205,7 +239,6 @@ const ensureBase = async (label, ph) => {
 // and wide tasks keep the full pipeline — there an early per-task finding is
 // cheaper than a late fix wave.
 const isCompact = (t) => !t.security && t.category !== 'design' && t.files.length <= 6
-const progressLines = []
 
 const tierUp = (m) => m === 'haiku' ? 'sonnet' : m === 'sonnet' ? undefined : undefined
 const implModelFor = (t) => t.category === 'design' || t.files.length > 6 ? undefined
@@ -214,10 +247,45 @@ const implModelFor = (t) => t.category === 'design' || t.files.length > 6 ? unde
 function refBlock(t) {
   const lines = []
   if (t.conformsTo.length > 0) lines.push('Reference files — REQUIRED reading; the diff shape in each touched layer must conform to them exactly:\n' + t.conformsTo.map(p => '- ' + p).join('\n'))
+  // The plan writes these relative to the compose-internals skill; the brief
+  // carries them verbatim, so without the resolved path the implementer looks
+  // for them under the rules pack and reports them missing.
+  if ((t.composeRefs ?? []).length > 0) lines.push('Compose rules — REQUIRED reading (the plan cites these by their skill-relative name):\n' + t.composeRefs.map(p => '- ' + p).join('\n'))
   if (t.shapePerUser) lines.push('Shape per user (verbatim from the plan): ' + t.shapePerUser)
   if (lines.length === 0) lines.push('Canonical examples: none for this task')
   return lines.join('\n')
 }
+
+// The repo's tooling is installed but invisible from inside a subagent
+// dispatch: nothing in a workflow prompt used to name the android CLI, adb,
+// debroid or the docs-first ladder, so implementers improvised device work
+// and coded remembered API signatures. This block is the contract, kept short
+// enough to ride along on every implementer and fix dispatch.
+const TOOL_CONTRACT = `Tooling contract for this repository:
+- External API signatures (SDK, Jetpack, any library): never from memory —
+  ground them via the docs-first ladder in the gor-mobile-using-android-cli
+  skill (\`android docs search\` / \`docs fetch\`, the
+  google-developer-knowledge MCP server, then the resolved artifact) and cite
+  what you read in your report.
+- Symbol counts and call chains: \`ast-index usages|symbol|implementations\`,
+  never grep — a bare-identifier grep is refused by this repo's guard hook.
+- Device / emulator work: build with \`./gradlew\`, then deploy with the
+  android CLI (\`android describe\` to locate the APK → \`android run --apks
+  <path>\`; there is no --variant flag). Gestures are \`android screen capture
+  --annotate\` → \`android screen resolve --screenshot <png> --string "tap #N"\`
+  → \`adb shell input <the printed coordinates>\`: the CLI resolves targets, adb
+  performs them. After any deploy, confirm the right build is actually running
+  — \`adb shell dumpsys activity activities | grep -m1 topResumedActivity\`
+  must show the variant's applicationId (a debug build is a different package
+  from release, and both can be installed at once).
+- A build is not verified by its exit code: require BUILD SUCCESSFUL /
+  BUILD SUCCEEDED in the log, and never chain a build with \`;\`, \`&&\` or a
+  pipe — the composite reports its last element.
+- A runtime bug you cannot explain from a static read: gather runtime evidence
+  with the debroid CLI (\`debroid launch|attach\`, \`break\`,
+  \`catch-exception\`, \`pause-state\`, \`inspect\`, \`set-var\` + \`resume\`) per
+  the gor-mobile-systematic-debugging skill, before rewriting code on a
+  hypothesis.`
 
 // Implementers on both paths generate and read their own brief: task-brief
 // writes to the deterministic path <workspace>/task-<N>-brief.md, so no
@@ -234,6 +302,8 @@ ${refBlock(t)}
 
 Global constraints binding every task:
 ${setup.constraints}
+
+${TOOL_CONTRACT}
 
 Fidelity: reproduce the task's calls exactly — match signatures, keep modifier
 chains and named arguments as written, never simplify or drop parameters.
@@ -302,6 +372,47 @@ for (const t of setup.tasks) {
   }
 }
 
+// Baseline gate: a verification command that already fails on the untouched
+// tree can never say anything about a task's diff — it burns fix rounds and
+// stops the run on a defect that is not in the code (field case: a plan's
+// xcodebuild destination demanded an x86_64 slice the project stopped
+// producing three weeks earlier). Each DISTINCT command runs once here, while
+// the tree is still clean; the ones that fail are dropped from their tasks
+// and reported instead of gating them. `--no-baseline` skips the pass.
+const BASELINE_SCHEMA = {
+  type: 'object', required: ['results'],
+  properties: {
+    results: {
+      type: 'array',
+      items: {
+        type: 'object', required: ['n', 'passed'],
+        properties: { n: { type: 'number' }, passed: { type: 'boolean' }, tail: { type: 'string' } },
+      },
+    },
+  },
+}
+const baselineCmds = [...new Set([...setup.tasks.map(t => t.verification), setup.verificationAll].filter(Boolean))]
+if (!skipBaseline && baselineCmds.length > 0) {
+  const bl = await agent(`You are running a baseline pass on an UNMODIFIED working tree, before any task of the plan at ${planPath} is implemented. Each command below is a verification gate the plan states; the only question is whether it can pass on this repository AT ALL.
+
+${baselineCmds.map((c, i) => `${i + 1}. ${c}${verifyContract(c)}`).join('\n')}
+
+Run each one exactly as written, in order, and report per command: n (its number above), passed, and the last ~30 lines as "tail" when it did not pass. Change nothing in the repository, run no other command, and never adjust a command's flags to coax it green — a command that cannot pass is the result this pass exists to find. Return the structured result only.`,
+    { label: 'setup:baseline', phase: 'Setup', effort: 'low', model: 'haiku', agentType: 'gor-mobile-runner', schema: BASELINE_SCHEMA })
+  if (bl) {
+    const broken = new Set(bl.results.filter(r => r.passed === false).map(r => baselineCmds[r.n - 1]).filter(Boolean))
+    for (const c of broken) {
+      const tail = (bl.results.find(r => baselineCmds[r.n - 1] === c) ?? {}).tail ?? ''
+      unverified.push(`"${c}" fails on the unmodified tree — dropped as a gate for this run. Baseline tail:\n${tail}`)
+      log(`baseline: "${c}" fails on a clean tree — dropped as a verification gate`)
+    }
+    for (const t of setup.tasks) if (t.verification && broken.has(t.verification)) t.verification = null
+    if (setup.verificationAll && broken.has(setup.verificationAll)) setup.verificationAll = null
+  } else {
+    log('baseline pass failed to report — verification commands stay in force unchecked')
+  }
+}
+
 phase('Tasks')
 
 for (const u of units) {
@@ -312,7 +423,7 @@ for (const u of units) {
     const verification = ts[0].verification
 
     const base = await ensureBase(`${label}:base`, 'Tasks')
-    if (!base) return out({ status: 'error', error: `base snapshot agent failed before batch ${label}` })
+    if (!base) return await bail({ status: 'error', error: `base snapshot agent failed before batch ${label}` })
 
     const batchImplPrompt = (extra) => `You are the implementer for a batch of ${ts.length} small same-shape tasks of the plan at ${planPath} in this repository:
 ${ts.map(t => `- Task ${t.n}: ${t.title}`).join('\n')}
@@ -326,6 +437,8 @@ ${ts.map(t => `Task ${t.n} references:\n${refBlock(t)}`).join('\n')}
 
 Global constraints binding every task:
 ${setup.constraints}
+
+${TOOL_CONTRACT}
 
 Fidelity: reproduce each task's calls exactly — match signatures, keep modifier
 chains and named arguments as written, never simplify or drop parameters.
@@ -346,7 +459,7 @@ and concerns.`
         { label: `${label}:impl-retry`, phase: 'Tasks', model: 'sonnet', agentType: 'general-purpose', schema: IMPL_SCHEMA })
     }
     if (!impl || impl.status === 'NEEDS_CONTEXT' || impl.status === 'BLOCKED') {
-      return out({
+      return await bail({
         status: 'blocked',
         blocked: `Batch ${label} (${ts.map(t => 'Task ' + t.n).join(', ')}): implementer ${impl ? impl.status : 'failed'} — ${impl ? (impl.concerns ?? []).join('; ') || impl.summary : 'agent error'}. Fix the plan or provide context, then RERUN /gor-execute — a resume replays the cached plan parse and will not see plan edits.`,
       })
@@ -360,7 +473,7 @@ and concerns.`
     // snapshots for the chain.
     const verifyBatch = (roundLabel) => {
       const steps = []
-      if (verification) steps.push(`${verification}\n   Report passed=true only on a zero exit code, with the last ~30 lines of output as "tail".`)
+      if (verification) steps.push(`${verification}${verifyContract(verification)}`)
       steps.push(`${SCRIPTS}/sdd-snapshot "${planPath}" — its printed tree SHA is "sha".`)
       steps.push(`git diff --name-only ${base} <the SHA from the previous step> — report the printed paths as "files".`)
       return agent(`Run these commands in the repository root — ${SCRIPTS_NOTE} for the scripts — and report honestly:\n`
@@ -371,36 +484,67 @@ and concerns.`
     const batchProblems = (v) => {
       const problems = []
       if (verification && v.passed !== true) problems.push(`verification failed:\n${v.tail ?? ''}`)
+      const verifyOnly = problems.length === 1
       const touched = v.files ?? []
       for (const t of ts) {
         if (!t.files.some(f => touched.some(c => c === f || c.endsWith('/' + f) || f.endsWith('/' + c)))) {
           problems.push(`Task ${t.n} (${t.title}): none of its listed files appear in the diff — the task was not implemented`)
         }
       }
+      // A batch whose ONLY problem is the shared verification command is the
+      // same case the per-task breaker adjudicates: the command may be
+      // unusable rather than the code broken.
+      problems.verifyOnly = verifyOnly && problems.length === 1
       return problems
     }
 
     let v = await verifyBatch(`${label}:verify`)
-    if (!v || !SHA_SHAPE.test(v.sha ?? '')) return out({ status: 'error', error: `verification agent failed on batch ${label}` })
+    if (!v || !SHA_SHAPE.test(v.sha ?? '')) return await bail({ status: 'error', error: `verification agent failed on batch ${label}` })
     let problems = batchProblems(v)
     let round = 0
-    while (problems.length > 0 && round < 3) {
+    let escalation = null
+    while (problems.length > 0 && round < 3 && !escalation) {
       round++
       const fix = await agent(batchImplPrompt(
-        `Fix round ${round}/3 — address these problems, changing nothing beyond what that requires:\n${problems.map(p => '- ' + p).join('\n')}\nAppend your fix report to the same report file.`),
+        `Fix round ${round}/3 — address these problems, changing nothing beyond what that requires:\n${problems.map(p => '- ' + p).join('\n')}\n${problems.verifyOnly ? 'If the verification command fails identically on an unmodified tree, say so as BLOCKED with that evidence instead of changing more code — an isolation run is your FIRST move on a failure you did not expect, not your last.\n' : ''}Append your fix report to the same report file.`),
         { label: `${label}:fix${round}`, phase: 'Tasks', model: round < 3 ? 'haiku' : 'sonnet', agentType: 'general-purpose', schema: IMPL_SCHEMA })
-      if (!fix) return out({ status: 'error', error: `fix agent failed on batch ${label} round ${round}` })
+      if (!fix) return await bail({ status: 'error', error: `fix agent failed on batch ${label} round ${round}` })
+      if (fix.status === 'BLOCKED' || fix.status === 'NEEDS_CONTEXT') {
+        escalation = `${fix.status} — ${(fix.concerns ?? []).join('; ') || fix.summary}`
+        break
+      }
       v = await verifyBatch(`${label}:verify${round}`)
-      if (!v || !SHA_SHAPE.test(v.sha ?? '')) return out({ status: 'error', error: `verification agent failed on batch ${label}` })
+      if (!v || !SHA_SHAPE.test(v.sha ?? '')) return await bail({ status: 'error', error: `verification agent failed on batch ${label}` })
       problems = batchProblems(v)
     }
+    let batchUnusable = false
     if (problems.length > 0) {
-      return out({ status: 'blocked', blocked: `Batch ${label}: still failing after ${round} fix round(s): ${problems.join('; ')}` })
+      if (!problems.verifyOnly) {
+        return await bail({ status: 'blocked', blocked: `Batch ${label}: still failing after ${round} fix round(s)${escalation ? ` (implementer escalated: ${escalation})` : ''}: ${problems.join('; ')}` })
+      }
+      const br = await agent(`You are the breaker adjudicating a verification gate that stayed red on a batch of ${ts.length} tasks (${ts.map(t => 'Task ' + t.n).join(', ')}) of the plan at ${planPath}.
+
+Command: ${verification}
+Last output tail:
+${v.tail ?? ''}
+${escalation ? `The implementer escalated: ${escalation}\n` : ''}Read the implementer report at ${reportPath} — isolation evidence, if any, lives there — plus the batch's diff and the plan.
+
+Return exactly ONE ruling, its title the literal string "verification failed":
+- 'parked' — the command is UNUSABLE in this repository: it fails the same way on an unmodified tree, or it names a destination / flag / target that does not exist. The code stands and the run continues without this gate.
+- 'blocked' — the code these tasks wrote is genuinely broken.
+Confirm the claim yourself before ruling 'parked': run the diagnosis that settles it — an isolation run of the same command, xcodebuild -showBuildSettings, --help on the flag the command passes. The implementer's word alone is not evidence. Return the structured result only.`,
+        { label: `${label}:vbreaker`, phase: 'Tasks', schema: BREAKER_SCHEMA })
+      if (!br || br.rulings.some(r => r.decision === 'blocked')) {
+        return await bail({ status: 'blocked', blocked: `Batch ${label}: verification still failing after ${round} fix round(s)${br ? ' — breaker: ' + br.rulings.filter(r => r.decision === 'blocked').map(r => r.ruling).join('; ') : ' and the breaker agent failed'}: ${v.tail ?? ''}` })
+      }
+      batchUnusable = true
+      unverified.push(`Batch ${label} (${ts.map(t => 'Task ' + t.n).join(', ')}): "${verification}" ruled unusable — ${br.rulings.map(r => r.ruling).join('; ')}`)
+      parkedAll.push(`Batch ${label}: code applied, verification not run — ${br.rulings.map(r => r.ruling).join('; ')}`)
     }
-    lastHead = v.sha
+    lastHead = escalation ? null : v.sha
     for (const t of ts) {
-      taskResults.push({ n: t.n, title: t.title, mode: 'batch', rounds: round, parked: [] })
-      progressLines.push(`Task ${t.n}: complete (batched ${label}, ${round} fix rounds) — ${impl.summary}`)
+      taskResults.push({ n: t.n, title: t.title, mode: 'batch', rounds: round, parked: [], unverified: batchUnusable })
+      progressLines.push(`Task ${t.n}: ${batchUnusable ? 'code applied, verification unusable' : 'complete'} (batched ${label}, ${round} fix rounds) — ${impl.summary}`)
     }
     continue
   }
@@ -416,7 +560,7 @@ and concerns.`
   // With statBase set it additionally measures the diff for review routing.
   const verify = (roundLabel, statBase) => {
     const steps = []
-    if (t.verification) steps.push(`${t.verification}\n   Report passed=true only on a zero exit code, with the last ~30 lines of output as "tail".`)
+    if (t.verification) steps.push(`${t.verification}${verifyContract(t.verification)}`)
     steps.push(`${SCRIPTS}/sdd-snapshot "${planPath}" — its printed tree SHA is "sha".`)
     if (statBase) steps.push(`git diff --shortstat ${statBase} <the SHA from the previous step> — report loc = insertions + deletions.`)
     return agent(`Run these commands in the repository root — ${SCRIPTS_NOTE} for the scripts — and report honestly:\n`
@@ -439,54 +583,96 @@ and concerns.`
     }
     return impl
   }
-  const implBlocked = (impl) => out({
+  const implBlocked = (impl) => bail({
     status: 'blocked',
     blocked: `Task ${t.n} (${t.title}): implementer ${impl ? impl.status : 'failed'} — ${impl ? (impl.concerns ?? []).join('; ') || impl.summary : 'agent error'}. Fix the plan or provide context, then RERUN /gor-execute — a resume replays the cached plan parse and will not see plan edits.`,
   })
 
+  // A gate that stays red after its fix rounds is not automatically a code
+  // defect: a command that cannot pass on ANY tree (an unresolvable
+  // destination, a flag the CLI does not have, a target the build never
+  // produced) fails identically before and after the diff. Field case: an
+  // implementer proved with an isolation run on HEAD that the plan's
+  // xcodebuild command had been broken for three weeks, and the run stopped
+  // at task 3 of 8 anyway. The breaker reads that evidence and rules the
+  // verification unusable — code kept, gate dropped, run continues — or
+  // confirms the code is really broken.
+  const verificationBreaker = async (tail, escalation) => agent(
+    `You are the breaker adjudicating a verification gate that stayed red on Task ${t.n} (${t.title}) of the plan at ${planPath}.
+
+Command: ${t.verification}
+Last output tail:
+${tail ?? ''}
+${escalation ? `The implementer escalated: ${escalation}\n` : ''}
+Read the implementer report at ${reportPath} — isolation evidence, if any, lives there — plus the task's diff and the plan.
+
+Return exactly ONE ruling, its title the literal string "verification failed":
+- 'parked' — the command is UNUSABLE in this repository: it fails the same way on an unmodified tree, or it names a destination / flag / target that does not exist. The task's code stands and the run continues without this gate.
+- 'blocked' — the code this task wrote is genuinely broken, or a later task builds on something this failure shows is wrong.
+Confirm the claim yourself before ruling 'parked': run the diagnosis that settles it — an isolation run of the same command, xcodebuild -showBuildSettings, --help on the flag the command passes. The implementer's word alone is not evidence. Return the structured result only.`,
+    { label: `${label}:vbreaker`, phase: 'Tasks', schema: BREAKER_SCHEMA })
+
   if (isCompact(t)) {
     const impl = await runImpl()
-    if (!impl || impl.status === 'NEEDS_CONTEXT' || impl.status === 'BLOCKED') return implBlocked(impl)
+    if (!impl || impl.status === 'NEEDS_CONTEXT' || impl.status === 'BLOCKED') return await implBlocked(impl)
     if (impl.status === 'DONE_WITH_CONCERNS' && (impl.concerns ?? []).length > 0) {
       for (const c of impl.concerns) deferredMinors.push(`Task ${t.n} implementer concern: ${c}`)
     }
 
     let round = 0
+    let unusable = false
     if (t.verification) {
       let v = await verify(`${label}:verify`, null)
-      if (!v) return out({ status: 'error', error: `verification agent failed on task ${t.n}` })
-      while (v.passed !== true && round < 3) {
+      if (!v) return await bail({ status: 'error', error: `verification agent failed on task ${t.n}` })
+      // An implementer that escalates has stopped changing code — burning the
+      // remaining rounds on the same dead end only repeats its report.
+      let escalation = null
+      while (v.passed !== true && round < 3 && !escalation) {
         round++
         const fix = await agent(implPrompt(t, reportPath,
-          `Fix round ${round}/3 — the verification command failed; make it pass, changing nothing beyond what that requires. Output tail:\n${v.tail ?? ''}\nAppend your fix report to the same report file.`),
+          `Fix round ${round}/3 — the verification command failed; make it pass, changing nothing beyond what that requires. Output tail:\n${v.tail ?? ''}\nIf the command fails identically on an unmodified tree, say so as BLOCKED with that evidence instead of changing more code — an isolation run is your FIRST move on a failure you did not expect, not your last.\nAppend your fix report to the same report file.`),
           { label: `${label}:fix${round}`, phase: 'Tasks', model: round < 3 ? implModel : tierUp(implModel), agentType: 'general-purpose', schema: IMPL_SCHEMA })
-        if (!fix) return out({ status: 'error', error: `fix agent failed on task ${t.n} round ${round}` })
+        if (!fix) return await bail({ status: 'error', error: `fix agent failed on task ${t.n} round ${round}` })
+        if (fix.status === 'BLOCKED' || fix.status === 'NEEDS_CONTEXT') {
+          escalation = `${fix.status} — ${(fix.concerns ?? []).join('; ') || fix.summary}`
+          break
+        }
         v = await verify(`${label}:verify${round}`, null)
-        if (!v) return out({ status: 'error', error: `verification agent failed on task ${t.n}` })
+        if (!v) return await bail({ status: 'error', error: `verification agent failed on task ${t.n}` })
       }
       if (v.passed !== true) {
-        return out({ status: 'blocked', blocked: `Task ${t.n} (${t.title}): verification still failing after ${round} fix round(s): ${v.tail ?? ''}` })
+        const br = await verificationBreaker(v.tail, escalation)
+        if (!br) return await bail({ status: 'blocked', blocked: `Task ${t.n} (${t.title}): verification still failing after ${round} fix round(s) and the breaker agent failed: ${v.tail ?? ''}` })
+        const blockedRulings = br.rulings.filter(r => r.decision === 'blocked')
+        if (blockedRulings.length > 0) {
+          return await bail({ status: 'blocked', blocked: `Task ${t.n} (${t.title}): verification failing after ${round} fix round(s) — breaker: ${blockedRulings.map(r => r.ruling).join('; ')}` })
+        }
+        unusable = true
+        unverified.push(`Task ${t.n} (${t.title}): "${t.verification}" ruled unusable — ${br.rulings.map(r => r.ruling).join('; ')}`)
+        parkedAll.push(`Task ${t.n}: code applied, verification not run — ${br.rulings.map(r => r.ruling).join('; ')}`)
       }
-      lastHead = SHA_SHAPE.test(v.sha ?? '') ? v.sha : null
+      // After an escalation the last fix ran without a following snapshot, so
+      // v.sha no longer describes the tree — force the next base to be taken.
+      lastHead = (!escalation && SHA_SHAPE.test(v.sha ?? '')) ? v.sha : null
     } else {
       lastHead = null
     }
-    taskResults.push({ n: t.n, title: t.title, mode: 'compact', rounds: round, parked: [] })
-    progressLines.push(`Task ${t.n}: complete (compact, ${round} fix rounds) — ${impl.summary}`)
+    taskResults.push({ n: t.n, title: t.title, mode: 'compact', rounds: round, parked: [], unverified: unusable })
+    progressLines.push(`Task ${t.n}: ${unusable ? 'code applied, verification unusable' : 'complete'} (compact, ${round} fix rounds) — ${impl.summary}`)
     continue
   }
 
   const base = await ensureBase(`${label}:base`, 'Tasks')
-  if (!base) return out({ status: 'error', error: `base snapshot agent failed on task ${t.n}` })
+  if (!base) return await bail({ status: 'error', error: `base snapshot agent failed on task ${t.n}` })
 
   const impl = await runImpl()
-  if (!impl || impl.status === 'NEEDS_CONTEXT' || impl.status === 'BLOCKED') return implBlocked(impl)
+  if (!impl || impl.status === 'NEEDS_CONTEXT' || impl.status === 'BLOCKED') return await implBlocked(impl)
   if (impl.status === 'DONE_WITH_CONCERNS' && (impl.concerns ?? []).length > 0) {
     for (const c of impl.concerns) deferredMinors.push(`Task ${t.n} implementer concern: ${c}`)
   }
 
   let v = await verify(`${label}:verify`, base)
-  if (!v || !SHA_SHAPE.test(v.sha ?? '')) return out({ status: 'error', error: `verification agent failed on task ${t.n}` })
+  if (!v || !SHA_SHAPE.test(v.sha ?? '')) return await bail({ status: 'error', error: `verification agent failed on task ${t.n}` })
   lastHead = v.sha
   let head = v.sha
   // A runner that omitted loc routes the review deep — the safe direction.
@@ -498,6 +684,7 @@ and concerns.`
   let reviewed = false
   let lastReviewBase = base
   let round = 0
+  let escalated = null
   let taskParked = []
 
   // First green verification unlocks the combined review; its C/I findings
@@ -512,7 +699,7 @@ and concerns.`
         model: reduced ? 'haiku' : undefined,
         schema: REVIEW_SCHEMA,
       })
-      if (!review) return out({ status: 'error', error: `review agent failed on task ${t.n}` })
+      if (!review) return await bail({ status: 'error', error: `review agent failed on task ${t.n}` })
       const all = [...review.specFindings, ...review.qualityFindings]
       for (const f of all.filter(f => f.severity === 'minor')) deferredMinors.push(`Task ${t.n}: ${f.title}`)
       openFindings = all.filter(f => f.severity !== 'minor')
@@ -520,31 +707,39 @@ and concerns.`
       lastReviewBase = head
     }
     if (openFindings.length === 0) break
-    if (round === 5) {
-      const breaker = await agent(`You are the breaker adjudicating a fix loop that hit its cap on Task ${t.n} (${t.title}) of the plan at ${planPath}. Open findings:
+    if (round >= 5 || escalated) {
+      const breaker = await agent(`You are the breaker adjudicating a fix loop that ${escalated ? 'an implementer escalated out of' : 'hit its cap'} on Task ${t.n} (${t.title}) of the plan at ${planPath}.${escalated ? ` The implementer escalated: ${escalated}` : ''} Open findings:
 ${openFindings.map(f => `- [${f.severity}] ${f.title}: ${f.detail}`).join('\n')}
-Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the report at ${reportPath}, and the relevant code. Per finding decide: 'parked' (contestable, or real but nothing downstream builds on it — give the ruling) or 'blocked' (real and load-bearing: a later task builds on it or it reveals a plan defect). Return the structured result only.`,
+Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the report at ${reportPath}, and the relevant code. Per finding decide: 'parked' (contestable, or real but nothing downstream builds on it — give the ruling) or 'blocked' (real and load-bearing: a later task builds on it or it reveals a plan defect). A finding titled "verification failed" is 'parked' when the command is unusable in this repository — it fails the same way on an unmodified tree, or names a destination / flag / target that does not exist — but confirm that yourself with the diagnosis that settles it, not on the implementer's word. Return the structured result only.`,
         { label: `${label}:breaker`, phase: 'Tasks', schema: BREAKER_SCHEMA })
-      if (!breaker) return out({ status: 'error', error: `breaker agent failed on task ${t.n}` })
+      if (!breaker) return await bail({ status: 'error', error: `breaker agent failed on task ${t.n}` })
       const blockedRulings = breaker.rulings.filter(r => r.decision === 'blocked')
       if (blockedRulings.length > 0) {
-        return out({
+        return await bail({
           status: 'blocked',
           blocked: `Task ${t.n} breaker: ${blockedRulings.map(r => `${r.title} — ${r.ruling}`).join('; ')}`,
         })
       }
-      for (const r of breaker.rulings) taskParked.push(`Task ${t.n}: parked — ${r.title} — ruling: ${r.ruling}`)
+      for (const r of breaker.rulings) {
+        taskParked.push(`Task ${t.n}: parked — ${r.title} — ruling: ${r.ruling}`)
+        if (r.title === 'verification failed') unverified.push(`Task ${t.n} (${t.title}): "${t.verification}" ruled unusable — ${r.ruling}`)
+      }
       parkedAll.push(...taskParked)
       break
     }
     round++
     const fixModel = round <= 3 ? implModel : tierUp(implModel)
     const fix = await agent(implPrompt(t, reportPath,
-      `${round > 3 ? `A prior implementer attempted this task ${round - 1} time(s); you own it now. Read the report file for what was tried. ` : ''}Fix round ${round}/5 — address these findings, nothing else:\n${openFindings.map(f => `- [${f.severity}] ${f.title}: ${f.detail}`).join('\n')}\nAppend your fix report to the same report file.`),
+      `${round > 3 ? `A prior implementer attempted this task ${round - 1} time(s); you own it now. Read the report file for what was tried. ` : ''}Fix round ${round}/5 — address these findings, nothing else:\n${openFindings.map(f => `- [${f.severity}] ${f.title}: ${f.detail}`).join('\n')}\n${openFindings.some(f => f.title === 'verification failed') ? 'If the verification command fails identically on an unmodified tree, say so as BLOCKED with that evidence instead of changing more code — an isolation run is your FIRST move on a failure you did not expect, not your last.\n' : ''}Append your fix report to the same report file.`),
       { label: `${label}:fix${round}`, phase: 'Tasks', model: fixModel, agentType: 'general-purpose', schema: IMPL_SCHEMA })
-    if (!fix) return out({ status: 'error', error: `fix agent failed on task ${t.n} round ${round}` })
+    if (!fix) return await bail({ status: 'error', error: `fix agent failed on task ${t.n} round ${round}` })
+    if (fix.status === 'BLOCKED' || fix.status === 'NEEDS_CONTEXT') {
+      escalated = `${fix.status} — ${(fix.concerns ?? []).join('; ') || fix.summary}`
+      lastHead = null
+      continue
+    }
     v = await verify(`${label}:verify${round}`, lastReviewBase)
-    if (!v || !SHA_SHAPE.test(v.sha ?? '')) return out({ status: 'error', error: `verification agent failed on task ${t.n}` })
+    if (!v || !SHA_SHAPE.test(v.sha ?? '')) return await bail({ status: 'error', error: `verification agent failed on task ${t.n}` })
     lastHead = v.sha
     head = v.sha
     loc = Number.isFinite(v.loc) ? v.loc : Infinity
@@ -560,7 +755,7 @@ Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the 
       label: `${label}:rereview${round}`, phase: 'Tasks',
       agentType: 'gor-mobile-code-reviewer', schema: REREVIEW_SCHEMA,
     })
-    if (!rr) return out({ status: 'error', error: `re-review agent failed on task ${t.n} round ${round}` })
+    if (!rr) return await bail({ status: 'error', error: `re-review agent failed on task ${t.n} round ${round}` })
     lastReviewBase = head
     const notAddressed = openFindings.filter((f, i) => !rr.verdicts.some(vd => vd.n === i + 1 && vd.verdict === 'ADDRESSED'))
     for (const f of rr.newFindings.filter(f => f.severity === 'minor')) deferredMinors.push(`Task ${t.n} (fix ${round}): ${f.title}`)
@@ -573,13 +768,9 @@ Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the 
 
 phase('Final')
 
-// One progress writer for the whole run instead of a per-task checkpoint
-// agent — progress.md is a convenience artifact; mid-run state lives in the
-// workflow journal. Non-fatal on failure.
-if (progressLines.length > 0) {
-  await agent(`Append these ${progressLines.length} line(s) verbatim to ${setup.workspace}/progress.md (create the file if missing):\n${progressLines.join('\n')}\nReturn ok=true.`,
-    runnerOpts('final:progress', 'Final'))
-}
+// One writer for whatever the Tasks phase did not already flush — a
+// mid-run stop flushes on its way out, so the checkpoint exists either way.
+await flushProgress()
 
 // Whole-project verification the plan named — run and independently checked
 // here, not delegated prose inside another agent's prompt (see verify() in
@@ -587,12 +778,11 @@ if (progressLines.length > 0) {
 // also snapshots, so a following fix wave reuses the SHA as its base.
 if (setup.verificationAll) {
   const va = await agent(`Run these commands in the repository root — ${SCRIPTS_NOTE} for the script — and report honestly:
-1. ${setup.verificationAll}
-   Report passed=true only on a zero exit code, with the last ~30 lines of output as "tail".
+1. ${setup.verificationAll}${verifyContract(setup.verificationAll)}
 2. ${SCRIPTS}/sdd-snapshot "${planPath}" — its printed tree SHA is "sha".
 Return the structured result only.`,
     runnerOpts('final:verifyAll', 'Final'))
-  if (!va || va.passed !== true) return out({ status: 'blocked', blocked: 'whole-project verification failed: ' + (va ? va.tail ?? '' : 'agent error') })
+  if (!va || va.passed !== true) return await bail({ status: 'blocked', blocked: 'whole-project verification failed: ' + (va ? va.tail ?? '' : 'agent error') })
   if (SHA_SHAPE.test(va.sha ?? '')) lastHead = va.sha
 }
 
@@ -603,7 +793,7 @@ const finalReview = await workflow('gor-review', {
 // A null or errored nested review is a hard stop, not a quiet 'done' — the
 // advertised final gate must actually have run for the session to trust it.
 if (!finalReview || finalReview.status === 'error') {
-  return out({
+  return await bail({
     status: 'blocked',
     blocked: 'final review failed — run /gor-review standalone, then address its findings',
     finalReview: { status: 'error', residualFindings: [] },
@@ -623,7 +813,7 @@ if (finalOpen.length > 0) {
   // chain is clean) so the re-review below covers only the wave's own diff,
   // not the whole plan implementation since initialBase.
   const waveBase = await ensureBase('final:base', 'Final')
-  if (!waveBase) return out({ status: 'error', error: 'final snapshot agent failed' })
+  if (!waveBase) return await bail({ status: 'error', error: 'final snapshot agent failed' })
   const wave = await agent(`You are the fix-wave implementer for the final review of the plan at ${planPath} in this repository. Fix ALL of these findings in the working tree (no commits):
 ${finalOpen.map(f => `- [${f.severity}] ${f.title}${f.file ? ' (' + f.file + ')' : ''}: ${f.detail}`).join('\n')}
 Global constraints:\n${setup.constraints}
@@ -636,7 +826,7 @@ You never dispatch subagents. Full report → ${waveReport}. Return the structur
   // nothing trustworthy — skip packaging/re-review and stop, same as the
   // per-task loop's handling of these two statuses.
   if (!wave || wave.status === 'NEEDS_CONTEXT' || wave.status === 'BLOCKED') {
-    return out({
+    return await bail({
       status: 'blocked',
       blocked: 'final fix wave did not complete — ' + (wave ? `${wave.status} — ${(wave.concerns ?? []).join('; ') || wave.summary}` : 'agent error'),
       finalReview: {
@@ -656,12 +846,12 @@ You never dispatch subagents. Full report → ${waveReport}. Return the structur
   // loses nothing and one runner covers both jobs.
   const pw = await agent(`Run these commands in the repository root — ${SCRIPTS_NOTE} for the script — and report honestly:\n`
     + (setup.verificationAll
-      ? `1. ${setup.verificationAll}\n   Report passed=true only on a zero exit code, with the last ~30 lines of output as "tail".\n2. ${SCRIPTS}/sdd-snapshot "${planPath}" — its printed tree SHA is "sha".`
+      ? `1. ${setup.verificationAll}${verifyContract(setup.verificationAll)}\n2. ${SCRIPTS}/sdd-snapshot "${planPath}" — its printed tree SHA is "sha".`
       : `1. ${SCRIPTS}/sdd-snapshot "${planPath}" — its printed tree SHA is "sha".`)
     + `\nReturn the structured result only.`,
     runnerOpts('final:postwave', 'Final'))
   if (setup.verificationAll && (!pw || pw.passed !== true)) {
-    return out({ status: 'blocked', blocked: 'whole-project verification failed: ' + (pw ? pw.tail ?? '' : 'agent error') })
+    return await bail({ status: 'blocked', blocked: 'whole-project verification failed: ' + (pw ? pw.tail ?? '' : 'agent error') })
   }
   const waveHead = pw && SHA_SHAPE.test(pw.sha ?? '') ? pw.sha : null
   if (waveHead) lastHead = waveHead
@@ -676,9 +866,13 @@ You never dispatch subagents. Full report → ${waveReport}. Return the structur
 
 // 'done' only with an empty residual set — a caller reading top-level status
 // must never see 'done' while findings from the final gate are still open.
+// A run whose gates were dropped is 'done' on code and open on evidence:
+// say so in the result, or the session reports work as verified that no
+// command ever checked.
 return out({
   status: finalOpen.length > 0 ? 'blocked' : 'done',
   ...(finalOpen.length > 0 ? { blocked: `final review found ${finalOpen.length} unresolved finding(s): ${finalOpen.map(f => f.title).join('; ')}` } : {}),
+  ...(unverified.length > 0 ? { needsManualVerification: `${unverified.length} verification command(s) were unusable — the code they covered was never built or run. Report this to the user instead of calling those tasks verified.` } : {}),
   finalReview: {
     status: finalReview.status, codexRan: finalReview.codexRan ?? false,
     gorRan: finalReview.gorRan ?? false, residualFindings: finalOpen,

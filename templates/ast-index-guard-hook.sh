@@ -62,6 +62,21 @@ is_noncode_target() {
     esac
 }
 
+# A search scoped to ONE named file is a different question from a symbol
+# query over the repo: "how many times does this string appear in THIS file"
+# is what `grep -c Foo Bar.kt` asks, and ast-index has no answer for it (its
+# counts are repo-wide). Only an existing regular file counts — a directory or
+# a glob is still a repo search.
+is_single_file() {
+    local p="$1"
+    [[ -n "$p" ]] || return 1
+    p="${p//\"/}"; p="${p//\'/}"
+    case "$p" in *'*'*|*'?'*) return 1 ;; esac
+    [[ -f "$p" ]] && return 0
+    [[ -n "${cwd:-}" && -f "$cwd/$p" ]] && return 0
+    return 1
+}
+
 is_noncode_type() {
     case "$1" in md|markdown|xml|json|yaml|txt|properties|config|css|html) return 0 ;; esac
     return 1
@@ -80,6 +95,7 @@ if [[ "$tool" == "Grep" ]]; then
     ftype="$(jqr '.tool_input.type')"
     [[ -n "$glob" ]] && is_noncode_target "$glob" && exit 0
     [[ -n "$path" ]] && is_noncode_target "$path" && exit 0
+    [[ -n "$path" ]] && is_single_file "$path" && exit 0
     [[ -n "$ftype" ]] && is_noncode_type "$ftype" && exit 0
 else
     cmd="$(jqr '.tool_input.command')"
@@ -184,6 +200,7 @@ else
             fi
         else
             is_noncode_target "$w" && exit 0
+            is_single_file "$w" && exit 0
         fi
     done
 fi

@@ -5,7 +5,7 @@ import { Command } from "commander";
 import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-var GOR_MOBILE_VERSION = "0.4.2";
+var GOR_MOBILE_VERSION = "0.4.3";
 var WORKFLOWS_MIN_CLAUDE_VERSION = "2.1.154";
 var WORKFLOW_SIZE_GUIDELINE_MIN_CLAUDE_VERSION = "2.1.219";
 var HOME = homedir();
@@ -200,7 +200,26 @@ var WORKFLOW_PERMISSION_ENTRIES = [
   "Bash(ls:*)",
   "Bash(./gradlew:*)",
   // on-device verification via the android CLI must run unprompted
-  "Bash(android:*)"
+  "Bash(android:*)",
+  // The android CLI deploys and resolves tap targets but executes no gesture
+  // and reads no device state, so the documented pipeline ends in `adb` (see
+  // the using-android-cli skill). Subcommands are listed one by one: a blanket
+  // `adb shell` entry is a shell on the device, which is not what a
+  // verification step needs.
+  "Bash(adb devices:*)",
+  "Bash(adb shell input:*)",
+  "Bash(adb shell dumpsys:*)",
+  "Bash(adb shell am start:*)",
+  "Bash(adb shell pm list:*)",
+  "Bash(adb logcat:*)",
+  // runtime evidence for the systematic-debugging overlay; every debroid
+  // command is read-or-control on a debuggable process and returns JSON
+  "Bash(debroid:*)",
+  // KMM repos verify the iOS half from the same plan. `xcrun` is not allowed
+  // broadly (it fronts the whole toolchain) — only the simulator control it
+  // actually needs.
+  "Bash(xcodebuild:*)",
+  "Bash(xcrun simctl:*)"
 ];
 function codexCompanionAllowEntry() {
   const codexDir = join2(HOME, ".claude", "plugins", "cache", "openai-codex", "codex");

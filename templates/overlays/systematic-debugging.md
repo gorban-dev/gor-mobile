@@ -76,7 +76,10 @@ evidence-gathering subagent as part of its report.
 For Android/Kotlin targets, the `android` CLI is the primary tool for
 this phase. Invoke `[[gor-mobile-using-android-cli]]` to get the
 phase→command map. That bridge skill is authoritative for Android
-device ops, replacing direct `adb` / `./gradlew` invocations.
+device ops, replacing direct `adb` / `./gradlew` invocations — except where
+the CLI has no command: **gestures** (`android screen resolve` → `adb shell
+input`) and **device-state reads** (`adb shell dumpsys`, `adb logcat`), which
+are the documented path, and `debroid` for live process state (below).
 
 ### Trace the bug — ast-index first
 
@@ -94,13 +97,43 @@ queries over `Grep` when distilling stack traces or chasing call chains:
 Pass these instructions to the Sonnet evidence-gathering subagent so it
 uses `ast-index` (read-only) instead of `Grep` whenever applicable.
 
+### A failing command is diagnosed before it is "fixed" (isolation first)
+
+When a build, test, or verification command fails unexpectedly — especially
+one you did not write yourself, e.g. a step from a plan — the FIRST move is
+the isolation run, not a hypothesis about your own code:
+
+1. Re-run the exact command on an **unmodified** tree (`git stash` your diff,
+   or check the file out to HEAD in a scratch copy). Identical failure → the
+   command, its flags, or the toolchain is broken, and your diff is not
+   implicated. Say so with the evidence and stop editing.
+2. Only if the baseline passes does the failure belong to your change.
+3. When the command's own diagnosis exists, run it: `xcodebuild
+   -showBuildSettings` for a resolved-arch/destination question, `--help` for
+   a flag the CLI rejected, `./gradlew <task> --info` for a task that "did
+   nothing".
+
+Field case: three rounds of edits to correct Swift before anyone re-ran the
+plan's xcodebuild command on HEAD — where it failed byte-for-byte identically,
+because the destination demanded an architecture slice the project had not
+built since a KMM target was removed three weeks earlier. One isolation run
+would have replaced all three rounds.
+
+> **Red Flag — STOP.** "Let me try one more fix and see if the build goes
+> green." Three iterations of guessing cost more than one baseline run, and a
+> command that cannot pass on any tree never goes green.
+
 ### Runtime evidence first — debroid (when the bug reproduces on a device)
 
 When the failure reproduces on a connected device/emulator with a debuggable
-build AND the `debroid` CLI is installed (check: `which debroid`; the
+build AND the `debroid` CLI is installed (`gor-mobile setup` offers it;
+check with `which debroid`, source: github.com/PatilShreyas/debroid; the
 `debroid-cli` skill in this repo's skills dir carries the full command
 reference), gather RUNTIME evidence before forming hypotheses from static
-reads:
+reads. Inside a `/gor-execute` run this is the step that replaces guessing:
+an implementer whose verification fails for a runtime reason has `debroid`
+available and pre-authorized, and a trapped variable value settles in one
+round what three edit-and-rebuild cycles do not:
 
 1. `debroid launch <app_id>` (or `attach` to a running process).
 2. Trap the failure: `debroid catch-exception` for crashes,

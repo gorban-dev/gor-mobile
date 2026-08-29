@@ -44,6 +44,32 @@ low-quality changes that the user later had to revert or rewrite:
 If any of these apply, the work is NOT complete — it has slop attached
 to it. Strip the slop, then run verification again.
 
+### A green build is not a delivered build
+
+"It compiled" and "the new code ran on the device" are two claims, and a
+verification pass that conflates them can spend an hour in the wrong binary.
+Before calling anything on-device verified:
+
+1. **The build actually ran.** Judge it by the marker in the log —
+   `BUILD SUCCESSFUL` (gradle) / `BUILD SUCCEEDED` (xcodebuild) — never by an
+   exit code, and never from a chained command (`build … ; echo`,
+   `build … | grep`): a composite reports its LAST element. An xcodebuild run
+   whose destination fails to resolve prints neither marker and can still
+   leave a zero status behind.
+2. **The artifact is new.** The `.apk` / `.app` you are about to install is
+   newer than the moment this build started. A stale artifact from days ago
+   installs and launches perfectly.
+3. **The right package is in the foreground.**
+   `adb shell dumpsys activity activities | grep -m1 topResumedActivity` shows
+   the variant's `applicationId`. Debug and release are separate packages
+   (`…debug` suffix), can both be installed, both be logged in, and look
+   identical — the only signal that you are testing production code instead of
+   your change is this check.
+
+Field case: three iOS "builds" reported exit 0 without compiling once, and
+half an hour of Android verification ran inside the release package. Both are
+invisible without the three checks above; both are cheap with them.
+
 ### Structural counts cite ast-index
 
 Any quantitative claim about code structure — "N usages", "N callers",
@@ -59,6 +85,9 @@ lines, XML attributes) and must be labeled as literal counts.
 For Android/Kotlin targets, the `android` CLI is the primary tool for
 this phase. Invoke `[[gor-mobile-using-android-cli]]` to get the
 phase→command map. That bridge skill is authoritative for Android
-device ops, replacing direct `adb` / `./gradlew` invocations.
+device ops, replacing direct `adb` / `./gradlew` invocations — with the two
+exceptions it names, where the CLI has no command at all: **gestures**
+(`android screen resolve` prints the coordinates, `adb shell input` performs
+the tap) and **device-state reads** (`adb shell dumpsys`, `adb logcat`).
 
 <!-- END gor-mobile overlay -->

@@ -1,5 +1,110 @@
 # Changelog
 
+## 0.4.3 — 2026-08-29
+
+Run `gor-mobile repair` in each repo — required this release: it refreshes the
+`/gor-execute` template, the `gor-mobile-runner` agent, the ast-index guard
+hook, four skills/overlays, and the workflow permission allowlist (nine new
+entries; without them every gesture, `dumpsys` read, `debroid` command and iOS
+build stalls the run on a permission prompt).
+
+Field report from a real 8-task run (ARU-9666, 28.08): the workflow finished
+3 tasks and stopped, after 15 agents and 783k tokens spent mostly repairing a
+defect that was never in the code — the plan's iOS verification command could
+not pass on any tree. Everything below comes from that run.
+
+- **Verification that cannot pass no longer stops the run** (regression
+  introduced by 0.4.1's compact path). A gate still red after its fix rounds
+  now goes to a breaker, which either rules the command *unusable* — the
+  task's code stands, the gate is dropped, the run continues, and the
+  command lands in the new `unverified` result field, and the run's result
+  carries `needsManualVerification` so the session cannot report the code as
+  checked — or confirms the code is broken and stops. Applies to the compact, batch, and full paths; before
+  this, a compact task's red gate was a hard `blocked` with no adjudication,
+  which is how 5 of 8 tasks never ran.
+- **An implementer that escalates is now heard.** `fix.status === 'BLOCKED' |
+  'NEEDS_CONTEXT'` was read on the first implementer dispatch and ignored on
+  every fix round: an implementer that proved with an isolation run that the
+  gate had been broken for three weeks was sent back into the same loop. An
+  escalation now short-circuits the remaining rounds straight to the breaker,
+  and the fix prompt tells implementers to run the isolation test FIRST on an
+  unexpected failure, not after three rounds of repairing correct code.
+- **Baseline pass over the plan's verification commands.** Before the first
+  task, each distinct command runs once on the still-clean tree; the ones
+  that fail are dropped as gates and reported. `--no-baseline` skips it.
+- **Builds are judged by the log marker, not the exit code.** Every
+  verification prompt now forbids composite commands (`;`, `&&`, pipes,
+  background jobs — a composite reports its LAST element's status), and a
+  gradle/xcodebuild/swift-build command reports `passed=true` only when the
+  output carries `BUILD SUCCESSFUL` / `BUILD SUCCEEDED`. Field case: three
+  iOS builds reported exit 0 without ever compiling — the destination failed
+  to resolve, which prints neither marker. Same contract in the
+  `gor-mobile-runner` agent template.
+- **The checkpoint is written on every exit** (regression introduced by
+  0.4.1's single Final-phase progress writer). A run that stopped during
+  Tasks wrote no `progress.md` at all — the file rehydration depends on. Each
+  non-normal exit now flushes what it has before returning.
+- **Runners stop expanding `~` into arguments.** `sdd-snapshot` was handed
+  `$HOME/.gor-mobile/plans/<plan>.md` for a repo-relative
+  `.gor-mobile/plans/<plan>.md`, so no checkpoint could be written. The
+  expansion instruction now names the script path as its only target, in both
+  the workflow prompts and the runner agent template.
+- **The workflow now knows which tools the repo has.** No `/gor-execute`
+  prompt named the android CLI, `adb`, `debroid` or the docs-first ladder, so
+  implementers improvised device work and wrote API signatures from memory —
+  while `using-android-cli` claimed the workflow "gates on it per phase".
+  Every implementer and fix dispatch now carries a tooling contract: docs-first
+  for external APIs, `ast-index` for symbol counts, gradle → `android describe`
+  → `android run --apks` for deploy, `android screen resolve` → `adb shell
+  input` for gestures, the foreground-package check after a deploy, and
+  `debroid` for runtime evidence before rewriting code on a hypothesis.
+- **Device and debugging tools are pre-authorized for workflow agents.** The
+  allowlist held `android` and `./gradlew` only, so every gesture, `dumpsys`
+  read, `debroid` command and iOS build stalled the run on a permission
+  prompt. Added, one subcommand at a time (a blanket `adb shell` entry is a
+  shell on the device): `adb devices|shell input|shell dumpsys|shell am
+  start|shell pm list|logcat`, plus `debroid`, `xcodebuild` and `xcrun simctl`
+  for the iOS half of a KMM plan. `repair` refreshes the list; `doctor`
+  reports drift.
+- **Gestures are documented as a first-class path** in `using-android-cli`:
+  `android screen` has only `capture` and `resolve`, so the pipeline ends in
+  `adb shell input $(android screen resolve --screenshot … --string "tap #N")`
+  — the same one Google's stock skill documents (whose example writes
+  `--screen`; the real option is `--screenshot`). The "never fall back to adb"
+  rule now names its two standing exceptions: gestures and device-state reads.
+- **On-device verification proves it deployed.** New checks in the
+  verification overlay and `using-android-cli`: artifact newer than the build,
+  and `adb shell dumpsys activity activities | grep -m1 topResumedActivity`
+  matching the variant's `applicationId`. A debug and a release package can
+  both be installed, both logged in, and identical on screen — half an hour of
+  the field run's verification went into untouched production code.
+- **Isolation-first is written into systematic-debugging**, with `debroid`
+  (github.com/PatilShreyas/debroid) named as the runtime-evidence step inside
+  a `/gor-execute` run: re-run the failing command on an unmodified tree
+  before hypothesizing about your own diff, then trap the live process rather
+  than guessing across rebuild cycles.
+- **`Compose rules:` paths resolve again.** The plan writes them relative to
+  the `gor-mobile-compose-internals` skill; the parser resolved only
+  `Conforms to:` lines, so implementers looked for `references/side-effects.md`
+  under the rules pack and reported REQUIRED reading as missing. The setup
+  parser now resolves them against the installed skill directory and hands
+  absolute paths to the implementer.
+- **The ast-index guard stops blocking single-file greps.** `grep -c Foo
+  Bar.kt` asks how many times a string occurs in ONE named file — a question
+  `ast-index usages` (repo-wide by design) does not answer. An explicit
+  existing file among the arguments now allows the call; directories, globs
+  and bare patterns are refused exactly as before.
+- **writing-plans Self-Review is a real gate, not a phantom reviewer.** The
+  overlay cited a "plan-document reviewer" three times; no such agent or step
+  existed. Self-Review now has three added steps — run every verification
+  command on the clean tree, resolve every cited path, anchor every claim
+  about current behavior with `file:line` — plus an Android/KMM section
+  naming the commands that cannot work (`generic/platform=iOS Simulator`
+  against an arm64-only KMM framework, `name=iPhone NN` without `OS=`,
+  `android run --variant` — the flag does not exist — and a bare-identifier
+  grep in an ast-index repo) and requiring `Manual (user):` on steps no agent
+  can execute.
+
 ## 0.4.2 — 2026-08-27
 
 Run `gor-mobile repair` in each repo to pick up the reworked `/gor-execute`
