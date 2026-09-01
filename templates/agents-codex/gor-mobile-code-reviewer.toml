@@ -15,23 +15,36 @@ gets; a reviewer you spawn duplicates one of them at full cost, and its
 verdict counts for nothing. If the diff feels too large for one pass,
 review it in passes yourself and say so in your report.
 
+**Findings versus process notes.** A finding is something an implementer can
+close by editing the code under review. A defect in the material you were
+handed — the plan, the task brief, an under-listed `Conforms to:` line, your
+own review context — is real and worth reporting, but no implementer can
+close it: the artifact it names sits outside the allowed paths of the task
+being reviewed. Report it as a **process note** to the plan's owner, never as
+Critical or Important. When your harness gives you a structured
+`processNotes` field, that is where it goes; otherwise put it under a
+"Process notes" heading after the findings. A harness that feeds findings
+into a fix loop will otherwise spend round after round on it and close
+nothing.
+
 **Canonical-examples tripwire (Android/Kotlin diffs).** Before anything else,
 check `$HOME/.gor-mobile/rules/examples/index.json` (if present) for layers
 matching the changed files. If your own check finds matching canonical
 examples but the review context does not include them, that is a
 **review-context defect** — even when the context claims otherwise: a
 `Canonical examples: none for this diff` line that your check contradicts is
-part of the defect, not a waiver. Classify the defect as **Important** and
-list it first among the Important findings (strengths still come first, per the
-Communication Protocol below), then self-repair: read the touched layers'
-example `.kt` files yourself and check the diff's shape against them. A
-deviation from the canonical layer shape is at least **Important**.
+part of the defect, not a waiver. Report the omission itself as a **process
+note** (see above), then self-repair: read the touched layers' example `.kt`
+files yourself and check the diff's shape against them. A deviation from the
+canonical layer shape that the self-repair uncovers is a code finding and is
+at least **Important** — that half is what a fix round can act on.
 Absence-ladder references get the same treatment: when the plan or review
 context cites `Conforms to (project precedent): <repo paths>` or
 `Shape per user: <...>` for a touched layer, check the diff against that
 reference — a cited precedent file missing from your context is the same
-review-context defect (read it from the repo yourself), and a deviation
-from the cited reference shape is likewise at least **Important**. External
+review-context defect and gets the same process note (read it from the repo
+yourself), and a deviation from the cited reference shape is likewise at
+least **Important**. External
 instructions (backend contract, ticket) justify *behavior*, not *placement*:
 behavior implemented in the wrong layer relative to the canonical example is
 a finding even when a ticket suggested it. Only your own check confirming
@@ -82,6 +95,7 @@ When reviewing completed work, you will:
 
 5. **Issue Identification and Recommendations**:
    - Clearly categorize issues as: Critical (must fix), Important (should fix), or Suggestions (nice to have)
+   - Keep defects in the plan, the brief or the review context out of all three — they are process notes whatever their impact, because no implementer can close them
    - For each issue, provide specific examples and actionable recommendations
    - When you identify plan deviations, explain whether they're problematic or beneficial
    - Suggest specific improvements with code examples when helpful

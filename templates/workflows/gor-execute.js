@@ -19,12 +19,13 @@ const planPath = opt.plan ?? tokens.find(t => !t.startsWith('-')) ?? null
 const skipBaseline = opt.noBaseline === true || tokens.includes('--no-baseline')
 
 const deferredMinors = []
+const processNotes = []
 const parkedAll = []
 const taskResults = []
 const unverified = []
 let initialBase = null
 
-const out = (extra) => ({ tasksDone: taskResults.length, taskResults, deferredMinors, parked: parkedAll, unverified, ...extra })
+const out = (extra) => ({ tasksDone: taskResults.length, taskResults, deferredMinors, processNotes, parked: parkedAll, unverified, ...extra })
 
 if (!planPath) return out({ status: 'error', error: 'usage: /gor-execute <plan-file>' })
 if (!/^[\w./-]+$/.test(planPath)) return out({ status: 'error', error: 'plan path contains unsupported characters' })
@@ -175,6 +176,14 @@ const IMPL_SCHEMA = {
     status: { enum: ['DONE', 'DONE_WITH_CONCERNS', 'NEEDS_CONTEXT', 'BLOCKED'] },
     summary: { type: 'string' },
     concerns: { type: 'array', items: { type: 'string' } },
+    unfixable: {
+      type: 'array',
+      description: 'findings this round cannot close from inside the task because their action item edits the plan, the brief, or anything else outside the allowed paths. Echo n and title verbatim from the list you were given.',
+      items: {
+        type: 'object', required: ['n', 'title', 'why'],
+        properties: { n: { type: 'number' }, title: { type: 'string' }, why: { type: 'string' } },
+      },
+    },
   },
 }
 const FINDING = {
@@ -184,11 +193,19 @@ const FINDING = {
     title: { type: 'string' }, file: { type: 'string' }, detail: { type: 'string' },
   },
 }
+// A defect in the plan, the brief or the review context is real, but no
+// implementer can close it: the artifact it names sits outside every task's
+// allowed paths. Kept off the findings list so it can never gate a fix loop.
+const PROCESS_NOTE = {
+  type: 'object', required: ['title', 'detail'],
+  properties: { title: { type: 'string' }, detail: { type: 'string' } },
+}
 const REVIEW_SCHEMA = {
   type: 'object', required: ['specFindings', 'qualityFindings'],
   properties: {
     specFindings: { type: 'array', items: FINDING },
     qualityFindings: { type: 'array', items: FINDING },
+    processNotes: { type: 'array', items: PROCESS_NOTE, description: 'defects in the plan, the brief or the review context itself — never code findings' },
     strengths: { type: 'array', items: { type: 'string' } },
   },
 }
@@ -314,7 +331,9 @@ ${extra ?? ''}
 You never dispatch subagents. Write your full report (what you did, decisions,
 self-review) to ${reportPath}. Return ONLY the structured result: status
 (DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED — use NEEDS_CONTEXT or
-BLOCKED honestly instead of guessing), a one-line summary, and concerns.`
+BLOCKED honestly instead of guessing), a one-line summary, concerns, and —
+when you were given a numbered findings list to fix — unfixable for any
+finding whose action item lies outside your allowed paths.`
 }
 
 // base and head are orchestrator-validated tree SHAs; the reviewer packages
@@ -327,16 +346,29 @@ Also read: the task brief at ${setup.workspace}/task-${t.n}-brief.md; the implem
 
 ${refBlock(t)}
 
-Report TWO sections, both required:
+Report THREE sections, all required — an empty array is a valid answer:
 1. specFindings — the code versus the brief VERBATIM: every requirement
    present, nothing extra, exact values and modifier chains preserved.
 2. qualityFindings — correctness, conventions, and diff shape versus the
    reference files above.
+3. processNotes — defects in the material you were handed: an under-listed
+   \`Conforms to:\` line, a mislabelled step, prose contradicting its own code
+   block, a canonical example the context omitted.
 ${reduced ? 'This task is non-behavioral wiring: check only allowed-paths compliance, that it plausibly compiles, and diff shape versus the reference files. Nothing else.' : ''}
 Verification has already been run by the orchestrator — do not re-run builds
-or tests; your job is code-level inspection. Severity: critical = must fix
-now, important = fix before proceeding, minor = note. Return the structured
-result only.`
+or tests; your job is code-level inspection.
+
+Findings 1 and 2 drive a fix loop, so a finding is only a finding when an
+implementer can close it by editing files under this task's allowed paths:
+${t.files.map(p => '- ' + p).join('\n')}
+If the fix you would ask for is an edit to the plan, the brief, or your own
+review context, it is a processNote — never a specFinding or qualityFinding
+at any severity, however important it is. Do the self-repair first: read the
+material the context omitted and check the diff against it. What that
+uncovers in the CODE is a normal finding; the omission itself is the note.
+
+Severity: critical = must fix now, important = fix before proceeding,
+minor = note. Return the structured result only.`
 }
 
 function reReviewPrompt(findings, briefPath, reportPath, base, head) {
@@ -701,6 +733,7 @@ Confirm the claim yourself before ruling 'parked': run the diagnosis that settle
       })
       if (!review) return await bail({ status: 'error', error: `review agent failed on task ${t.n}` })
       const all = [...review.specFindings, ...review.qualityFindings]
+      for (const p of review.processNotes ?? []) processNotes.push(`Task ${t.n}: ${p.title} — ${p.detail}`)
       for (const f of all.filter(f => f.severity === 'minor')) deferredMinors.push(`Task ${t.n}: ${f.title}`)
       openFindings = all.filter(f => f.severity !== 'minor')
       reviewed = true
@@ -710,7 +743,7 @@ Confirm the claim yourself before ruling 'parked': run the diagnosis that settle
     if (round >= 5 || escalated) {
       const breaker = await agent(`You are the breaker adjudicating a fix loop that ${escalated ? 'an implementer escalated out of' : 'hit its cap'} on Task ${t.n} (${t.title}) of the plan at ${planPath}.${escalated ? ` The implementer escalated: ${escalated}` : ''} Open findings:
 ${openFindings.map(f => `- [${f.severity}] ${f.title}: ${f.detail}`).join('\n')}
-Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the report at ${reportPath}, and the relevant code. Per finding decide: 'parked' (contestable, or real but nothing downstream builds on it — give the ruling) or 'blocked' (real and load-bearing: a later task builds on it or it reveals a plan defect). A finding titled "verification failed" is 'parked' when the command is unusable in this repository — it fails the same way on an unmodified tree, or names a destination / flag / target that does not exist — but confirm that yourself with the diagnosis that settles it, not on the implementer's word. Return the structured result only.`,
+Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the report at ${reportPath}, and the relevant code. Per finding decide: 'parked' (contestable, or real but nothing downstream builds on it — give the ruling) or 'blocked' (real and load-bearing: a later task builds on it or it reveals a plan defect). A finding whose only action item edits the plan, the brief or the review context is 'parked' unless a later task builds on the defect: no implementer bound to this task's allowed paths can ever close it, and the session receives it as a process note. A finding titled "verification failed" is 'parked' when the command is unusable in this repository — it fails the same way on an unmodified tree, or names a destination / flag / target that does not exist — but confirm that yourself with the diagnosis that settles it, not on the implementer's word. Return the structured result only.`,
         { label: `${label}:breaker`, phase: 'Tasks', schema: BREAKER_SCHEMA })
       if (!breaker) return await bail({ status: 'error', error: `breaker agent failed on task ${t.n}` })
       const blockedRulings = breaker.rulings.filter(r => r.decision === 'blocked')
@@ -730,7 +763,7 @@ Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the 
     round++
     const fixModel = round <= 3 ? implModel : tierUp(implModel)
     const fix = await agent(implPrompt(t, reportPath,
-      `${round > 3 ? `A prior implementer attempted this task ${round - 1} time(s); you own it now. Read the report file for what was tried. ` : ''}Fix round ${round}/5 — address these findings, nothing else:\n${openFindings.map(f => `- [${f.severity}] ${f.title}: ${f.detail}`).join('\n')}\n${openFindings.some(f => f.title === 'verification failed') ? 'If the verification command fails identically on an unmodified tree, say so as BLOCKED with that evidence instead of changing more code — an isolation run is your FIRST move on a failure you did not expect, not your last.\n' : ''}Append your fix report to the same report file.`),
+      `${round > 3 ? `A prior implementer attempted this task ${round - 1} time(s); you own it now. Read the report file for what was tried. ` : ''}Fix round ${round}/5 — address these findings, nothing else:\n${openFindings.map((f, i) => `${i + 1}. [${f.severity}] ${f.title}: ${f.detail}`).join('\n')}\nA finding whose action item is an edit to the plan, the brief or anything else outside your allowed paths cannot be closed from here: return it in unfixable with its n and its title copied verbatim, and say why. Do that the FIRST round you see it — re-confirming that the code is already correct produces nothing and costs a full round.\n${openFindings.some(f => f.title === 'verification failed') ? 'If the verification command fails identically on an unmodified tree, say so as BLOCKED with that evidence instead of changing more code — an isolation run is your FIRST move on a failure you did not expect, not your last.\n' : ''}Append your fix report to the same report file.`),
       { label: `${label}:fix${round}`, phase: 'Tasks', model: fixModel, agentType: 'general-purpose', schema: IMPL_SCHEMA })
     if (!fix) return await bail({ status: 'error', error: `fix agent failed on task ${t.n} round ${round}` })
     if (fix.status === 'BLOCKED' || fix.status === 'NEEDS_CONTEXT') {
@@ -738,19 +771,49 @@ Read the plan${setup.specPath ? ` and the spec at ${setup.specPath}` : ''}, the 
       lastHead = null
       continue
     }
+    // A finding whose fix edits the plan or the brief cannot be closed by an
+    // implementer bound to the task's allowed paths, and the re-reviewer can
+    // only ever verdict it NOT_ADDRESSED. Field case: one such finding held a
+    // task for five rounds — 628k tokens — while every fixer from round 1 on
+    // wrote in its own report that it was unfixable here. A red verification
+    // gate is never droppable this way: the breaker adjudicates that one.
+    const declined = new Set()
+    for (const u of fix.unfixable ?? []) {
+      if (!u || typeof u.title !== 'string') continue
+      const hit = openFindings.find((f, i) => (Number.isFinite(u.n) && u.n === i + 1) || f.title === u.title)
+      if (!hit || hit.title === 'verification failed' || declined.has(hit)) continue
+      declined.add(hit)
+      processNotes.push(`Task ${t.n} (fix ${round}): ${hit.title} — not fixable in task scope: ${u.why}`)
+    }
+    if (declined.size > 0) openFindings = openFindings.filter(f => !declined.has(f))
+    const preFixHead = head
     v = await verify(`${label}:verify${round}`, lastReviewBase)
     if (!v || !SHA_SHAPE.test(v.sha ?? '')) return await bail({ status: 'error', error: `verification agent failed on task ${t.n}` })
     lastHead = v.sha
     head = v.sha
     loc = Number.isFinite(v.loc) ? v.loc : Infinity
+    // A fix round that left the tree byte-identical closed nothing: the
+    // re-reviewer can only spend a full seat to verdict NOT_ADDRESSED, and a
+    // gate that was red has no new information to fail on. Hand it to the
+    // breaker rather than burn the rounds that are left. Field case: one
+    // finding no implementer could close from inside the task ran the loop to
+    // its cap — 628k tokens over four rounds that changed not one byte.
+    const noop = v.sha === preFixHead
     if (t.verification && v.passed !== true) {
       openFindings = [
         { severity: 'critical', title: 'verification failed', detail: v.tail ?? '' },
         ...openFindings.filter(f => f.title !== 'verification failed'),
       ]
+      if (noop) escalated = `fix round ${round} changed nothing in the tree while the verification gate stayed red — ${fix.summary}`
       continue
     }
     if (!reviewed) { openFindings = []; continue }
+    // Everything still open was declined as outside the task's allowed paths.
+    if (openFindings.length === 0) continue
+    if (noop) {
+      escalated = `fix round ${round} changed nothing in the tree while ${openFindings.length} finding(s) stayed open — ${fix.summary}`
+      continue
+    }
     const rr = await agent(reReviewPrompt(openFindings, briefPath, reportPath, lastReviewBase, head), {
       label: `${label}:rereview${round}`, phase: 'Tasks',
       agentType: 'gor-mobile-code-reviewer', schema: REREVIEW_SCHEMA,
@@ -804,6 +867,7 @@ let finalOpen = finalReview.status === 'reviewed'
   : []
 if (finalReview.status === 'reviewed') {
   for (const f of finalReview.findings.filter(f => f.severity === 'minor')) deferredMinors.push(`Final review: ${f.title}`)
+  for (const p of finalReview.processNotes ?? []) processNotes.push(`Final review: ${p.title} — ${p.detail}`)
 }
 
 // One fix wave, one scoped re-review — residuals surface to the session.
@@ -815,7 +879,8 @@ if (finalOpen.length > 0) {
   const waveBase = await ensureBase('final:base', 'Final')
   if (!waveBase) return await bail({ status: 'error', error: 'final snapshot agent failed' })
   const wave = await agent(`You are the fix-wave implementer for the final review of the plan at ${planPath} in this repository. Fix ALL of these findings in the working tree (no commits):
-${finalOpen.map(f => `- [${f.severity}] ${f.title}${f.file ? ' (' + f.file + ')' : ''}: ${f.detail}`).join('\n')}
+${finalOpen.map((f, i) => `${i + 1}. [${f.severity}] ${f.title}${f.file ? ' (' + f.file + ')' : ''}: ${f.detail}`).join('\n')}
+A finding whose action item is an edit to the plan or the spec rather than to code cannot be closed here: return it in unfixable with its n and its title copied verbatim, and say why.
 Global constraints:\n${setup.constraints}
 ${setup.verificationAll ? `Then run: ${setup.verificationAll} — it must pass.` : ''}
 You never dispatch subagents. Full report → ${waveReport}. Return the structured result.`,
@@ -839,6 +904,18 @@ You never dispatch subagents. Full report → ${waveReport}. Return the structur
   if (wave.status === 'DONE_WITH_CONCERNS' && (wave.concerns ?? []).length > 0) {
     for (const c of wave.concerns) deferredMinors.push(`Final fix wave concern: ${c}`)
   }
+  // Same rule as the per-task loop: a plan defect is not a residual finding
+  // the run can clear, and leaving it in finalOpen ends the run 'blocked' on
+  // something no fix wave was ever able to touch.
+  const waveDeclined = new Set()
+  for (const u of wave.unfixable ?? []) {
+    if (!u || typeof u.title !== 'string') continue
+    const hit = finalOpen.find((f, i) => (Number.isFinite(u.n) && u.n === i + 1) || f.title === u.title)
+    if (!hit || waveDeclined.has(hit)) continue
+    waveDeclined.add(hit)
+    processNotes.push(`Final review: ${hit.title} — not fixable in the run's scope: ${u.why}`)
+  }
+  if (waveDeclined.size > 0) finalOpen = finalOpen.filter(f => !waveDeclined.has(f))
 
   // Post-wave runner: independent whole-project verification (when the plan
   // names one) plus the head snapshot the re-review packages against. Runs
@@ -855,7 +932,7 @@ You never dispatch subagents. Full report → ${waveReport}. Return the structur
   }
   const waveHead = pw && SHA_SHAPE.test(pw.sha ?? '') ? pw.sha : null
   if (waveHead) lastHead = waveHead
-  const rr = waveHead ? await agent(reReviewPrompt(finalOpen, planPath, waveReport, waveBase, waveHead), {
+  const rr = waveHead && finalOpen.length > 0 ? await agent(reReviewPrompt(finalOpen, planPath, waveReport, waveBase, waveHead), {
     label: 'final:rereview', phase: 'Final', agentType: 'gor-mobile-code-reviewer', schema: REREVIEW_SCHEMA,
   }) : null
   const residual = rr

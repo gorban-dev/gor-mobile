@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.4.4 — 2026-09-01
+
+Run `gor-mobile repair` in each repo — required: it refreshes the
+`/gor-execute` and `/gor-review` templates and all four reviewer agents
+(Claude `.md` and Codex `.toml`).
+
+Field report from a real 4-task run (01.09): 36 agents, 1h06m. Task 1 alone
+took 19 agents and 993k tokens — 628k of them across four fix rounds that
+changed not one byte of the tree. The finding that held it was
+`Review-context defect: canonical sealed-type examples were omitted`,
+classified Important: an accurate complaint about the plan's `Conforms to:`
+line, which no implementer can act on because the plan sits outside every
+task's allowed paths. Every fixer from round 1 on said so in its own report.
+The re-reviewer has only ADDRESSED / NOT_ADDRESSED, so it stayed
+NOT_ADDRESSED until the cap.
+
+Origin: 0.2.9 told reviewers to classify a review-context defect as
+**Important** and list it first, when a review was prose a human read. The
+first `/gor-execute` (stage-2 workflows) then made `severity !== 'minor'`
+mean "an implementer closes this, up to 5 rounds, then a breaker" — nobody
+re-read what reviewers had been told to mark Important against the new
+meaning. 0.4.3 fixed the same shape from the other side (a verification gate
+that can never go green) without generalizing it to findings.
+
+- **Reviewers separate findings from process notes.** A finding is now
+  defined as something an implementer can close by editing files under the
+  task's allowed paths; a defect in the plan, the brief or the review
+  context goes to a new `processNotes` channel that never gates a fix loop,
+  at any severity. The canonical-examples tripwire keeps its teeth: the
+  self-repair still runs, and a deviation from the canonical shape it
+  uncovers is still at least Important — only the omission itself moves.
+  `processNotes` runs through `/gor-review`'s merge and surfaces in the
+  `/gor-execute` result.
+- **Implementers can decline a finding.** New `unfixable` field on the
+  implementer result: n, verbatim title, and why. The loop drops those
+  findings and records them as process notes instead of re-dispatching a
+  re-reviewer on them. A red verification gate is never droppable this way —
+  the breaker still adjudicates that one.
+- **A fix round that changes nothing goes to the breaker.** The tree SHA
+  before and after each fix is already known; when they match, the fix
+  closed nothing and the re-review can only spend a full reviewer seat to
+  say so. Straight to the breaker instead of burning the rounds that remain.
+  Same for a gate that stayed red across a byte-identical round.
+- **The final fix wave honours `unfixable` too.** A plan defect surviving the
+  wave used to end the run `blocked` on something no wave could touch.
+
+Replayed against the run above: 19 agents for task 1 become 5 when the fixer
+declines the finding, 8 when it stays silent and the no-op guard catches it.
+A task whose rounds genuinely edit code still gets all five.
+
 ## 0.4.3 — 2026-08-29
 
 Run `gor-mobile repair` in each repo — required this release: it refreshes the

@@ -105,10 +105,21 @@ const codexAdversarial = explicitDeep || scope.securityTouched
 // know Codex's report may be a strict subset.
 const codexScope = scope.treeDirty ? 'working-tree' : 'branch'
 
+// A defect in the plan, the brief or the review context is real, but no
+// implementer can close it — the artifact sits outside the allowed paths of
+// the task under review. Kept off `findings` so a caller that feeds findings
+// into a fix loop (gor-execute) can never spend rounds on it.
+const PROCESS_NOTE = {
+  type: 'object',
+  required: ['title', 'detail'],
+  properties: { title: { type: 'string' }, detail: { type: 'string' } },
+}
+
 const REVIEW_SCHEMA = {
   type: 'object',
   required: ['strengths', 'findings'],
   properties: {
+    processNotes: { type: 'array', items: PROCESS_NOTE, description: 'defects in the plan, the brief or the review context itself — never code findings' },
     strengths: { type: 'array', items: { type: 'string' } },
     findings: {
       type: 'array',
@@ -154,6 +165,13 @@ const reviewerPrompt = `Review the working-tree changes of this repository.
 ${contextLines.join('\n\n')}
 
 Do not re-run tests or builds — your job is code-level inspection.
+
+Findings drive a fix loop, so a finding is only a finding when an implementer
+can close it by editing the code under review. A defect in the plan, the task
+brief or the review context you were handed goes in processNotes instead —
+never in findings at any severity. Read the material the context omitted and
+check the diff against it: what that uncovers in the CODE is a normal finding.
+
 Severity policy: critical = must fix now, important = fix before proceeding,
 minor = note. Return the structured result only.`
 
@@ -201,7 +219,8 @@ if (!codexRan) {
   return {
     status: 'reviewed', baseRef: scope.baseRef, deep: deepPass, codexRan: false,
     gorRan: Boolean(gor), codexScope,
-    strengths: gor.strengths, findings: gor.findings, conflicts: [],
+    strengths: gor.strengths, findings: gor.findings,
+    processNotes: gor.processNotes ?? [], conflicts: [],
   }
 }
 
@@ -211,6 +230,7 @@ const MERGE_SCHEMA = {
   properties: {
     strengths: { type: 'array', items: { type: 'string' } },
     findings: REVIEW_SCHEMA.properties.findings,
+    processNotes: { type: 'array', items: PROCESS_NOTE },
     conflicts: { type: 'array', items: { type: 'string' }, description: 'genuine disagreements between the two passes, one line each — never silently drop a side' },
   },
 }
@@ -221,6 +241,9 @@ keep the union, preserve each finding's severity — on a severity disagreement
 for the same issue keep the higher one. On a genuine disagreement about whether
 an issue is real, prefer the side backed by a concrete repro or line reference
 and record the disagreement in "conflicts" instead of dropping either side.
+Carry Report A's processNotes through unchanged, and move any Report B item
+whose action item edits the plan or the brief rather than the code into
+processNotes rather than findings.
 
 Report A (gor-mobile reviewer, structured):
 ${JSON.stringify(gor ?? { strengths: [], findings: [] }, null, 2)}
@@ -234,11 +257,13 @@ if (!merged) return {
   status: 'reviewed', baseRef: scope.baseRef, deep: deepPass, codexRan: true,
   gorRan: Boolean(gor), codexScope,
   strengths: gor ? gor.strengths : [], findings: gor ? gor.findings : [],
+  processNotes: gor ? gor.processNotes ?? [] : [],
   conflicts: ['merge agent failed — Codex report returned unmerged'],
   codexReport: codex.report,
 }
 return {
   status: 'reviewed', baseRef: scope.baseRef, deep: deepPass, codexRan: true,
   gorRan: Boolean(gor), codexScope,
-  strengths: merged.strengths, findings: merged.findings, conflicts: merged.conflicts,
+  strengths: merged.strengths, findings: merged.findings,
+  processNotes: merged.processNotes ?? [], conflicts: merged.conflicts,
 }

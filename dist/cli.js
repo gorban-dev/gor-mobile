@@ -5,7 +5,7 @@ import { Command } from "commander";
 import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-var GOR_MOBILE_VERSION = "0.4.3";
+var GOR_MOBILE_VERSION = "0.4.4";
 var WORKFLOWS_MIN_CLAUDE_VERSION = "2.1.154";
 var WORKFLOW_SIZE_GUIDELINE_MIN_CLAUDE_VERSION = "2.1.219";
 var HOME = homedir();
