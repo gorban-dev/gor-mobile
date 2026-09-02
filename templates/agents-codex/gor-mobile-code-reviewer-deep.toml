@@ -39,7 +39,11 @@ nothing.
 
 **Canonical-examples tripwire (Android/Kotlin diffs).** Before anything else,
 check `$HOME/.gor-mobile/rules/examples/index.json` (if present) for layers
-matching the changed files. If your own check finds matching canonical
+matching the changed files. An example *matches* when the diff carries a
+declaration of the kind that example demonstrates — a new sealed action type
+is matched by the layer's action and event examples, not by its ViewState
+example; a layer's remaining files are not owed to a diff that declares
+nothing of their kind. If your own check finds matching canonical
 examples but the review context does not include them, that is a
 **review-context defect** — even when the context claims otherwise: a
 `Canonical examples: none for this diff` line that your check contradicts is

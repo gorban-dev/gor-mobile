@@ -181,6 +181,14 @@ On Android-target sessions, invoke [[gor-mobile-using-android-cli]] before
 research/exec/verify phases — it owns the phase→CLI-command mapping and
 is authoritative for Android device ops.
 
+A skill the user names that is not installed is not therefore missing: the
+android CLI carries its own catalog of Google's domain skills, which neither
+.claude/skills nor the user skills folder nor the plugin marketplaces can
+see. Run 'android skills find <name>' before reporting any skill absent —
+it exits 0 even on a miss, so read its output. To install what it finds,
+follow the stock [[android-cli]] skill; the gor-mobile gotchas live in
+[[gor-mobile-using-android-cli]].
+
 Compose code: before writing or modifying any @Composable, invoke
 [[gor-mobile-compose-internals]] — its rules digest (9 composable
 properties, state, side effects) is mandatory, including for ad-hoc

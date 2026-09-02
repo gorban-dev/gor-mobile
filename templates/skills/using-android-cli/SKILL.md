@@ -1,6 +1,6 @@
 ---
 name: using-android-cli
-description: Use when working on an Android/Kotlin codebase — maps gor-mobile workflow phases (brainstorm, plan, execute, debug, verify) to specific `android` CLI commands. Authoritative for Android device ops. Activates on any Android task that touches research, project introspection, build/deploy, UI debugging, verification, or Google's optional skill catalog.
+description: Use when working on an Android/Kotlin codebase — maps gor-mobile workflow phases (brainstorm, plan, execute, debug, verify) to specific `android` CLI commands. Authoritative for Android device ops. Activates on any Android task that touches research, project introspection, build/deploy, UI debugging, verification, or Google's Android skill catalog — including any request naming a skill that is not installed locally.
 ---
 
 # Bridging gor-mobile workflow with the `android` CLI
@@ -33,7 +33,8 @@ record what you used:
    the feature (not "when stuck").**
    - **Android SDK / Jetpack** → `android docs search` / `android docs fetch`;
      developer.android.com. When Google ships a domain skill for the API area,
-     browse it (`gor-mobile android-skills`).
+     find it with `android skills find <topic>` and install it — see
+     **Skill catalog** below.
    - **Firebase, Google Cloud, Maps, Play Services** → the
      `google-developer-knowledge` MCP server (`search_documents` →
      `get_documents`), when it is connected. Search first and fetch narrowly —
@@ -116,13 +117,39 @@ restating the ladder.
   and `android studio render-compose-preview` for IDE-level inspection (need a
   running Studio instance).
 
-## Optional skill catalog
-Google publishes domain-specific skills. Browse and install them at runtime —
-do NOT hardcode the list:
+## Skill catalog — the installed set is not the catalog (MANDATORY)
 
-    gor-mobile android-skills
+Google ships around twenty domain skills (R8 / keep rules, CameraX, Media3,
+Wear, adaptive layouts, AGP upgrades, XML→Compose migration, profiling…).
+Most are not installed, and the catalog belongs to the CLI: neither
+`.claude/skills/`, the user skills folder, nor the plugin marketplaces can
+see it.
 
-Pick per project (it lists what's actually available via `android skills list`).
+**Before telling the user a named skill does not exist, and whenever the
+skill you need is not among the installed ones, search the catalog.** The
+commands and their flags are the stock `[[android-cli]]` skill's
+"Managing skills" section and `android skills --help` — read them there, they
+drift on Google's release cycle. This section owns only the routing decision
+and the two behaviours their help text does not state:
+
+- `android skills find` prints `No skills found matching '<kw>'` on a miss and
+  still **exits 0** — read the output, never the exit code.
+- `--project <path>` installs into `<path>/skills/`, not `<path>/.claude/skills/`.
+  For a Claude project pass the `.claude` directory itself; `--project <repo-root>`
+  creates a `<repo-root>/skills/` that no harness reads.
+
+`gor-mobile android-skills` is the USER's interactive picker (multiselect,
+also removes). Outside a TTY it prints the list and installs nothing — never
+reach for it to install a skill yourself.
+
+> **Red Flag — STOP.** Reporting "there is no such skill" after searching only
+> `.claude/skills/`, the user skills folder and the plugin marketplaces. None
+> of the three sees the android catalog. Field case: a user asked to run
+> `r8-analyzer`, was told it did not exist, and `android skills find r8` had
+> it all along — while the stock `[[android-cli]]` skill sat in the same
+> session advertising "discover and install official Android skills" in its
+> own description. An installed, well-described skill is not a routing
+> guarantee; this rule is.
 
 ## When `android` is missing or a command fails
 1. Do not silently fall back to `adb`/`./gradlew` for what the android CLI

@@ -17,8 +17,9 @@ Before dispatching the implementer subagent, load rules from
   layer membership always comes from the *current* pack's index, never a
   remembered default list). For every layer-touching task these form a
   REQUIRED block of the implementer prompt, resolved from the task's
-  `Conforms to:` artifact line(s) — one per touched layer; see Reference
-  files below.
+  `Conforms to:` artifact line(s) — one per touched layer, each naming every
+  example in that layer whose shape the task creates or modifies; see
+  Reference files below.
 
 Rules-pack is user-replaceable via `gor-mobile rules use <url>` — read from
 manifest, never hardcode filenames.

@@ -50,11 +50,23 @@ files, not the index) and must carry an artifact line per touched layer —
 a task spanning two declared layers carries two lines, or is split per the
 Decomposition rules below:
 
-    Conforms to: examples/<layer>/<ExampleFile>.kt
+    Conforms to: examples/<layer>/<ExampleFile>.kt[, examples/<layer>/<Other>.kt...]
 
-The path is the file entry verbatim from the pack's
+Each path is a file entry verbatim from the pack's
 `index.json → .layers.<layer>.files` — `examples/<layer>/<ExampleFile>.kt` is the
 default pack's shape, not a required prefix.
+
+**Cite every example the task's own declarations answer to — not one file per
+layer.** A layer ships several examples because it holds several kinds of
+declaration: a screen's state, its ViewModel, its view, its action and event
+types. Read the layer's file list, then ask of each file: does this task
+create or modify a declaration of that kind? Every yes goes on the line. A
+task adding a sealed action type to `presentation` cites the Action and Event
+examples; naming only `ExampleViewState.kt` because it came first in the list
+leaves both the implementer and the reviewer without the shape the task
+actually produces. Field case (v0.4.4): a plan cited 3 of a layer's 6 files,
+the one shape the task created sat among the 3 it left out, and the run spent
+628k tokens on the gap.
 
 **Precedence rule.** External requirements (backend contract, ticket, vendor
 doc) define *behavior*; the rules-pack conventions define *placement and
@@ -78,11 +90,17 @@ remembered default list):
 
 Never fabricate a citation: an artifact line naming an example file that
 does not exist in the current pack is the same defect class as an unsourced
-API signature. The Self-Review gate below verifies that every layer-touching
-task carries, for each touched layer, one of the three artifact lines, that
-each cited path resolves on disk, and that the task's code does not
-contradict the cited reference. A layer-touching task with none is a plan
-defect.
+API signature. An incomplete line is the quieter defect of the two — every
+path on it resolves, and it still sends the implementer to the wrong shape.
+The Self-Review gate below verifies that every layer-touching task carries,
+for each touched layer, one of the three artifact lines, that each cited path
+resolves on disk, that no example whose kind of declaration the task creates
+is missing from the line, and that the task's code does not contradict the
+cited reference. A layer-touching task with none is a plan defect.
+
+> **Red Flag — STOP.** Writing a `Conforms to:` line from the first entry in
+> the layer's file list. The list is not ranked — read the files, then cite
+> the ones whose declarations this task reproduces.
 
 > **Red Flag — STOP.** A task that designs retry / caching / mapping logic
 > into a datasource when the cited layer example is a one-liner. That plan is

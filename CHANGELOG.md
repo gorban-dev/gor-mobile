@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.4.5 — 2026-09-02
+
+Run `gor-mobile repair` in each repo — required: it refreshes the
+`writing-plans` and `subagent-driven-development` overlays, the
+`writing-plans` plan-reviewer prompt, and all four reviewer agents.
+
+Closes the source of the defect 0.4.4 made survivable. The examples-first gate
+told planners to cite one example file per touched layer, while a layer ships
+one example per kind of declaration it holds — state, ViewModel, view, action
+and event types. A task creating a sealed action type got `ExampleViewState.kt`
+and nothing else, and neither the implementer nor the reviewer ever saw the
+shape the task actually produced.
+
+- **`Conforms to:` names every example the task's declarations answer to.**
+  Still one line per touched layer, now carrying each file in that layer whose
+  kind of declaration the task creates or modifies. The plan parser and the
+  implementer/reviewer reference blocks already took a list; only the
+  authoring rule was narrow.
+- **The plan Self-Review gate checks completeness, not just resolvability.**
+  An incomplete line is the quieter defect: every path on it resolves and it
+  still sends the implementer to the wrong shape. The plan-document reviewer
+  prompt flags it too.
+- **The reviewers' canonical-examples tripwire says what "matching" means.** An
+  example matches when the diff carries a declaration of the kind it
+  demonstrates — a layer's remaining files are not owed to a diff that
+  declares nothing of their kind. Without this the tripwire would fire on
+  every correctly-scoped plan.
+- **Google's Android skill catalog is reachable from a session.** A user asked
+  to run the `r8-analyzer` skill and was told it does not exist — it was in
+  `android skills find r8` the whole time. Nothing in the flow said the
+  catalog exists: `[[gor-mobile-using-android-cli]]` pointed at
+  `gor-mobile android-skills`, an interactive picker that installs nothing
+  outside a TTY, and the always-on Android block never mentioned skills at
+  all. Google's own `android-cli` skill was installed in that session with
+  "discover and install official Android skills" in its description, and was
+  not invoked — an installed, well-described skill is not a routing
+  guarantee. The rule therefore lives in the SessionStart injection, which
+  fires whatever skill the agent picks: search the catalog before reporting a
+  skill absent. Command surface stays Google's (`[[android-cli]]`,
+  `android skills --help`) rather than being copied into our skill, where it
+  would drift; `[[gor-mobile-using-android-cli]]` keeps only the routing rule
+  and the two behaviours their help does not state — `android skills find`
+  exits 0 on a miss, and `--project <path>` installs into `<path>/skills/`,
+  so a Claude project needs the `.claude` directory passed as the project.
+
 ## 0.4.4 — 2026-09-01
 
 Run `gor-mobile repair` in each repo — required: it refreshes the
