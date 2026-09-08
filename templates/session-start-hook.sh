@@ -305,8 +305,8 @@ Context was cleared at the plan→execution boundary (the clear option was
 chosen at the writing-plans handoff). A fresh checkpoint exists at:
   ${cp_file}
 BEFORE anything else: read it and the plan/spec it references, then start
-executing by running the /gor-execute workflow with the plan path from the
-checkpoint (Codex, no workflows: the sub-skill named in the plan header). If the
+executing with the sub-skill named in the plan header
+(gor-mobile-subagent-driven-development or gor-mobile-executing-plans). If the
 user's first message asks for something unrelated instead, do that and leave the
 checkpoint alone.
 </gor-mobile-resume>"

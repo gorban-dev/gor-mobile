@@ -24,8 +24,7 @@ import {
   copyHookTemplates,
   installAgents,
   installSddScripts,
-  installSkills,
-  installWorkflows
+  installSkills
 } from "../helpers/install-assets.js";
 import {
   cleanLegacyProjectMcp,
@@ -39,13 +38,14 @@ import {
   migrateProjectMarker,
   readProjectMarker,
   removeLocalExclude,
-  writeProjectMarker
+  writeProjectMarker,
+  type ProjectMarker
 } from "../helpers/project.js";
 import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
-  applyWorkflowSizeGuideline,
+  AGENT_PERMISSION_ENTRIES,
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
-  dynamicWorkflowAllowEntries,
+  dynamicAgentAllowEntries,
   staleCodexCompanionEntries,
   enableClearContextOnPlanAccept,
   ensurePermissionAllow,
@@ -54,9 +54,9 @@ import {
   installUserPromptSubmitHook,
   removePermissionAllow,
   STALE_PERMISSION_ENTRIES,
-  WORKFLOW_PERMISSION_ENTRIES,
   WORKFLOW_SIZE_GUIDELINE
 } from "../helpers/settings-merge.js";
+import { describeLegacyCleanup, removeLegacyWorkflows } from "../helpers/workflows-legacy.js";
 import { installStatusLine, statusLineState } from "../helpers/settings-statusline.js";
 import {
   codexStatusLineState,
@@ -108,12 +108,11 @@ async function repairProject(root: string): Promise<void> {
   const agents = installAgents(spec);
   log.ok(`Agents refreshed (${agents.length} in ${spec.agentsDir})`);
 
-  const workflows = installWorkflows(spec, marker.managed_workflows ?? []);
-  log.ok(`Workflows refreshed (${workflows.length} in ${spec.workflowsDir})`);
+  const legacy = removeLegacyWorkflows(spec, marker);
+  const legacyNote = describeLegacyCleanup(legacy);
+  if (legacyNote) log.ok(legacyNote);
 
-  const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
-  if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
-  const allowEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...dynamicWorkflowAllowEntries()];
+  const allowEntries = [...AGENT_PERMISSION_ENTRIES, ...dynamicAgentAllowEntries()];
   const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length}`);
 
@@ -176,24 +175,23 @@ async function repairProject(root: string): Promise<void> {
     ? [...new Set([...(marker.managed_settings ?? []), CLEAR_CONTEXT_ON_PLAN_ACCEPT])]
     : (marker.managed_settings ?? []);
   if (enabledNow) log.ok(`Enabled ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} (plan-approval "clear context" option)`);
-  writeProjectMarker(root, {
+  const nextMarker: ProjectMarker = {
     ...marker,
     version: GOR_MOBILE_VERSION,
-    managed_settings: sizeSet
-      ? [...new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])]
-      : managedSettings,
+    managed_settings: managedSettings.filter((k) => k !== WORKFLOW_SIZE_GUIDELINE),
     managed_permissions: [
       ...new Set([
         ...(marker.managed_permissions ?? []).filter((e) => !staleOwned.includes(e)),
         ...addedPerms
       ])
     ],
-    managed_workflows: [...new Set([...(marker.managed_workflows ?? []), ...workflows])],
     managed_mcp: mcpRes.written
       ? [...new Set([...(marker.managed_mcp ?? []), DEV_KNOWLEDGE_MCP_NAME])]
       : (marker.managed_mcp ?? []),
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
-  });
+  };
+  delete nextMarker.managed_workflows;
+  writeProjectMarker(root, nextMarker);
   log.ok(`Marker refreshed (v${GOR_MOBILE_VERSION})`);
 
   // Pre-0.3.5 layout: marker at the repo root. The refreshed one is already

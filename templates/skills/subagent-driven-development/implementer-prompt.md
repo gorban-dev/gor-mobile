@@ -15,6 +15,11 @@ Task tool (general-purpose):
 
     [BRIEF_PATH — from scripts/task-brief PLAN_FILE N]
 
+    Isolation inputs (see Tooling contract): ISOLATE_SCRIPT =
+    [absolute path of scripts/sdd-isolate — ~/.gor-mobile/scripts/sdd-isolate
+    expanded], BASE_SHA = [the tree SHA scripts/sdd-snapshot printed before
+    this dispatch].
+
     Do not read the rest of the plan file — the brief is your complete spec.
 
     ## Context
@@ -71,6 +76,44 @@ Task tool (general-purpose):
     a dynamic list without `key(...)`, unstable collection parameters,
     `ViewModel` / `MutableState` passed down the tree — is a defect even
     when it compiles.
+
+    ## Tooling contract
+
+    - External API signatures (SDK, Jetpack, any library): never from memory —
+      ground them via the docs-first ladder in the gor-mobile-using-android-cli
+      skill (`android docs search` / `docs fetch`, the
+      google-developer-knowledge MCP server, then the resolved artifact) and
+      cite what you read in your report.
+    - Symbol counts and call chains: `ast-index usages|symbol|implementations`,
+      never grep — a bare-identifier grep is refused by this repo's guard hook.
+    - Device / emulator work: build with `./gradlew`, then deploy with the
+      android CLI (`android describe` to locate the APK → `android run --apks
+      <path>`; there is no --variant flag). Gestures are `android screen capture
+      --annotate` → `android screen resolve --screenshot <png> --string "tap #N"`
+      → `adb shell input <the printed coordinates>`: the CLI resolves targets,
+      adb performs them. After any deploy, confirm the right build is actually
+      running — `adb shell dumpsys activity activities | grep -m1
+      topResumedActivity` must show the variant's applicationId (a debug build
+      is a different package from release, and both can be installed at once).
+    - A build is not verified by its exit code: require BUILD SUCCESSFUL /
+      BUILD SUCCEEDED in the log, and never chain a build with `;`, `&&` or a
+      pipe — the composite reports its last element.
+    - A runtime bug you cannot explain from a static read: gather runtime
+      evidence with the debroid CLI (`debroid launch|attach`, `break`,
+      `catch-exception`, `pause-state`, `inspect`, `set-var` + `resume`) per
+      the gor-mobile-systematic-debugging skill, before rewriting code on a
+      hypothesis.
+    - A verification command that fails unexpectedly: FIRST run it on the
+      unmodified pre-task tree (isolation run) and put the result in your
+      report — a gate that was already red is not your defect to repair. The
+      pre-task tree is `[ISOLATE_SCRIPT] [BASE_SHA]` (prints a temp directory
+      holding exactly that tree; run the command inside it). Never use git
+      checkout, stash, worktree or clone to get there.
+    - Never run git commit, git branch, git checkout, or git worktree — changes
+      accumulate uncommitted in the working tree.
+    - When you were given a numbered findings list to fix, report `unfixable`
+      for any finding whose action item lies outside your allowed paths:
+      its number, verbatim title, and why.
 
     ## When You're in Over Your Head
 
@@ -129,6 +172,9 @@ Task tool (general-purpose):
     - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
     - One line on what you did
     - Concerns, one line each (if any)
+    - Unfixable (fix rounds only): `<n> — <verbatim finding title> — <why>`,
+      one per line, for findings whose action item lies outside your allowed
+      paths
 
     The report file carries the detail — do not repeat it in your reply.
 

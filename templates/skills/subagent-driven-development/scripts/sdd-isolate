@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Materialize a snapshot tree (from sdd-snapshot) into a fresh temp directory
+# and print its path — the exact pre-task tree, without git checkout, stash,
+# worktree or any ref/index change (no-automatic-git holds). Used for the
+# isolation run: re-run a failing verification command there; a command that
+# fails on the unmodified tree is not the task's defect.
+#
+# Usage: sdd-isolate TREE_SHA
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "usage: sdd-isolate TREE_SHA" >&2
+  exit 2
+fi
+
+sha=$1
+git rev-parse --verify --quiet "$sha^{tree}" >/dev/null || { echo "not a tree object: $sha" >&2; exit 2; }
+
+dir=$(mktemp -d "${TMPDIR:-/tmp}/sdd-isolate.XXXXXX")
+git archive --format=tar "$sha" | tar -x -C "$dir"
+echo "$dir"

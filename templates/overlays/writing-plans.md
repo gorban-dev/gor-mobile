@@ -189,7 +189,7 @@ with the task's verification step (Gradle test / compile / on-device check).
 
 ### Override: Execution Handoff — the clear-context seam (MANDATORY)
 
-The body's Execution Handoff (which now just names `/gor-execute`) is
+The body's Execution Handoff (which names the execution sub-skill) is
 **replaced** by this fuller sequence. The plan→execute boundary is the
 cleanest point to shed context — spec, plan, and checkpoint on disk are
 complete ground truth; the planning transcript is dead weight — so **every**
@@ -213,10 +213,10 @@ plan exits through a handoff that offers clearing.
    first option — "Yes, clear context …" (enabled per-repo by `gor-mobile
    init` via `showClearContextOnPlanAccept`) — makes the harness clear the
    planning context exactly once and restart; the SessionStart hook (source
-   `clear`, fresh checkpoint) rehydrates and execution starts by running
-   `/gor-execute <plan-path>` (Codex:
+   `clear`, fresh checkpoint) rehydrates and execution starts with the
+   sub-skill named in the plan header —
    `[[gor-mobile-subagent-driven-development]]` or
-   `[[gor-mobile-executing-plans]]` per the plan header, as before). A plain
+   `[[gor-mobile-executing-plans]]`. A plain
    "Yes" → same execution, this session, no clearing. "No, keep planning" →
    back to editing.
 3. **Fallback — no plan-mode tools available** (tool absent or the call is

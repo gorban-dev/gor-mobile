@@ -29,7 +29,7 @@ export interface ProjectMarker {
   managed_settings?: string[];
   /** permissions.allow entries in settings.local.json that init wrote (for uninstall). */
   managed_permissions?: string[];
-  /** workflow filenames in .claude/workflows that init/repair installed (for uninstall). */
+  /** 0.4.x only: workflow filenames init/repair installed. Read by the legacy cleanup, never written since 0.5.0. */
   managed_workflows?: string[];
   /** MCP server names in .mcp.json that init wrote (for uninstall). */
   managed_mcp?: string[];

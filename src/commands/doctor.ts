@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { execa } from "execa";
 import {
   CLAUDE_JSON,
-  CLAUDE_SETTINGS,
   DEV_KNOWLEDGE_MCP_NAME,
   GOR_MOBILE_CONFIG,
   GOR_MOBILE_HOME,
@@ -13,10 +12,7 @@ import {
   GOR_MOBILE_VERSION,
   LEGACY_PROJECT_MARKER_NAME,
   PROJECT_MARKER_NAME,
-  SECTION_BEGIN,
-  WORKFLOW_SIZE_GUIDELINE_MIN_CLAUDE_VERSION,
-  WORKFLOWS_MIN_CLAUDE_VERSION,
-  gorMobileRoot
+  SECTION_BEGIN
 } from "../constants.js";
 import { androidCliSkillInstalled, smokeTestContract } from "../helpers/android-cli.js";
 import { ANDROID_CONTRACT } from "../android-contract.js";
@@ -32,9 +28,11 @@ import {
   codexCompanionAllowEntry,
   countManagedHooks,
   sddScriptsAllowEntry,
-  WORKFLOW_PERMISSION_ENTRIES
+  AGENT_PERMISSION_ENTRIES
 } from "../helpers/settings-merge.js";
+import { LEGACY_RUNNER_AGENT } from "../helpers/workflows-legacy.js";
 import { statusLineState } from "../helpers/settings-statusline.js";
+import type { ProjectMarker } from "../helpers/project.js";
 import { codexStatusLineState } from "../helpers/codex-statusline.js";
 import { androidCliPath, which } from "../helpers/deps.js";
 import { astIndexPath } from "../helpers/ast-index.js";
@@ -326,91 +324,33 @@ function verboseContractLint(target: TargetSpec): void {
   else log.warn(`bridge skill references commands NOT in contract: ${stray.join(", ")}`);
 }
 
-type SemVer = [number, number, number];
-
-function parseSemVer(text: string): SemVer | null {
-  const m = /(\d+)\.(\d+)\.(\d+)/.exec(text);
-  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
-}
-
-function versionBelow(a: SemVer, b: SemVer): boolean {
-  return a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1] : a[2] < b[2];
-}
-
-function warnIfDisableWorkflows(file: string, scope: string): void {
-  const settings = readJsonSafe<Record<string, unknown>>(file, {});
-  if (settings["disableWorkflows"] === true) {
-    log.warn(`disableWorkflows=true in ${file} — workflows are OFF for ${scope}`);
-  }
-}
-
-async function checkClaudeWorkflowsSupport(): Promise<void> {
-  if (!which("claude")) {
-    log.info("claude CLI not on PATH — workflows check skipped (Codex-only machine?)");
-    return;
-  }
-  const res = await execa("claude", ["--version"], { reject: false });
-  const m = /(\d+)\.(\d+)\.(\d+)/.exec(res.stdout ?? "");
-  if (res.exitCode !== 0 || !m) {
-    log.warn("claude CLI version unreadable — cannot verify workflows support");
-    return;
-  }
-  const version = parseSemVer(m[0])!;
-  const floor = parseSemVer(WORKFLOWS_MIN_CLAUDE_VERSION)!;
-  if (versionBelow(version, floor)) {
-    log.warn(`Claude Code v${m[0]} < ${WORKFLOWS_MIN_CLAUDE_VERSION} — /gor-review workflow will not load`);
-  } else {
-    log.ok(`Claude Code v${m[0]} supports workflows (≥ ${WORKFLOWS_MIN_CLAUDE_VERSION})`);
-    const guidelineFloor = parseSemVer(WORKFLOW_SIZE_GUIDELINE_MIN_CLAUDE_VERSION)!;
-    if (versionBelow(version, guidelineFloor)) {
-      log.warn(
-        `workflowSizeGuideline is honored only since ${WORKFLOW_SIZE_GUIDELINE_MIN_CLAUDE_VERSION} — the size guideline init wrote is inert on this version`
-      );
-    }
-  }
-  warnIfDisableWorkflows(CLAUDE_SETTINGS, "this user");
-  const root = findProjectRoot();
-  if (root) {
-    warnIfDisableWorkflows(join(root, ".claude", "settings.json"), "this project");
-    warnIfDisableWorkflows(join(root, ".claude", "settings.local.json"), "this project");
-  }
-}
-
-/** Shipped workflow filenames, from the templates dir (fallback for an unreadable dir). */
-function expectedWorkflows(): string[] {
-  try {
-    return readdirSync(join(gorMobileRoot(), "templates", "workflows")).filter(
-      (name) => name.startsWith("gor-") && name.endsWith(".js")
-    );
-  } catch {
-    return ["gor-review.js", "gor-execute.js"];
-  }
-}
-
-function checkWorkflows(target: TargetSpec): void {
-  if (!target.workflowsDir) return;
-  for (const name of expectedWorkflows()) {
-    const p = join(target.workflowsDir, name);
-    if (!existsSync(p)) {
-      log.warn(`workflow ${name} missing — run 'gor-mobile repair'`);
-      continue;
-    }
-    const head = readFileSync(p, "utf8").slice(0, 2048);
-    if (/export const meta = \{/.test(head)) log.ok(`workflow ${name} installed`);
-    else log.warn(`workflow ${name} has no meta header — run 'gor-mobile repair'`);
-  }
+function checkAgentAllowlist(target: TargetSpec): void {
   const settings = readJsonSafe<ManagedSettings>(target.hooksFile, {});
   const allow = settings.permissions?.allow ?? [];
-  const expected = [...WORKFLOW_PERMISSION_ENTRIES, sddScriptsAllowEntry()];
+  const expected = [...AGENT_PERMISSION_ENTRIES, sddScriptsAllowEntry()];
   const missing = expected.filter((e) => !allow.includes(e));
   if (missing.length > 0) {
-    log.warn(`workflow allowlist incomplete (${missing.length} missing) — run 'gor-mobile repair'`);
+    log.warn(`permission allowlist incomplete (${missing.length} missing) — run 'gor-mobile repair'`);
   } else {
-    log.ok("workflow permission allowlist present");
+    log.ok("permission allowlist present");
   }
   const codexEntry = codexCompanionAllowEntry();
   if (codexEntry && !allow.includes(codexEntry)) {
     log.warn("codex companion allowlist entry stale or missing (plugin updated?) — run 'gor-mobile repair'");
+  }
+}
+
+// 0.4.x wrote workflows and a runner agent into the project; 0.5.0 init/repair
+// remove them, guided by the marker. Marker-driven here too: a gor-*.js the
+// marker does not own is the user's file, which repair will not touch, so
+// warning on it would be advice that can never come true.
+function checkLegacyWorkflows(target: TargetSpec, marker: ProjectMarker): void {
+  const leftovers = (marker.managed_workflows ?? [])
+    .filter((name) => existsSync(join(target.home, "workflows", name)))
+    .map((name) => `workflows/${name}`);
+  if (existsSync(join(target.agentsDir, LEGACY_RUNNER_AGENT))) leftovers.push(`agents/${LEGACY_RUNNER_AGENT}`);
+  if (leftovers.length > 0) {
+    log.warn(`0.4.x workflow leftovers: ${leftovers.join(", ")} — run 'gor-mobile repair'`);
   }
 }
 
@@ -440,7 +380,7 @@ function checkTarget(target: TargetSpec): void {
   if (target.instructionsFile) checkInstructionsSection(target);
   if (target.statusLineKind === "claude-command") checkStatusLine();
   else if (target.statusLineKind === "codex-config") checkCodexStatusLine();
-  checkWorkflows(target);
+  if (target.scope === "project") checkAgentAllowlist(target);
 }
 
 function checkProject(root: string): TargetSpec {
@@ -472,6 +412,7 @@ function checkProject(root: string): TargetSpec {
     );
   }
   const spec = projectClaudeSpec(root);
+  checkLegacyWorkflows(spec, marker);
   const mcp = localMcpState(root, marker.managed_mcp ?? []);
   if (mcp.malformed) {
     log.warn(`${CLAUDE_JSON} is not valid JSON — fix it, then run 'gor-mobile mcp'`);
@@ -544,7 +485,6 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
       "  → jq powers the status line AND the ast-index guard hook (guard fails open without it) — brew install jq"
     );
   }
-  await checkClaudeWorkflowsSupport();
   const dk = resolveDevKnowledgeKey();
   if (dk.key) {
     log.ok(`Developer Knowledge API key → ${KEY_SOURCE_LABEL[dk.source]}`);
@@ -566,7 +506,7 @@ export async function cmdDoctor(opts: DoctorOptions = {}): Promise<void> {
     emulationTargets.push(checkProject(root));
   } else {
     log.info(`No ${PROJECT_MARKER_NAME} in the current directory tree.`);
-    log.info("  → cd into a mobile repo and run 'gor-mobile init' to install the workflow.");
+    log.info("  → cd into a mobile repo and run 'gor-mobile init' to install gor-mobile.");
   }
 
   if (agentHomeExists("codex")) {

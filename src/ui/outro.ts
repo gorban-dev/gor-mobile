@@ -10,7 +10,7 @@ export interface InstallSummary {
 const NEXT_STEPS = [
   "gor-mobile doctor           verify setup",
   "gor-mobile rules list       inspect installed architecture rules",
-  "cd <android-project>        open Claude Code; the session-start hook loads workflow"
+  "cd <android-project>        open Claude Code; the session-start hook loads the skills"
 ];
 
 /**

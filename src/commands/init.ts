@@ -17,7 +17,7 @@ import { astIndexPath } from "../helpers/ast-index.js";
 import { debroidSkillSourceDir } from "../helpers/debroid.js";
 import { resolveDevKnowledgeKey } from "../helpers/dev-knowledge.js";
 import { applyEnabledPlugins, SUPERPOWERS_KEY } from "../helpers/enabled-plugins.js";
-import { installAgents, installSkills, installWorkflows } from "../helpers/install-assets.js";
+import { installAgents, installSkills } from "../helpers/install-assets.js";
 import {
   cleanLegacyProjectMcp,
   LEGACY_PROJECT_MCP_FILE,
@@ -44,9 +44,9 @@ import {
 import { readManifest } from "../helpers/rules-pack.js";
 import { migrateStateLayout } from "../helpers/state-artifacts.js";
 import {
-  applyWorkflowSizeGuideline,
+  AGENT_PERMISSION_ENTRIES,
   CLEAR_CONTEXT_ON_PLAN_ACCEPT,
-  dynamicWorkflowAllowEntries,
+  dynamicAgentAllowEntries,
   staleCodexCompanionEntries,
   enableClearContextOnPlanAccept,
   ensurePermissionAllow,
@@ -55,9 +55,9 @@ import {
   installUserPromptSubmitHook,
   removePermissionAllow,
   STALE_PERMISSION_ENTRIES,
-  WORKFLOW_PERMISSION_ENTRIES,
   WORKFLOW_SIZE_GUIDELINE
 } from "../helpers/settings-merge.js";
+import { describeLegacyCleanup, LEGACY_RUNNER_AGENT, removeLegacyWorkflows } from "../helpers/workflows-legacy.js";
 import { projectClaudeSpec } from "../targets.js";
 import { confirmStep } from "../ui/confirm-step.js";
 import { log } from "../ui/log.js";
@@ -227,8 +227,12 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     for (const line of [
       `install skills → ${spec.skillsDir}`,
       `install agents → ${spec.agentsDir}`,
-      `install workflows → ${spec.workflowsDir}`,
-      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls, gradle, android CLI, SDD scripts + codex companion) → ${spec.hooksFile}`,
+      `permission allowlist for skill subagents (git/ls, gradle, android CLI, adb, debroid, SDD scripts + codex companion) → ${spec.hooksFile}`,
+      ...((marker.managed_workflows?.length ?? 0) > 0 ||
+      (marker.managed_settings ?? []).includes(WORKFLOW_SIZE_GUIDELINE) ||
+      existsSync(join(spec.agentsDir, LEGACY_RUNNER_AGENT))
+        ? [`remove 0.4.x leftovers: .claude/workflows/gor-*.js, agents/gor-mobile-runner.md, ${WORKFLOW_SIZE_GUIDELINE}`]
+        : []),
       `merge SessionStart + UserPromptSubmit + PreToolUse → ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` +
         (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
@@ -266,14 +270,13 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
   const agents = installAgents(spec);
   log.ok(`${agents.length} review agents → ${spec.agentsDir}`);
 
-  const workflows = installWorkflows(spec, marker.managed_workflows ?? []);
-  log.ok(`${workflows.length} workflows → ${spec.workflowsDir}`);
+  const legacy = removeLegacyWorkflows(spec, marker);
+  const legacyNote = describeLegacyCleanup(legacy);
+  if (legacyNote) log.ok(legacyNote);
 
-  const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
-  if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
-  const allowEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...dynamicWorkflowAllowEntries()];
+  const allowEntries = [...AGENT_PERMISSION_ENTRIES, ...dynamicAgentAllowEntries()];
   const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
-  if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length} (workflow agents run unprompted)`);
+  if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length} (skill subagents run unprompted)`);
 
   const staleOwned = [
     ...STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e)),
@@ -360,19 +363,17 @@ export async function cmdInit(opts: InitOptions = {}): Promise<void> {
     version: GOR_MOBILE_VERSION,
     installed_at: opts.now ?? marker.installed_at ?? new Date().toISOString().slice(0, 10),
     managed_plugins: managedPlugins,
-    managed_settings: sizeSet
-      ? [...new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])]
-      : managedSettings,
+    managed_settings: managedSettings.filter((k) => k !== WORKFLOW_SIZE_GUIDELINE),
     managed_permissions: [
       ...new Set([
         ...(marker.managed_permissions ?? []).filter((e) => !staleOwned.includes(e)),
         ...addedPerms
       ])
     ],
-    managed_workflows: [...new Set([...(marker.managed_workflows ?? []), ...workflows])],
     managed_mcp: managedMcp,
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };
+  delete nextMarker.managed_workflows;
   writeProjectMarker(root, nextMarker);
   log.ok(`Wrote ${PROJECT_MARKER_NAME}`);
 
@@ -415,7 +416,7 @@ function outro(root: string, platform: ProjectPlatform): void {
         ]
       : [
           "Open Claude Code in this folder: claude",
-          "The SessionStart hook loads the gor-mobile workflow automatically."
+          "The SessionStart hook loads the gor-mobile skills automatically."
         ];
   for (const s of steps) console.log(`    ${pc.cyan(s)}`);
   console.log("");

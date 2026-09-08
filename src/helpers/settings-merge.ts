@@ -161,13 +161,14 @@ export function removeClearContextOnPlanAccept(file: string): void {
   writeJson(file, settings);
 }
 
-// Workflow agents run in acceptEdits and inherit the session allowlist; a Bash
-// call outside it stalls the run on a permission prompt. These entries cover
-// the gor-review scope/review agents. `node` is deliberately NOT allowed
-// broadly (that would grant unprompted arbitrary code execution to every
-// session in the repo) — see codexCompanionAllowEntry() for the exact-path
-// rule scoped to the installed Codex companion script.
-export const WORKFLOW_PERMISSION_ENTRIES = [
+// Subagents dispatched by the execution skills go through the session's
+// permission checks; a Bash call outside the allowlist stalls the run on a
+// prompt. These entries cover verification, device work and review packaging.
+// `node` is deliberately NOT allowed broadly (that would grant unprompted
+// arbitrary code execution to every session in the repo) — see
+// codexCompanionAllowEntry() for the exact-path rule scoped to the installed
+// Codex companion script.
+export const AGENT_PERMISSION_ENTRIES = [
   "Bash(git diff:*)",
   "Bash(git status:*)",
   "Bash(git rev-parse:*)",
@@ -202,7 +203,7 @@ export const WORKFLOW_PERMISSION_ENTRIES = [
  * Resolve the newest installed Codex companion script and return an exact-path
  * Bash allow entry for it (`Bash(node <abs-path>:*)`), or null when the plugin
  * is not installed. No shell involved (plain fs readdir + mtime sort), unlike
- * the `ls -t` listing the workflow's own scope agent runs at review time.
+ * the `ls -t` listing a review dispatch would run at review time.
  */
 export function codexCompanionAllowEntry(): string | null {
   const codexDir = join(HOME, ".claude", "plugins", "cache", "openai-codex", "codex");
@@ -241,13 +242,13 @@ export function staleCodexCompanionEntries(managed: string[]): string[] {
   return managed.filter((e) => pattern.test(e) && e !== current);
 }
 
-/** gor-execute's agents invoke the SDD scripts by absolute path. */
+/** The SDD skill and its subagents invoke the SDD scripts by absolute path. */
 export function sddScriptsAllowEntry(): string {
   return `Bash(${join(GOR_MOBILE_HOME, "scripts")}/:*)`;
 }
 
 /** Entries whose exact text depends on this machine — resolved at install time. */
-export function dynamicWorkflowAllowEntries(): string[] {
+export function dynamicAgentAllowEntries(): string[] {
   const entries = [sddScriptsAllowEntry()];
   const codex = codexCompanionAllowEntry();
   if (codex) entries.push(codex);
@@ -258,18 +259,10 @@ export function dynamicWorkflowAllowEntries(): string[] {
 // the marker proves we wrote them).
 export const STALE_PERMISSION_ENTRIES = ["Bash(node:*)"];
 
-// The default size guideline (medium, ≤15 agents) does not survive a full
-// gor-execute run; the key is honored from any settings file since CC 2.1.219.
+// 0.4.x init/repair wrote this key for the gor-execute workflow. Kept only so
+// the legacy cleanup (init/repair/uninstall) can remove what the marker says
+// we wrote; nothing writes it anymore.
 export const WORKFLOW_SIZE_GUIDELINE = "workflowSizeGuideline";
-
-/** Returns true if this run set the key (false = user already chose a value). */
-export function applyWorkflowSizeGuideline(file: string): boolean {
-  const settings = ensureSettingsFile(file);
-  if (typeof settings[WORKFLOW_SIZE_GUIDELINE] === "string") return false;
-  settings[WORKFLOW_SIZE_GUIDELINE] = "large";
-  writeJson(file, settings);
-  return true;
-}
 
 export function removeWorkflowSizeGuideline(file: string): void {
   if (!existsSync(file)) return;

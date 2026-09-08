@@ -103,7 +103,6 @@ export function installSkills(target: TargetSpec): InstallSkillsResult {
   for (const name of readdirSync(skillsDir)) {
     const srcDir = join(skillsDir, name);
     if (!statSync(srcDir).isDirectory()) continue;
-    if (target.excludeSkills?.includes(name)) continue;
     const dstDir = join(target.skillsDir, `gor-mobile-${name}`);
     cpSync(srcDir, dstDir, { recursive: true });
     const skillMd = join(dstDir, "SKILL.md");
@@ -150,40 +149,9 @@ export function installAgents(target: TargetSpec): string[] {
   return copied;
 }
 
-// Ours are gor-*.js. The shipped set (readdir of templates/workflows) is the
-// copy filter; `owned` (the caller's marker.managed_workflows) gates whether
-// an existing file with a shipped name gets overwritten — a name we did not
-// previously install is a user's own file and is left alone. A workflow
-// renamed or dropped from templates/workflows is not swept here either way:
-// init/repair union the old marker's managed_workflows into the new one
-// instead of overwriting it, so the marker keeps remembering it, and that
-// union is the actual rename-cleanup path (see CLAUDE.md's "Templates"
-// section on renames) — not a pass in this function.
-export function installWorkflows(target: TargetSpec, owned: string[] = []): string[] {
-  if (!target.workflowsDir) return [];
-  const src = join(gorMobileRoot(), "templates", "workflows");
-  if (!existsSync(src)) return [];
-  const shipped = readdirSync(src).filter(
-    (name) => name.startsWith("gor-") && name.endsWith(".js")
-  );
-  ensureDir(target.workflowsDir);
-  const copied: string[] = [];
-  for (const name of shipped) {
-    const dst = join(target.workflowsDir, name);
-    if (existsSync(dst) && !owned.includes(name)) {
-      console.warn(`[gor-mobile] kept user workflow ${name} — not overwriting an unowned file`);
-      continue;
-    }
-    copyFileSync(join(src, name), dst);
-    chmodSync(dst, 0o644);
-    copied.push(name);
-  }
-  return copied;
-}
-
-// gor-execute's agents call these by absolute path; the skill copies under
-// templates/skills/ stay untouched (Codex installs keep reading them).
-export const SDD_SCRIPT_NAMES = ["sdd-workspace", "task-brief", "sdd-snapshot", "review-package"];
+// The SDD skill's scripts, installed machine-level so the main session and its
+// subagents call them by one absolute path (the allowlist entry covers it).
+export const SDD_SCRIPT_NAMES = ["sdd-workspace", "task-brief", "sdd-snapshot", "review-package", "sdd-isolate"];
 
 export function installSddScripts(): string[] {
   const src = join(gorMobileRoot(), "templates", "skills", "subagent-driven-development", "scripts");

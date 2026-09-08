@@ -148,9 +148,10 @@ run the self-review, and invoke writing-plans immediately. Do not ask the
 user to review the spec file. The plan is likewise written without an
 approval pause; the single human stop of the whole chain is the
 plan-approval dialog at the writing-plans handoff (ExitPlanMode), and the
-deterministic `/gor-execute` pipeline (spec-compliance review per task,
-final `/gor-review` gate) is the safety net behind it.
+execution sub-skill's gates (spec-compliance review per task, bounded fix
+loop, final `requesting-code-review` gate with Codex) are the safety net
+behind it.
 
-On Codex (no workflows) the body's gates stay exactly as written.
+On Codex the body's gates stay exactly as written.
 
 <!-- END gor-mobile overlay -->

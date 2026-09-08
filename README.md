@@ -19,9 +19,9 @@
 
 A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Claude Code **and OpenAI Codex CLI**: a superpowers-style workflow (`brainstorm → plan → implement → review → verify`), a swappable rules pack, and two reviewer agents (Sonnet + a deep one on the session's main model). Everything runs on the host agent itself — no external inference, no local model runtime.
 
-Two-level install (since v0.3.0): `gor-mobile setup` provisions the machine once (`~/.gor-mobile/` rules + hook scripts, the Android CLI, and the user-level Codex workflow under `~/.codex/`, honoring `$CODEX_HOME`); `gor-mobile init` installs the Claude workflow **per repo** under `<repo>/.claude/`. Skills are shared (cross-compatible `SKILL.md`); hooks, reviewer agents, and the global-instructions handling adapt to each agent's format. See [Targets](#targets-claude--codex).
+Two-level install (since v0.3.0): `gor-mobile setup` provisions the machine once (`~/.gor-mobile/` rules + hook scripts, the Android CLI, and the user-level Codex workflow under `~/.codex/`, honoring `$CODEX_HOME`); `gor-mobile init` installs the Claude skills **per repo** under `<repo>/.claude/`. Skills are shared (cross-compatible `SKILL.md`); hooks, reviewer agents, and the global-instructions handling adapt to each agent's format. See [Targets](#targets-claude--codex).
 
-> Status: `v0.4.5` — pre-release scaffolding, under active development on `main`. See `CHANGELOG.md`.
+> Status: `v0.5.0` — pre-release scaffolding, under active development on `main`. See `CHANGELOG.md`.
 
 ## Requirements
 
@@ -63,7 +63,7 @@ gor-mobile init             # once per repo
 
 ## Two levels: `setup` (machine) and `init` (repo)
 
-Since v0.3.0 the Claude workflow installs **per-project**. Global installs put
+Since v0.3.0 the Claude install is **per-project**. Global installs put
 14 skills + 2 agents + 3 hooks into *every* Claude session — mobile or not.
 The split confines the payload to repos that opted in with `gor-mobile init`;
 non-mobile sessions load nothing. Codex has no project scope, so its install
@@ -84,29 +84,26 @@ Flags: `--dry-run`, `--yes`/`-y`, `--no-tui`, `--advanced` (per-step confirm + e
 
 ### `gor-mobile init` — once per repo, from its root
 
-Installs the workflow into the current repository, locally (nothing committed):
+Installs gor-mobile into the current repository, locally (nothing committed):
 
 ```
 <repo>/
-  .claude/skills/gor-mobile-*/     # 8 skills (orchestration moved to workflows)
+  .claude/skills/gor-mobile-*/     # 14 skills (superpowers fork + gor-mobile additions, overlays applied)
   .claude/skills/android-cli/      # stock Google skill (from `android init`)
   .claude/agents/gor-mobile-code-reviewer{,-deep}.md
-  .claude/workflows/gor-review.js  # /gor-review: two-pass review (gor-mobile reviewer + Codex, parallel)
-  .claude/workflows/gor-execute.js # /gor-execute: plan executor — per-task review/fix-loop + nested final gor-review
   .claude/settings.local.json      # SessionStart + UserPromptSubmit + PreToolUse hooks
                                    # + enabledPlugins: superpowers disabled for this repo
                                    # + showClearContextOnPlanAccept: plan-approval clear-context option
-                                   # + workflowSizeGuideline=large + workflow permission allowlist
+                                   # + permission allowlist for skill subagents
   .gor-mobile/marker.json          # marker: platform, version, install date
   .gor-mobile/plans|specs|state/   # plan artifacts (created by the skills, TTL-swept)
 ```
 
 - Hooks reference `~/.gor-mobile/templates/*.sh` by absolute path; `settings.local.json` is never committed by Claude Code, so no foreign-path problem. The **PreToolUse ast-index guard** denies bare-identifier `grep`/`rg` in ast-indexed repos (`.claude/rules/ast-index.md` present) and fails open otherwise.
-- No `CLAUDE.md` managed section: the former workflow pointers are injected by the SessionStart hook, keyed on the `.gor-mobile/marker.json` marker (walk up from cwd). A repo with no marker injects nothing.
+- No `CLAUDE.md` managed section: the former CLAUDE.md pointers are injected by the SessionStart hook, keyed on the `.gor-mobile/marker.json` marker (walk up from cwd). A repo with no marker injects nothing.
 - `superpowers@claude-plugins-official` is disabled in `settings.local.json` so the bundled upstream skills don't duplicate the `gor-mobile-*` copies. `--plugins figma,swagger-android,…` additionally enables named plugins for the repo.
 - `showClearContextOnPlanAccept` is enabled in `settings.local.json`: the writing-plans handoff exits through the plan-approval dialog, whose first option ("Yes, clear context") clears the planning context exactly once; the SessionStart hook then rehydrates execution from the `.gor-mobile/state/<plan>/progress.md` checkpoint (legacy flat `*.progress.md` files are still picked up). Tracked in `.gor-mobile/marker.json` `managed_settings`, removed on `uninstall --project` unless it was already on. Without plan-mode tools the skill falls back to a two-option dialog + manual `/clear` (Codex: `/compact`).
-- **`/gor-review`** — run it standalone in a repo with a diff for a two-pass code review: the `gor-mobile-code-reviewer` agent and Codex (when installed) review in parallel, then a merge pass dedups findings and surfaces genuine disagreements as conflicts instead of dropping either side. Escalates to the deep reviewer / Codex adversarial mode on diff size, a touched security surface, or an explicit `deep` argument. `init` writes `workflowSizeGuideline=large` and a workflow permission allowlist (`git diff/status/rev-parse/symbolic-ref/log`, `ls`, `./gradlew`, `android` (device control), the `adb` subcommands the android CLI has no equivalent for — `devices`, `shell input`, `shell dumpsys`, `shell am start`, `shell pm list`, `logcat` — plus `debroid`, `xcodebuild`, `xcrun simctl`, and an exact-path `node` rule for the installed Codex companion script) to `settings.local.json` so the workflow's own agents never stall on a permission prompt. Requires Claude Code ≥ 2.1.154 for the workflow to load (`doctor` checks the version).
-- **`/gor-execute <plan-path>`** — executes an approved plan task by task: compact implement+verify for small tasks (consecutive same-shape ones batch into one dispatch), the full implement → verify → review → fix-loop pipeline for security/design/wide tasks, then a nested `/gor-review` as the final gate. Before the first task it runs each distinct verification command the plan names once on the still-clean tree: a command that already fails there cannot judge a diff, so it is dropped as a gate and reported under `unverified` instead of burning fix rounds (`--no-baseline` skips that pass). A gate that stays red after its fix rounds — or an implementer that escalates with isolation evidence — goes to a breaker that either rules the command unusable and lets the run continue, or stops it. Progress is flushed to `.gor-mobile/state/<plan>/progress.md` on every exit, including a blocked one.
+- **Execution and review run through the skills** (same chain as Codex): `writing-plans` hands off to `subagent-driven-development` (fresh implementer per task, one combined review per task, 5-round fix loop with a breaker) or `executing-plans`; the final gate is `requesting-code-review` — the deep reviewer and Codex (when installed) dispatched in parallel. Before Task 1 the executor runs each distinct verification command once on the clean tree and drops the ones that already fail (reported under `Unverified:`); a gate that stays red is adjudicated as *command unusable* (code stands, `Needs manual verification: yes`) or *code broken* (stop). `init` writes a permission allowlist (`git diff/status/rev-parse/symbolic-ref/log`, `ls`, `./gradlew`, `android`, the `adb` subcommands the android CLI has no equivalent for — `devices`, `shell input`, `shell dumpsys`, `shell am start`, `shell pm list`, `logcat` — plus `debroid`, `xcodebuild`, `xcrun simctl`, the SDD scripts dir, and an exact-path `node` rule for the installed Codex companion script) to `settings.local.json` so subagents never stall on a permission prompt. Upgrading from 0.4.x: `gor-mobile repair` removes the old `.claude/workflows/gor-*.js`, the runner agent and `workflowSizeGuideline`.
 - `.claude/` and `.gor-mobile/` are added to `.git/info/exclude` (local ignore — no repo diff). If the folder is not a git repo, `init` offers `git init`; declining falls back to a committed `.gitignore` with a warning.
 - Plan artifacts (`.gor-mobile/plans|specs|state`) have a retention TTL: the SessionStart hook deletes anything untouched for `artifact_ttl_days` (`.gor-mobile/marker.json`, default 30; `0` disables). Freshness is linked per plan — an active plan keeps its spec and workspace alive. `doctor` shows the inventory and the TTL in effect.
 - **Greenfield**: in an empty folder with no build markers, `init` asks the platform (Android / iOS) instead of guessing, then points you at `claude` to scaffold the project.
@@ -121,7 +118,7 @@ Setup & maintenance:
 
 ```
 gor-mobile setup             # machine setup (once): android CLI, rules, hooks, Codex
-gor-mobile init              # install the workflow into the current repo (--platform, --plugins)
+gor-mobile init              # install gor-mobile into the current repo (--platform, --plugins)
 gor-mobile doctor            # check machine + this project + Codex (--verbose: hook payload)
 gor-mobile repair            # refresh machine hook scripts, this project, and Codex
 gor-mobile mcp               # connect Google's Developer Knowledge docs MCP + rotate its key
@@ -168,7 +165,7 @@ gor-mobile rules validate
 
 ## Targets (`claude` | `codex`)
 
-gor-mobile installs the same Android workflow into Claude Code and OpenAI Codex
+gor-mobile installs the same Android skill set into Claude Code and OpenAI Codex
 CLI. Claude installs **per repo** (`<repo>/.claude/`, via `gor-mobile init`);
 Codex installs **user-level** (`~/.codex/`, honoring `$CODEX_HOME`, via
 `gor-mobile setup`) because it has no project scope. What differs per agent is
@@ -266,8 +263,8 @@ which skills carry an Android-rules / Task(model=...) appendix.
 |-|-|-|
 | `brainstorming` | superpowers | rules-pack pointer |
 | `writing-plans` | superpowers | — |
-| `subagent-driven-development` | superpowers | rules + implementer → Sonnet |
-| `executing-plans` | superpowers | task-loop classification (Sonnet / session model) |
+| `subagent-driven-development` | superpowers | rules + implementer → Sonnet + execution gates (baseline pass, unusable-gate breaker, process notes, no-op guard, tooling contract) |
+| `executing-plans` | superpowers | task-loop classification (Sonnet / session model) + baseline pass + unusable-gate rule |
 | `dispatching-parallel-agents` | superpowers | — |
 | `requesting-code-review` | superpowers | Sonnet reviewer default, deep reviewer (session model) on escalation and for the final plan review; optional Codex second opinion when `codex@openai-codex` is installed |
 | `receiving-code-review` | superpowers | — |

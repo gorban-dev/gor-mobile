@@ -33,10 +33,9 @@ import {
   removeClearContextOnPlanAccept,
   removePermissionAllow,
   removeSessionStartHook,
-  removeUserPromptSubmitHook,
-  removeWorkflowSizeGuideline,
-  WORKFLOW_SIZE_GUIDELINE
+  removeUserPromptSubmitHook
 } from "../helpers/settings-merge.js";
+import { removeLegacyWorkflows } from "../helpers/workflows-legacy.js";
 import { teardownUserTarget } from "../helpers/teardown.js";
 import {
   detectInstalledTargets,
@@ -153,23 +152,8 @@ async function uninstallProject(opts: UninstallOptions): Promise<void> {
   }
   log.ok(`Agents removed (${spec.agentsDir})`);
 
-  if (spec.workflowsDir && existsSync(spec.workflowsDir)) {
-    const wfDir = spec.workflowsDir;
-    const managedWorkflows = marker.managed_workflows ?? [];
-    // Only remove what the marker recorded gor-mobile installing. A project
-    // marker written before managed_workflows existed never had shipped
-    // workflows to begin with, so an empty list removes nothing here — never
-    // sweep the directory by shipped filename, which could delete a
-    // user-authored file that happens to share a shipped name.
-    for (const entry of readdirSync(wfDir)) {
-      if (managedWorkflows.includes(entry)) rmSync(join(wfDir, entry), { force: true });
-    }
-    rmdirIfEmpty(wfDir);
-    log.ok(`Workflows removed (${wfDir})`);
-  }
-  if ((marker.managed_settings ?? []).includes(WORKFLOW_SIZE_GUIDELINE)) {
-    removeWorkflowSizeGuideline(spec.hooksFile);
-  }
+  const legacy = removeLegacyWorkflows(spec, marker);
+  if (legacy.workflows.length > 0) log.ok(`Workflows removed (${join(spec.home, "workflows")})`);
   removePermissionAllow(spec.hooksFile, marker.managed_permissions ?? []);
 
   // Plan artifacts under .gor-mobile/ are the user's working files — only the

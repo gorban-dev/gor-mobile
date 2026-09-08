@@ -44,8 +44,8 @@ Before ANY tool call (including Grep/Glob/Read/Explore/Task/other plugin skills)
 - Any "add/make/build/implement/create/do" a feature/screen/component/task
   (including tracker IDs like ARU-1234, JIRA-567) → Skill(gor-mobile-brainstorming) OR Skill(gor-mobile-writing-plans).
 - Bug/failure/unexpected behavior/"why does X happen" → Skill(gor-mobile-systematic-debugging).
-- "Review this code" / completion claims → run the /gor-review workflow. On Codex (no workflows): Skill(gor-mobile-requesting-code-review).
-- Running an existing written plan → run the /gor-execute workflow with the plan path. On Codex: Skill(gor-mobile-executing-plans).
+- "Review this code" / completion claims → Skill(gor-mobile-requesting-code-review).
+- Running an existing written plan → the sub-skill named in the plan header: Skill(gor-mobile-subagent-driven-development) or Skill(gor-mobile-executing-plans).
 
 No automatic git: gor-mobile flows NEVER run `git commit`, `git branch`, `git checkout`, or `git worktree add` on behalf of the user. All work accumulates as uncommitted modifications in the working tree; the user decides when to commit and on which branch.
 

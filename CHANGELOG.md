@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.5.0 — 2026-09-08
+
+Run `gor-mobile repair` in each repo — required: it removes the 0.4.x
+workflows (`.claude/workflows/gor-execute.js`, `gor-review.js`), the
+`gor-mobile-runner` agent and `workflowSizeGuideline`, and installs the six
+orchestration skills Claude projects have been missing since 0.4.0.
+
+Workflows are gone. Five releases of field runs (0.4.0–0.4.5) never showed a
+quality difference against the skill chain, and the cost was structural: a
+4-task run took 36 agents and 1h06m; 81,3% of the tokens in the measured run
+were first-request baselines of agents that existed only to run one shell
+command (`docs/research/2026-08-27-gor-execute-workflow-token-overhead.md`).
+Merging agents in 0.4.2 did not change the shape. The Claude project target
+now runs the chain Codex has run all along: skills + overlays + hooks, with
+the session as the controller and new contexts only for the implementer and
+the reviewer.
+
+- **Removed:** `/gor-execute`, `/gor-review`, `templates/workflows/`, the
+  `gor-mobile-runner` agent, `workflowSizeGuideline`, the Claude Code version
+  floors in `doctor`, `WORKFLOW_SUPERSEDED_SKILLS` (Claude projects get all
+  14 skills again).
+- **Kept:** the permission allowlist (subagents dispatched by the skills hit
+  the same prompts), the SDD scripts under `~/.gor-mobile/scripts`, and
+  every non-workflow feature from 0.4.x — debroid, the android/adb tool
+  contract in `doctor`, `Conforms to:` citing every matching example, the
+  android skill catalog in SessionStart, findings vs process notes in the
+  reviewers, `Spec:` + Global Constraints in the plan header, log-marker
+  build verification.
+- **Ported into the `subagent-driven-development` overlay (short form in
+  `executing-plans`):** the baseline pass over the plan's verification
+  commands; the unusable-gate breaker (`Unverified:` + `Needs manual
+  verification: yes` in the final report); process notes never gate the fix
+  loop and `unfixable` from an implementer becomes a process note; a fix
+  round with an unchanged tree SHA goes straight to the breaker; the tooling
+  contract (docs-first, ast-index, android CLI deploy/gestures, foreground
+  check, debroid, log-marker builds) now lives in `implementer-prompt.md`
+  and rides on every implementer and fix dispatch. New SDD script
+  `sdd-isolate TREE_SHA` (installed with the others by `setup`/`repair`)
+  materializes the pre-task snapshot tree in a temp dir via `git archive`, so
+  the isolation run needs no checkout, stash, worktree or clone.
+- **Migration:** `init` and `repair` remove what 0.4.x wrote, guided by the
+  marker (`managed_workflows`, `managed_settings`); user-authored files in
+  `.claude/workflows/` are left alone. `doctor` warns about leftovers until
+  repair has run. `uninstall --project` still cleans a 0.4.x install that
+  never ran repair.
+- Hooks route "review this" to `gor-mobile-requesting-code-review` and "run
+  the plan" to the sub-skill named in the plan header, on both targets.
+
 ## 0.4.5 — 2026-09-02
 
 Run `gor-mobile repair` in each repo — required: it refreshes the

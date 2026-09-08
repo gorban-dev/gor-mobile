@@ -5,9 +5,7 @@ import { Command } from "commander";
 import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-var GOR_MOBILE_VERSION = "0.4.5";
-var WORKFLOWS_MIN_CLAUDE_VERSION = "2.1.154";
-var WORKFLOW_SIZE_GUIDELINE_MIN_CLAUDE_VERSION = "2.1.219";
+var GOR_MOBILE_VERSION = "0.5.0";
 var HOME = homedir();
 var GOR_MOBILE_HOME = process.env.GOR_MOBILE_HOME ?? join(HOME, ".gor-mobile");
 var GOR_MOBILE_RULES_DIR = join(GOR_MOBILE_HOME, "rules");
@@ -191,7 +189,7 @@ function removeClearContextOnPlanAccept(file) {
   delete settings[CLEAR_CONTEXT_ON_PLAN_ACCEPT];
   writeJson(file, settings);
 }
-var WORKFLOW_PERMISSION_ENTRIES = [
+var AGENT_PERMISSION_ENTRIES = [
   "Bash(git diff:*)",
   "Bash(git status:*)",
   "Bash(git rev-parse:*)",
@@ -252,7 +250,7 @@ function staleCodexCompanionEntries(managed) {
 function sddScriptsAllowEntry() {
   return `Bash(${join2(GOR_MOBILE_HOME, "scripts")}/:*)`;
 }
-function dynamicWorkflowAllowEntries() {
+function dynamicAgentAllowEntries() {
   const entries = [sddScriptsAllowEntry()];
   const codex = codexCompanionAllowEntry();
   if (codex) entries.push(codex);
@@ -260,13 +258,6 @@ function dynamicWorkflowAllowEntries() {
 }
 var STALE_PERMISSION_ENTRIES = ["Bash(node:*)"];
 var WORKFLOW_SIZE_GUIDELINE = "workflowSizeGuideline";
-function applyWorkflowSizeGuideline(file) {
-  const settings = ensureSettingsFile(file);
-  if (typeof settings[WORKFLOW_SIZE_GUIDELINE] === "string") return false;
-  settings[WORKFLOW_SIZE_GUIDELINE] = "large";
-  writeJson(file, settings);
-  return true;
-}
 function removeWorkflowSizeGuideline(file) {
   if (!existsSync2(file)) return;
   const settings = readJsonSafe(file, {});
@@ -309,14 +300,6 @@ function hasManagedHooksInFile(hooksFile) {
 }
 
 // src/targets.ts
-var WORKFLOW_SUPERSEDED_SKILLS = [
-  "subagent-driven-development",
-  "executing-plans",
-  "requesting-code-review",
-  "receiving-code-review",
-  "verification-before-completion",
-  "dispatching-parallel-agents"
-];
 var TARGETS = {
   claude: {
     id: "claude",
@@ -365,8 +348,6 @@ function projectClaudeSpec(root) {
     home,
     skillsDir: join3(home, "skills"),
     agentsDir: join3(home, "agents"),
-    workflowsDir: join3(home, "workflows"),
-    excludeSkills: WORKFLOW_SUPERSEDED_SKILLS,
     instructionsFile: "",
     instructionsSnippet: "claude-md-snippet.md",
     hooksFile: join3(home, "settings.local.json"),
@@ -1299,7 +1280,6 @@ function installSkills(target) {
   for (const name of readdirSync3(skillsDir)) {
     const srcDir = join7(skillsDir, name);
     if (!statSync2(srcDir).isDirectory()) continue;
-    if (target.excludeSkills?.includes(name)) continue;
     const dstDir = join7(target.skillsDir, `gor-mobile-${name}`);
     cpSync2(srcDir, dstDir, { recursive: true });
     const skillMd = join7(dstDir, "SKILL.md");
@@ -1340,28 +1320,7 @@ function installAgents(target) {
   }
   return copied;
 }
-function installWorkflows(target, owned = []) {
-  if (!target.workflowsDir) return [];
-  const src = join7(gorMobileRoot(), "templates", "workflows");
-  if (!existsSync8(src)) return [];
-  const shipped = readdirSync3(src).filter(
-    (name) => name.startsWith("gor-") && name.endsWith(".js")
-  );
-  ensureDir(target.workflowsDir);
-  const copied = [];
-  for (const name of shipped) {
-    const dst = join7(target.workflowsDir, name);
-    if (existsSync8(dst) && !owned.includes(name)) {
-      console.warn(`[gor-mobile] kept user workflow ${name} \u2014 not overwriting an unowned file`);
-      continue;
-    }
-    copyFileSync(join7(src, name), dst);
-    chmodSync(dst, 420);
-    copied.push(name);
-  }
-  return copied;
-}
-var SDD_SCRIPT_NAMES = ["sdd-workspace", "task-brief", "sdd-snapshot", "review-package"];
+var SDD_SCRIPT_NAMES = ["sdd-workspace", "task-brief", "sdd-snapshot", "review-package", "sdd-isolate"];
 function installSddScripts() {
   const src = join7(gorMobileRoot(), "templates", "skills", "subagent-driven-development", "scripts");
   if (!existsSync8(src)) return [];
@@ -2191,8 +2150,8 @@ async function cmdSetup(opts = {}) {
 }
 
 // src/commands/init.ts
-import { cpSync as cpSync4, existsSync as existsSync18 } from "fs";
-import { join as join14 } from "path";
+import { cpSync as cpSync4, existsSync as existsSync19 } from "fs";
+import { join as join15 } from "path";
 import pc8 from "picocolors";
 import { cancel as cancel4, isCancel as isCancel4, select as select2 } from "@clack/prompts";
 
@@ -2605,10 +2564,46 @@ function artifactInventory(root) {
   };
 }
 
+// src/helpers/workflows-legacy.ts
+import { existsSync as existsSync18, readdirSync as readdirSync8, rmSync as rmSync6, rmdirSync } from "fs";
+import { join as join14 } from "path";
+var LEGACY_RUNNER_AGENT = "gor-mobile-runner.md";
+function removeLegacyWorkflows(spec, marker) {
+  const result = { workflows: [], runnerRemoved: false, guidelineRemoved: false };
+  const wfDir = join14(spec.home, "workflows");
+  const owned = marker.managed_workflows ?? [];
+  if (owned.length > 0 && existsSync18(wfDir)) {
+    for (const entry of readdirSync8(wfDir)) {
+      if (!owned.includes(entry)) continue;
+      rmSync6(join14(wfDir, entry), { force: true });
+      result.workflows.push(entry);
+    }
+    if (readdirSync8(wfDir).length === 0) rmdirSync(wfDir);
+  }
+  const runner = join14(spec.agentsDir, LEGACY_RUNNER_AGENT);
+  if (existsSync18(runner)) {
+    rmSync6(runner, { force: true });
+    result.runnerRemoved = true;
+  }
+  if ((marker.managed_settings ?? []).includes(WORKFLOW_SIZE_GUIDELINE)) {
+    removeWorkflowSizeGuideline(spec.hooksFile);
+    result.guidelineRemoved = true;
+  }
+  return result;
+}
+function describeLegacyCleanup(c) {
+  const items = [
+    ...c.workflows,
+    ...c.runnerRemoved ? [LEGACY_RUNNER_AGENT] : [],
+    ...c.guidelineRemoved ? [WORKFLOW_SIZE_GUIDELINE] : []
+  ];
+  return items.length > 0 ? `Removed 0.4.x workflow leftovers: ${items.join(", ")}` : null;
+}
+
 // src/commands/init.ts
 var EXCLUDE_ENTRIES = [".claude/", `${PROJECT_STATE_DIR}/`];
 function machineReady() {
-  if (!existsSync18(join14(GOR_MOBILE_TEMPLATES_DIR, "session-start-hook.sh"))) {
+  if (!existsSync19(join15(GOR_MOBILE_TEMPLATES_DIR, "session-start-hook.sh"))) {
     return { ok: false, reason: "hook scripts not found in ~/.gor-mobile/templates" };
   }
   if (!readManifest()) {
@@ -2681,7 +2676,7 @@ async function cmdInit(opts = {}) {
   const spec = projectClaudeSpec(root);
   const marker = readProjectMarker(root);
   const reinit = hasProjectMarker(root);
-  const legacyMarker = existsSync18(legacyProjectMarkerPath(root));
+  const legacyMarker = existsSync19(legacyProjectMarkerPath(root));
   console.log("");
   console.log(pc8.bold(pc8.magenta(`gor-mobile init`)) + pc8.dim(`  \xB7  ${root}`));
   if (reinit) log.info("Existing install found \u2014 refreshing (idempotent re-init).");
@@ -2730,8 +2725,8 @@ async function cmdInit(opts = {}) {
     for (const line of [
       `install skills \u2192 ${spec.skillsDir}`,
       `install agents \u2192 ${spec.agentsDir}`,
-      `install workflows \u2192 ${spec.workflowsDir}`,
-      `set ${WORKFLOW_SIZE_GUIDELINE}=large + workflow permission allowlist (git/ls, gradle, android CLI, SDD scripts + codex companion) \u2192 ${spec.hooksFile}`,
+      `permission allowlist for skill subagents (git/ls, gradle, android CLI, adb, debroid, SDD scripts + codex companion) \u2192 ${spec.hooksFile}`,
+      ...(marker.managed_workflows?.length ?? 0) > 0 || (marker.managed_settings ?? []).includes(WORKFLOW_SIZE_GUIDELINE) || existsSync19(join15(spec.agentsDir, LEGACY_RUNNER_AGENT)) ? [`remove 0.4.x leftovers: .claude/workflows/gor-*.js, agents/gor-mobile-runner.md, ${WORKFLOW_SIZE_GUIDELINE}`] : [],
       `merge SessionStart + UserPromptSubmit + PreToolUse \u2192 ${spec.hooksFile}`,
       `disable ${SUPERPOWERS_KEY} in ${spec.hooksFile}` + (opts.plugins ? ` (+enable ${opts.plugins})` : ""),
       `enable ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} in ${spec.hooksFile}`,
@@ -2739,7 +2734,7 @@ async function cmdInit(opts = {}) {
       "android init \u2192 copy stock skill into .claude/skills, drop Claude-home copy",
       `write ${PROJECT_MARKER_NAME} (platform=${platform})`,
       ...legacyMarker ? [`move ${LEGACY_PROJECT_MARKER_NAME} \u2192 ${PROJECT_MARKER_NAME}, drop its exclude line`] : [],
-      ...existsSync18(join14(root, LEGACY_PROJECT_MCP_FILE)) ? [`drop ${DEV_KNOWLEDGE_MCP_NAME} from ${LEGACY_PROJECT_MCP_FILE}, clear its exclude line`] : [],
+      ...existsSync19(join15(root, LEGACY_PROJECT_MCP_FILE)) ? [`drop ${DEV_KNOWLEDGE_MCP_NAME} from ${LEGACY_PROJECT_MCP_FILE}, clear its exclude line`] : [],
       `git exclude += ${EXCLUDE_ENTRIES.join(", ")}`
     ]) {
       console.log(`    ${pc8.dim("[dry-run]")} ${line}`);
@@ -2758,13 +2753,12 @@ async function cmdInit(opts = {}) {
   }
   const agents = installAgents(spec);
   log.ok(`${agents.length} review agents \u2192 ${spec.agentsDir}`);
-  const workflows = installWorkflows(spec, marker.managed_workflows ?? []);
-  log.ok(`${workflows.length} workflows \u2192 ${spec.workflowsDir}`);
-  const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
-  if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
-  const allowEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...dynamicWorkflowAllowEntries()];
+  const legacy = removeLegacyWorkflows(spec, marker);
+  const legacyNote = describeLegacyCleanup(legacy);
+  if (legacyNote) log.ok(legacyNote);
+  const allowEntries = [...AGENT_PERMISSION_ENTRIES, ...dynamicAgentAllowEntries()];
   const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
-  if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length} (workflow agents run unprompted)`);
+  if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length} (skill subagents run unprompted)`);
   const staleOwned = [
     ...STALE_PERMISSION_ENTRIES.filter((e) => (marker.managed_permissions ?? []).includes(e)),
     ...staleCodexCompanionEntries(marker.managed_permissions ?? [])
@@ -2810,8 +2804,8 @@ async function cmdInit(opts = {}) {
   else if (!android.ran) log.warn("android CLI not on PATH \u2014 skipped android-cli skill (run 'gor-mobile setup')");
   else log.warn(`android-cli skill not placed: ${android.error ?? "stock skill missing"}`);
   const debroidSrc = debroidSkillSourceDir();
-  if (existsSync18(join14(debroidSrc, "SKILL.md"))) {
-    cpSync4(debroidSrc, join14(spec.skillsDir, "debroid-cli"), { recursive: true });
+  if (existsSync19(join15(debroidSrc, "SKILL.md"))) {
+    cpSync4(debroidSrc, join15(spec.skillsDir, "debroid-cli"), { recursive: true });
     log.ok(`debroid-cli skill \u2192 ${spec.skillsDir}/debroid-cli/`);
   }
   if (platform === "android") noteAstIndex(root);
@@ -2825,17 +2819,17 @@ async function cmdInit(opts = {}) {
     version: GOR_MOBILE_VERSION,
     installed_at: opts.now ?? marker.installed_at ?? (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
     managed_plugins: managedPlugins,
-    managed_settings: sizeSet ? [.../* @__PURE__ */ new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])] : managedSettings,
+    managed_settings: managedSettings.filter((k) => k !== WORKFLOW_SIZE_GUIDELINE),
     managed_permissions: [
       .../* @__PURE__ */ new Set([
         ...(marker.managed_permissions ?? []).filter((e) => !staleOwned.includes(e)),
         ...addedPerms
       ])
     ],
-    managed_workflows: [.../* @__PURE__ */ new Set([...marker.managed_workflows ?? [], ...workflows])],
     managed_mcp: managedMcp,
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
   };
+  delete nextMarker.managed_workflows;
   writeProjectMarker(root, nextMarker);
   log.ok(`Wrote ${PROJECT_MARKER_NAME}`);
   if (migrateProjectMarker(root)) {
@@ -2847,7 +2841,7 @@ async function cmdInit(opts = {}) {
 }
 function noteAstIndex(root) {
   if (!astIndexPath()) return;
-  if (existsSync18(join14(root, ".claude", "rules", "ast-index.md"))) return;
+  if (existsSync19(join15(root, ".claude", "rules", "ast-index.md"))) return;
   note(
     [
       "ast-index CLI detected but this repo is not indexed yet. To enable the",
@@ -2868,7 +2862,7 @@ function outro(root, platform) {
     `Ask it to scaffold your ${platform} project \u2014 the brainstorming skill drives 'android' CLI.`
   ] : [
     "Open Claude Code in this folder: claude",
-    "The SessionStart hook loads the gor-mobile workflow automatically."
+    "The SessionStart hook loads the gor-mobile skills automatically."
   ];
   for (const s of steps) console.log(`    ${pc8.cyan(s)}`);
   console.log("");
@@ -2879,8 +2873,8 @@ import pc9 from "picocolors";
 import { confirm as confirm2, isCancel as isCancel5 } from "@clack/prompts";
 
 // src/helpers/teardown.ts
-import { existsSync as existsSync19, readdirSync as readdirSync8, readFileSync as readFileSync9, rmSync as rmSync6 } from "fs";
-import { join as join15 } from "path";
+import { existsSync as existsSync20, readdirSync as readdirSync9, readFileSync as readFileSync9, rmSync as rmSync7 } from "fs";
+import { join as join16 } from "path";
 function teardownUserTarget(target, opts = {}) {
   log.step(`Removing gor-mobile from ${target.label} (${target.home})`);
   removeSessionStartHook(target);
@@ -2899,27 +2893,27 @@ function teardownUserTarget(target, opts = {}) {
   if (target.id === "claude") {
     cleanupLegacyCommands(CLAUDE_COMMANDS_DIR);
   }
-  if (existsSync19(target.skillsDir)) {
-    for (const entry of readdirSync8(target.skillsDir)) {
+  if (existsSync20(target.skillsDir)) {
+    for (const entry of readdirSync9(target.skillsDir)) {
       if (entry.startsWith("gor-mobile-")) {
-        rmSync6(join15(target.skillsDir, entry), { recursive: true, force: true });
+        rmSync7(join16(target.skillsDir, entry), { recursive: true, force: true });
       }
     }
   }
   log.ok(`Skills removed (${target.skillsDir})`);
-  if (existsSync19(target.agentsDir)) {
+  if (existsSync20(target.agentsDir)) {
     const ext = `.${target.agentFormat}`;
-    for (const entry of readdirSync8(target.agentsDir)) {
+    for (const entry of readdirSync9(target.agentsDir)) {
       if (entry.startsWith("gor-mobile-") && entry.endsWith(ext)) {
-        rmSync6(join15(target.agentsDir, entry), { force: true });
+        rmSync7(join16(target.agentsDir, entry), { force: true });
       }
     }
     if (target.id === "claude") {
-      const legacyCr = join15(target.agentsDir, "code-reviewer.md");
-      if (existsSync19(legacyCr)) {
+      const legacyCr = join16(target.agentsDir, "code-reviewer.md");
+      if (existsSync20(legacyCr)) {
         const head = readFileSync9(legacyCr, "utf8").split("\n").slice(0, 20).join("\n");
         if (/^name: code-reviewer/m.test(head)) {
-          rmSync6(legacyCr);
+          rmSync7(legacyCr);
         }
       }
     }
@@ -2991,18 +2985,18 @@ async function cmdMigrate(opts = {}) {
 }
 
 // src/commands/doctor.ts
-import { existsSync as existsSync21, mkdirSync as mkdirSync3, mkdtempSync, readFileSync as readFileSync10, readdirSync as readdirSync9, rmSync as rmSync7, writeFileSync as writeFileSync8 } from "fs";
+import { existsSync as existsSync22, mkdirSync as mkdirSync3, mkdtempSync, readFileSync as readFileSync10, readdirSync as readdirSync10, rmSync as rmSync8, writeFileSync as writeFileSync8 } from "fs";
 import { tmpdir } from "os";
-import { join as join17 } from "path";
+import { join as join18 } from "path";
 import { execa as execa9 } from "execa";
 
 // src/helpers/ast-index-freshness.ts
-import { existsSync as existsSync20 } from "fs";
-import { join as join16 } from "path";
+import { existsSync as existsSync21 } from "fs";
+import { join as join17 } from "path";
 import { execa as execa8 } from "execa";
 async function runAstIndexUpdate(root) {
   if (!astIndexPath()) return null;
-  if (!existsSync20(join16(root, ".claude", "rules", "ast-index.md"))) return null;
+  if (!existsSync21(join17(root, ".claude", "rules", "ast-index.md"))) return null;
   const res = await execa8("ast-index", ["update"], {
     cwd: root,
     reject: false,
@@ -3027,7 +3021,7 @@ function reportDep(name, path, required) {
   }
 }
 function checkFile(path, label) {
-  if (existsSync21(path)) {
+  if (existsSync22(path)) {
     log.ok(`${label} \u2192 ${path}`);
     return true;
   }
@@ -3035,7 +3029,7 @@ function checkFile(path, label) {
   return false;
 }
 function checkHooks(target) {
-  if (!existsSync21(target.hooksFile)) {
+  if (!existsSync22(target.hooksFile)) {
     log.warn(`No ${target.hooksFile}`);
     return;
   }
@@ -3051,7 +3045,7 @@ function checkHooks(target) {
   }
 }
 function checkInstructionsSection(target) {
-  if (!existsSync21(target.instructionsFile)) {
+  if (!existsSync22(target.instructionsFile)) {
     log.warn(`${target.instructionsFile} does not exist`);
     return;
   }
@@ -3081,7 +3075,7 @@ function checkCodexStatusLine() {
   }
 }
 function checkRulesPack() {
-  if (!existsSync21(GOR_MOBILE_RULES_DIR)) {
+  if (!existsSync22(GOR_MOBILE_RULES_DIR)) {
     log.warn(`Rules pack not installed (${GOR_MOBILE_RULES_DIR}) \u2014 run 'gor-mobile setup'`);
     return;
   }
@@ -3103,7 +3097,7 @@ function checkHookTemplates() {
   ];
   let ok = true;
   for (const f of scripts) {
-    if (!existsSync21(join17(GOR_MOBILE_TEMPLATES_DIR, f))) {
+    if (!existsSync22(join18(GOR_MOBILE_TEMPLATES_DIR, f))) {
       ok = false;
       log.warn(`hook template missing: ${f} \u2014 run 'gor-mobile setup'`);
     }
@@ -3113,7 +3107,7 @@ function checkHookTemplates() {
 function checkSddScripts() {
   let ok = true;
   for (const name of SDD_SCRIPT_NAMES) {
-    if (!existsSync21(join17(GOR_MOBILE_HOME, "scripts", name))) {
+    if (!existsSync22(join18(GOR_MOBILE_HOME, "scripts", name))) {
       ok = false;
       log.warn(`SDD script missing: scripts/${name} \u2014 run 'gor-mobile setup'`);
     }
@@ -3128,7 +3122,7 @@ async function verboseHookEmulation(target) {
   ];
   for (const [file, label] of hooks) {
     const path = `${GOR_MOBILE_HOME}/templates/${file}`;
-    if (!existsSync21(path)) {
+    if (!existsSync22(path)) {
       log.warn(`[${label}] template missing: ${path}`);
       continue;
     }
@@ -3156,10 +3150,10 @@ async function verboseHookEmulation(target) {
     }
     if (label === "PreToolUse") {
       log.ok(`[${label}] guard allows non-symbol probe (exit 0)`);
-      const probeDir = mkdtempSync(join17(tmpdir(), "gorm-guard-probe-"));
+      const probeDir = mkdtempSync(join18(tmpdir(), "gorm-guard-probe-"));
       try {
-        mkdirSync3(join17(probeDir, ".claude", "rules"), { recursive: true });
-        writeFileSync8(join17(probeDir, ".claude", "rules", "ast-index.md"), "");
+        mkdirSync3(join18(probeDir, ".claude", "rules"), { recursive: true });
+        writeFileSync8(join18(probeDir, ".claude", "rules", "ast-index.md"), "");
         const deny = await execa9("bash", [path], {
           reject: false,
           input: JSON.stringify({
@@ -3176,7 +3170,7 @@ async function verboseHookEmulation(target) {
           );
         }
       } finally {
-        rmSync7(probeDir, { recursive: true, force: true });
+        rmSync8(probeDir, { recursive: true, force: true });
       }
       continue;
     }
@@ -3201,16 +3195,16 @@ async function verboseHookEmulation(target) {
   }
 }
 function verboseSkillsFrontmatter(target) {
-  if (!existsSync21(target.skillsDir)) {
+  if (!existsSync22(target.skillsDir)) {
     log.warn(`${target.skillsDir} missing`);
     return;
   }
   let count = 0;
   let bad = 0;
-  for (const entry of readdirSync9(target.skillsDir)) {
+  for (const entry of readdirSync10(target.skillsDir)) {
     if (!entry.startsWith("gor-mobile-")) continue;
-    const skillMd = join17(target.skillsDir, entry, "SKILL.md");
-    if (!existsSync21(skillMd)) continue;
+    const skillMd = join18(target.skillsDir, entry, "SKILL.md");
+    if (!existsSync22(skillMd)) continue;
     count++;
     const content = readFileSync10(skillMd, "utf8");
     if (!/^name: gor-mobile-/m.test(content)) {
@@ -3239,8 +3233,8 @@ async function checkAndroidContract() {
   }
 }
 function verboseContractLint(target) {
-  const skill = join17(target.skillsDir, "gor-mobile-using-android-cli", "SKILL.md");
-  if (!existsSync21(skill)) {
+  const skill = join18(target.skillsDir, "gor-mobile-using-android-cli", "SKILL.md");
+  if (!existsSync22(skill)) {
     log.warn("bridge skill missing \u2014 cannot lint contract");
     return;
   }
@@ -3255,83 +3249,26 @@ function verboseContractLint(target) {
   if (stray.length === 0) log.ok(`bridge skill \u2194 contract in sync (${mentioned.size} cmds referenced)`);
   else log.warn(`bridge skill references commands NOT in contract: ${stray.join(", ")}`);
 }
-function parseSemVer(text) {
-  const m = /(\d+)\.(\d+)\.(\d+)/.exec(text);
-  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
-}
-function versionBelow(a, b) {
-  return a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1] : a[2] < b[2];
-}
-function warnIfDisableWorkflows(file, scope) {
-  const settings = readJsonSafe(file, {});
-  if (settings["disableWorkflows"] === true) {
-    log.warn(`disableWorkflows=true in ${file} \u2014 workflows are OFF for ${scope}`);
-  }
-}
-async function checkClaudeWorkflowsSupport() {
-  if (!which("claude")) {
-    log.info("claude CLI not on PATH \u2014 workflows check skipped (Codex-only machine?)");
-    return;
-  }
-  const res = await execa9("claude", ["--version"], { reject: false });
-  const m = /(\d+)\.(\d+)\.(\d+)/.exec(res.stdout ?? "");
-  if (res.exitCode !== 0 || !m) {
-    log.warn("claude CLI version unreadable \u2014 cannot verify workflows support");
-    return;
-  }
-  const version = parseSemVer(m[0]);
-  const floor = parseSemVer(WORKFLOWS_MIN_CLAUDE_VERSION);
-  if (versionBelow(version, floor)) {
-    log.warn(`Claude Code v${m[0]} < ${WORKFLOWS_MIN_CLAUDE_VERSION} \u2014 /gor-review workflow will not load`);
-  } else {
-    log.ok(`Claude Code v${m[0]} supports workflows (\u2265 ${WORKFLOWS_MIN_CLAUDE_VERSION})`);
-    const guidelineFloor = parseSemVer(WORKFLOW_SIZE_GUIDELINE_MIN_CLAUDE_VERSION);
-    if (versionBelow(version, guidelineFloor)) {
-      log.warn(
-        `workflowSizeGuideline is honored only since ${WORKFLOW_SIZE_GUIDELINE_MIN_CLAUDE_VERSION} \u2014 the size guideline init wrote is inert on this version`
-      );
-    }
-  }
-  warnIfDisableWorkflows(CLAUDE_SETTINGS, "this user");
-  const root = findProjectRoot();
-  if (root) {
-    warnIfDisableWorkflows(join17(root, ".claude", "settings.json"), "this project");
-    warnIfDisableWorkflows(join17(root, ".claude", "settings.local.json"), "this project");
-  }
-}
-function expectedWorkflows() {
-  try {
-    return readdirSync9(join17(gorMobileRoot(), "templates", "workflows")).filter(
-      (name) => name.startsWith("gor-") && name.endsWith(".js")
-    );
-  } catch {
-    return ["gor-review.js", "gor-execute.js"];
-  }
-}
-function checkWorkflows(target) {
-  if (!target.workflowsDir) return;
-  for (const name of expectedWorkflows()) {
-    const p = join17(target.workflowsDir, name);
-    if (!existsSync21(p)) {
-      log.warn(`workflow ${name} missing \u2014 run 'gor-mobile repair'`);
-      continue;
-    }
-    const head = readFileSync10(p, "utf8").slice(0, 2048);
-    if (/export const meta = \{/.test(head)) log.ok(`workflow ${name} installed`);
-    else log.warn(`workflow ${name} has no meta header \u2014 run 'gor-mobile repair'`);
-  }
+function checkAgentAllowlist(target) {
   const settings = readJsonSafe(target.hooksFile, {});
   const allow = settings.permissions?.allow ?? [];
-  const expected = [...WORKFLOW_PERMISSION_ENTRIES, sddScriptsAllowEntry()];
+  const expected = [...AGENT_PERMISSION_ENTRIES, sddScriptsAllowEntry()];
   const missing = expected.filter((e) => !allow.includes(e));
   if (missing.length > 0) {
-    log.warn(`workflow allowlist incomplete (${missing.length} missing) \u2014 run 'gor-mobile repair'`);
+    log.warn(`permission allowlist incomplete (${missing.length} missing) \u2014 run 'gor-mobile repair'`);
   } else {
-    log.ok("workflow permission allowlist present");
+    log.ok("permission allowlist present");
   }
   const codexEntry = codexCompanionAllowEntry();
   if (codexEntry && !allow.includes(codexEntry)) {
     log.warn("codex companion allowlist entry stale or missing (plugin updated?) \u2014 run 'gor-mobile repair'");
+  }
+}
+function checkLegacyWorkflows(target, marker) {
+  const leftovers = (marker.managed_workflows ?? []).filter((name) => existsSync22(join18(target.home, "workflows", name))).map((name) => `workflows/${name}`);
+  if (existsSync22(join18(target.agentsDir, LEGACY_RUNNER_AGENT))) leftovers.push(`agents/${LEGACY_RUNNER_AGENT}`);
+  if (leftovers.length > 0) {
+    log.warn(`0.4.x workflow leftovers: ${leftovers.join(", ")} \u2014 run 'gor-mobile repair'`);
   }
 }
 function checkTarget(target) {
@@ -3343,14 +3280,14 @@ function checkTarget(target) {
   } else if (androidCliPath()) {
     log.warn("android-cli skill missing \u2014 run 'gor-mobile repair'");
   }
-  const bridgePath = join17(target.skillsDir, "gor-mobile-using-android-cli", "SKILL.md");
-  if (existsSync21(bridgePath)) {
+  const bridgePath = join18(target.skillsDir, "gor-mobile-using-android-cli", "SKILL.md");
+  if (existsSync22(bridgePath)) {
     log.ok("gor-mobile-using-android-cli bridge skill installed");
   } else if (androidCliPath()) {
     log.warn("gor-mobile-using-android-cli skill missing \u2014 run 'gor-mobile repair'");
   }
-  const astIndexSkillPath = join17(target.skillsDir, "gor-mobile-ast-index", "SKILL.md");
-  if (existsSync21(astIndexSkillPath)) {
+  const astIndexSkillPath = join18(target.skillsDir, "gor-mobile-ast-index", "SKILL.md");
+  if (existsSync22(astIndexSkillPath)) {
     log.ok("gor-mobile-ast-index skill installed");
   } else {
     log.warn("gor-mobile-ast-index skill missing \u2014 run 'gor-mobile repair'");
@@ -3358,11 +3295,11 @@ function checkTarget(target) {
   if (target.instructionsFile) checkInstructionsSection(target);
   if (target.statusLineKind === "claude-command") checkStatusLine();
   else if (target.statusLineKind === "codex-config") checkCodexStatusLine();
-  checkWorkflows(target);
+  if (target.scope === "project") checkAgentAllowlist(target);
 }
 function checkProject(root) {
   const marker = readProjectMarker(root);
-  const legacy = existsSync21(legacyProjectMarkerPath(root));
+  const legacy = existsSync22(legacyProjectMarkerPath(root));
   log.ok(
     `${legacy ? LEGACY_PROJECT_MARKER_NAME : PROJECT_MARKER_NAME} \u2192 platform=${marker.platform ?? "?"}, v${marker.version ?? "?"} (${root})`
   );
@@ -3389,6 +3326,7 @@ function checkProject(root) {
     );
   }
   const spec = projectClaudeSpec(root);
+  checkLegacyWorkflows(spec, marker);
   const mcp = localMcpState(root, marker.managed_mcp ?? []);
   if (mcp.malformed) {
     log.warn(`${CLAUDE_JSON} is not valid JSON \u2014 fix it, then run 'gor-mobile mcp'`);
@@ -3456,7 +3394,6 @@ async function cmdDoctor(opts = {}) {
       "  \u2192 jq powers the status line AND the ast-index guard hook (guard fails open without it) \u2014 brew install jq"
     );
   }
-  await checkClaudeWorkflowsSupport();
   const dk = resolveDevKnowledgeKey();
   if (dk.key) {
     log.ok(`Developer Knowledge API key \u2192 ${KEY_SOURCE_LABEL[dk.source]}`);
@@ -3475,7 +3412,7 @@ async function cmdDoctor(opts = {}) {
     emulationTargets.push(checkProject(root));
   } else {
     log.info(`No ${PROJECT_MARKER_NAME} in the current directory tree.`);
-    log.info("  \u2192 cd into a mobile repo and run 'gor-mobile init' to install the workflow.");
+    log.info("  \u2192 cd into a mobile repo and run 'gor-mobile init' to install gor-mobile.");
   }
   if (agentHomeExists("codex")) {
     log.step("Codex integration (user-level)");
@@ -3509,8 +3446,8 @@ async function cmdDoctor(opts = {}) {
 }
 
 // src/commands/repair.ts
-import { cpSync as cpSync5, existsSync as existsSync22 } from "fs";
-import { join as join18 } from "path";
+import { cpSync as cpSync5, existsSync as existsSync23 } from "fs";
+import { join as join19 } from "path";
 function refreshHooks(target) {
   const ss = installSessionStartHook(target);
   log.ok(
@@ -3538,11 +3475,10 @@ async function repairProject(root) {
   log.ok(`Skills refreshed (${skills.installed.length} gor-mobile-* dirs \u2192 ${spec.skillsDir})`);
   const agents = installAgents(spec);
   log.ok(`Agents refreshed (${agents.length} in ${spec.agentsDir})`);
-  const workflows = installWorkflows(spec, marker.managed_workflows ?? []);
-  log.ok(`Workflows refreshed (${workflows.length} in ${spec.workflowsDir})`);
-  const sizeSet = applyWorkflowSizeGuideline(spec.hooksFile);
-  if (sizeSet) log.ok(`Set ${WORKFLOW_SIZE_GUIDELINE}=large for workflow runs`);
-  const allowEntries = [...WORKFLOW_PERMISSION_ENTRIES, ...dynamicWorkflowAllowEntries()];
+  const legacy = removeLegacyWorkflows(spec, marker);
+  const legacyNote = describeLegacyCleanup(legacy);
+  if (legacyNote) log.ok(legacyNote);
+  const allowEntries = [...AGENT_PERMISSION_ENTRIES, ...dynamicAgentAllowEntries()];
   const addedPerms = ensurePermissionAllow(spec.hooksFile, allowEntries);
   if (addedPerms.length > 0) log.ok(`Permission allowlist +${addedPerms.length}`);
   const staleOwned = [
@@ -3558,8 +3494,8 @@ async function repairProject(root) {
   else if (!android.ran) log.info("android CLI not on PATH \u2014 skipped android-cli skill");
   else log.warn(`android-cli skill not placed: ${android.error ?? "stock skill missing"}`);
   const debroidSrc = debroidSkillSourceDir();
-  if (existsSync22(join18(debroidSrc, "SKILL.md"))) {
-    cpSync5(debroidSrc, join18(spec.skillsDir, "debroid-cli"), { recursive: true });
+  if (existsSync23(join19(debroidSrc, "SKILL.md"))) {
+    cpSync5(debroidSrc, join19(spec.skillsDir, "debroid-cli"), { recursive: true });
     log.ok(`debroid-cli skill \u2192 ${spec.skillsDir}/debroid-cli/`);
   }
   applyEnabledPlugins(spec.hooksFile, [], [SUPERPOWERS_KEY]);
@@ -3590,20 +3526,21 @@ async function repairProject(root) {
   const enabledNow = enableClearContextOnPlanAccept(spec.hooksFile);
   const managedSettings = enabledNow ? [.../* @__PURE__ */ new Set([...marker.managed_settings ?? [], CLEAR_CONTEXT_ON_PLAN_ACCEPT])] : marker.managed_settings ?? [];
   if (enabledNow) log.ok(`Enabled ${CLEAR_CONTEXT_ON_PLAN_ACCEPT} (plan-approval "clear context" option)`);
-  writeProjectMarker(root, {
+  const nextMarker = {
     ...marker,
     version: GOR_MOBILE_VERSION,
-    managed_settings: sizeSet ? [.../* @__PURE__ */ new Set([...managedSettings, WORKFLOW_SIZE_GUIDELINE])] : managedSettings,
+    managed_settings: managedSettings.filter((k) => k !== WORKFLOW_SIZE_GUIDELINE),
     managed_permissions: [
       .../* @__PURE__ */ new Set([
         ...(marker.managed_permissions ?? []).filter((e) => !staleOwned.includes(e)),
         ...addedPerms
       ])
     ],
-    managed_workflows: [.../* @__PURE__ */ new Set([...marker.managed_workflows ?? [], ...workflows])],
     managed_mcp: mcpRes.written ? [.../* @__PURE__ */ new Set([...marker.managed_mcp ?? [], DEV_KNOWLEDGE_MCP_NAME])] : marker.managed_mcp ?? [],
     artifact_ttl_days: typeof marker.artifact_ttl_days === "number" ? marker.artifact_ttl_days : 30
-  });
+  };
+  delete nextMarker.managed_workflows;
+  writeProjectMarker(root, nextMarker);
   log.ok(`Marker refreshed (v${GOR_MOBILE_VERSION})`);
   if (migrateProjectMarker(root)) {
     log.ok(`Moved ${LEGACY_PROJECT_MARKER_NAME} \u2192 ${PROJECT_MARKER_NAME}`);
@@ -3633,7 +3570,7 @@ async function repairCodex(target) {
   if (!androidRes.ran) log.info("android CLI not on PATH \u2014 skipping 'android init'");
   else if (androidRes.skillInstalled) log.ok("android-cli skill refreshed via 'android init'");
   else if (androidRes.error) log.warn(`'android init' failed: ${androidRes.error}`);
-  writeManagedSection(target.instructionsFile, join18(gorMobileRoot(), "templates", target.instructionsSnippet));
+  writeManagedSection(target.instructionsFile, join19(gorMobileRoot(), "templates", target.instructionsSnippet));
   log.ok(`Managed instructions section refreshed (${target.instructionsFile})`);
 }
 async function cmdRepair(opts = {}) {
@@ -3736,8 +3673,8 @@ async function cmdMcp(opts = {}) {
 }
 
 // src/commands/uninstall.ts
-import { existsSync as existsSync23, readdirSync as readdirSync10, rmdirSync, rmSync as rmSync8 } from "fs";
-import { join as join19 } from "path";
+import { existsSync as existsSync24, readdirSync as readdirSync11, rmdirSync as rmdirSync2, rmSync as rmSync9 } from "fs";
+import { join as join20 } from "path";
 import { confirm as confirm3, isCancel as isCancel6, select as select3 } from "@clack/prompts";
 var EXCLUDE_ENTRIES2 = [
   ".claude/",
@@ -3761,7 +3698,7 @@ async function resolveMode(opts) {
 }
 function rmdirIfEmpty(dir) {
   try {
-    if (existsSync23(dir) && readdirSync10(dir).length === 0) rmdirSync(dir);
+    if (existsSync24(dir) && readdirSync11(dir).length === 0) rmdirSync2(dir);
   } catch {
   }
 }
@@ -3803,40 +3740,30 @@ async function uninstallProject(opts) {
       legacyMcp.fileDeleted ? `Removed ${LEGACY_PROJECT_MCP_FILE}` : `Dropped ${legacyMcp.removed.join(", ")} from ${LEGACY_PROJECT_MCP_FILE}`
     );
   }
-  if (existsSync23(spec.skillsDir)) {
-    for (const entry of readdirSync10(spec.skillsDir)) {
+  if (existsSync24(spec.skillsDir)) {
+    for (const entry of readdirSync11(spec.skillsDir)) {
       if (entry.startsWith("gor-mobile-") || entry === "android-cli" || entry === "debroid-cli") {
-        rmSync8(join19(spec.skillsDir, entry), { recursive: true, force: true });
+        rmSync9(join20(spec.skillsDir, entry), { recursive: true, force: true });
       }
     }
     rmdirIfEmpty(spec.skillsDir);
   }
   log.ok(`Skills removed (${spec.skillsDir})`);
-  if (existsSync23(spec.agentsDir)) {
-    for (const entry of readdirSync10(spec.agentsDir)) {
+  if (existsSync24(spec.agentsDir)) {
+    for (const entry of readdirSync11(spec.agentsDir)) {
       if (entry.startsWith("gor-mobile-")) {
-        rmSync8(join19(spec.agentsDir, entry), { force: true });
+        rmSync9(join20(spec.agentsDir, entry), { force: true });
       }
     }
     rmdirIfEmpty(spec.agentsDir);
   }
   log.ok(`Agents removed (${spec.agentsDir})`);
-  if (spec.workflowsDir && existsSync23(spec.workflowsDir)) {
-    const wfDir = spec.workflowsDir;
-    const managedWorkflows = marker.managed_workflows ?? [];
-    for (const entry of readdirSync10(wfDir)) {
-      if (managedWorkflows.includes(entry)) rmSync8(join19(wfDir, entry), { force: true });
-    }
-    rmdirIfEmpty(wfDir);
-    log.ok(`Workflows removed (${wfDir})`);
-  }
-  if ((marker.managed_settings ?? []).includes(WORKFLOW_SIZE_GUIDELINE)) {
-    removeWorkflowSizeGuideline(spec.hooksFile);
-  }
+  const legacy = removeLegacyWorkflows(spec, marker);
+  if (legacy.workflows.length > 0) log.ok(`Workflows removed (${join20(spec.home, "workflows")})`);
   removePermissionAllow(spec.hooksFile, marker.managed_permissions ?? []);
-  rmSync8(projectMarkerPath(root), { force: true });
-  rmSync8(legacyProjectMarkerPath(root), { force: true });
-  rmdirIfEmpty(join19(root, PROJECT_STATE_DIR));
+  rmSync9(projectMarkerPath(root), { force: true });
+  rmSync9(legacyProjectMarkerPath(root), { force: true });
+  rmdirIfEmpty(join20(root, PROJECT_STATE_DIR));
   log.ok(`Removed ${PROJECT_MARKER_NAME}`);
   const excl = await removeLocalExclude(root, EXCLUDE_ENTRIES2);
   if (excl && excl.added.length > 0) log.ok(`Local ignore cleaned (${excl.file})`);
@@ -3859,11 +3786,11 @@ async function uninstallMachine(opts) {
     teardownUserTarget(target);
   }
   log.step(`Removing ${GOR_MOBILE_HOME} (templates, rules)`);
-  if (existsSync23(GOR_MOBILE_HOME)) {
-    rmSync8(GOR_MOBILE_HOME, { recursive: true, force: true });
+  if (existsSync24(GOR_MOBILE_HOME)) {
+    rmSync9(GOR_MOBILE_HOME, { recursive: true, force: true });
   }
   log.step(`Removing ${GOR_MOBILE_CONFIG}`);
-  if (existsSync23(GOR_MOBILE_CONFIG)) rmSync8(GOR_MOBILE_CONFIG);
+  if (existsSync24(GOR_MOBILE_CONFIG)) rmSync9(GOR_MOBILE_CONFIG);
   rmdirIfEmpty(GOR_MOBILE_CONFIG_DIR);
   log.ok("gor-mobile artifacts removed");
   const cli = androidCliPath();
@@ -3893,14 +3820,14 @@ async function cmdUninstall(opts = {}) {
 }
 
 // src/commands/rules.ts
-import { existsSync as existsSync24, rmSync as rmSync9 } from "fs";
+import { existsSync as existsSync25, rmSync as rmSync10 } from "fs";
 async function rulesList() {
-  if (!existsSync24(GOR_MOBILE_RULES_DIR)) {
+  if (!existsSync25(GOR_MOBILE_RULES_DIR)) {
     log.warn("No rules pack installed. Run: gor-mobile rules use <url>");
     return;
   }
   const m = readManifest();
-  const cfg = existsSync24(GOR_MOBILE_CONFIG) ? readConfig2() : {};
+  const cfg = existsSync25(GOR_MOBILE_CONFIG) ? readConfig2() : {};
   const { branch, rev } = await gitBranchAndRev();
   console.log("Installed pack:");
   console.log(`  name:    ${m?.name ?? "?"}`);
@@ -3919,14 +3846,14 @@ async function rulesUse(target) {
     return;
   }
   const backup = `${GOR_MOBILE_RULES_DIR}.bak`;
-  if (existsSync24(GOR_MOBILE_RULES_DIR)) {
+  if (existsSync25(GOR_MOBILE_RULES_DIR)) {
     log.info(`Backing up existing pack to ${backup}`);
-    if (existsSync24(backup)) rmSync9(backup, { recursive: true, force: true });
+    if (existsSync25(backup)) rmSync10(backup, { recursive: true, force: true });
     const { renameSync: renameSync2 } = await import("fs");
     renameSync2(GOR_MOBILE_RULES_DIR, backup);
   }
   try {
-    if (existsSync24(target)) {
+    if (existsSync25(target)) {
       log.info(`Copying local pack from ${target}`);
       copyFromLocal(target);
     } else {
@@ -3935,10 +3862,10 @@ async function rulesUse(target) {
     }
   } catch (err) {
     log.err(`Install failed \u2014 restoring backup: ${err.message}`);
-    if (existsSync24(GOR_MOBILE_RULES_DIR)) {
-      rmSync9(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
+    if (existsSync25(GOR_MOBILE_RULES_DIR)) {
+      rmSync10(GOR_MOBILE_RULES_DIR, { recursive: true, force: true });
     }
-    if (existsSync24(backup)) {
+    if (existsSync25(backup)) {
       const { renameSync: renameSync2 } = await import("fs");
       renameSync2(backup, GOR_MOBILE_RULES_DIR);
     }
@@ -3947,7 +3874,7 @@ async function rulesUse(target) {
   }
   saveConfig(target);
   log.ok(`Rules pack installed at ${GOR_MOBILE_RULES_DIR}`);
-  if (existsSync24(backup)) rmSync9(backup, { recursive: true, force: true });
+  if (existsSync25(backup)) rmSync10(backup, { recursive: true, force: true });
   const res = validateManifest();
   if (!res.ok) {
     for (const e of res.errors) log.err(e);
@@ -4011,8 +3938,8 @@ async function cmdDocs(query) {
 }
 
 // src/commands/self-update.ts
-import { existsSync as existsSync25 } from "fs";
-import { join as join20 } from "path";
+import { existsSync as existsSync26 } from "fs";
+import { join as join21 } from "path";
 import { execa as execa11 } from "execa";
 function noteMigration() {
   if (legacyClaudeFootprint().length === 0) return;
@@ -4021,7 +3948,7 @@ function noteMigration() {
 }
 async function cmdSelfUpdate() {
   const root = gorMobileRoot();
-  if (existsSync25(join20(root, ".git"))) {
+  if (existsSync26(join21(root, ".git"))) {
     log.step(`git pull in ${root}`);
     await execa11("git", ["-C", root, "pull", "--ff-only"], { stdio: "inherit" });
     log.step("npm install");
@@ -4047,7 +3974,7 @@ async function cmdSelfUpdate() {
 }
 
 // src/commands/android.ts
-import { existsSync as existsSync26 } from "fs";
+import { existsSync as existsSync27 } from "fs";
 import { execa as execa12 } from "execa";
 async function cmdAndroid(args) {
   const cli = androidCliPath();
@@ -4056,7 +3983,7 @@ async function cmdAndroid(args) {
     process.exit(res.exitCode ?? 0);
   }
   const first = args[0];
-  if (first && ["build", "assemble", "assembleDebug", "assembleRelease"].includes(first) && existsSync26("./gradlew")) {
+  if (first && ["build", "assemble", "assembleDebug", "assembleRelease"].includes(first) && existsSync27("./gradlew")) {
     log.info(`Falling back to ./gradlew ${first}`);
     const res = await execa12("./gradlew", [first], { stdio: "inherit", reject: false });
     process.exit(res.exitCode ?? 0);
@@ -4071,11 +3998,11 @@ async function cmdAndroid(args) {
 }
 
 // src/commands/android-skills.ts
-import { existsSync as existsSync27 } from "fs";
-import { join as join21 } from "path";
+import { existsSync as existsSync28 } from "fs";
+import { join as join22 } from "path";
 import { cancel as cancel5, isCancel as isCancel7, multiselect, spinner } from "@clack/prompts";
 function isInstalled(name) {
-  return existsSync27(join21(CLAUDE_SKILLS_DIR, name, "SKILL.md"));
+  return existsSync28(join22(CLAUDE_SKILLS_DIR, name, "SKILL.md"));
 }
 async function cmdAndroidSkills() {
   if (!androidCliPath()) {
@@ -4143,12 +4070,12 @@ async function cmdAndroidSkills() {
 }
 
 // src/commands/update.ts
-import { existsSync as existsSync28 } from "fs";
-import { join as join22 } from "path";
+import { existsSync as existsSync29 } from "fs";
+import { join as join23 } from "path";
 import { execa as execa13 } from "execa";
 async function cmdUpdate() {
   log.step("Updating rules pack");
-  if (existsSync28(join22(GOR_MOBILE_RULES_DIR, ".git"))) {
+  if (existsSync29(join23(GOR_MOBILE_RULES_DIR, ".git"))) {
     const res = await execa13(
       "git",
       ["-C", GOR_MOBILE_RULES_DIR, "pull", "--ff-only"],
@@ -4210,7 +4137,7 @@ program.command("version").description("Print version").action(() => {
 program.command("setup").description("Machine setup (once): android CLI, ast-index, rules pack, hook scripts, Codex").option("--dry-run", "print planned actions; no filesystem changes").option("-y, --yes", "assume yes to all prompts (non-interactive)").option("--no-tui", "force plain-text prompts").option("--advanced", "confirm each step and allow URL override").option("--rules <url>", "custom rules-pack git URL").option("--skip-android-update", "do not auto-update the Android CLI").option("--target <targets>", "user-level agents to set up (codex)").action(async (opts) => {
   await cmdSetup(opts);
 });
-program.command("init").description("Install the gor-mobile workflow into the current repo (per-project)").option("--dry-run", "print planned actions; no filesystem changes").option("-y, --yes", "assume yes to all prompts (non-interactive)").option("--no-tui", "force plain-text prompts").option("--platform <platform>", "android or ios (skip detection/prompt)").option("--plugins <list>", "comma-separated extra plugins to enable (figma,swagger-android,\u2026)").action(async (opts) => {
+program.command("init").description("Install gor-mobile into the current repo (per-project)").option("--dry-run", "print planned actions; no filesystem changes").option("-y, --yes", "assume yes to all prompts (non-interactive)").option("--no-tui", "force plain-text prompts").option("--platform <platform>", "android or ios (skip detection/prompt)").option("--plugins <list>", "comma-separated extra plugins to enable (figma,swagger-android,\u2026)").action(async (opts) => {
   await cmdInit(opts);
 });
 program.command("migrate").description("Remove a legacy v0.2.x global install (keeps the rules pack)").option("-y, --yes", "skip confirmation").action(async (opts) => {

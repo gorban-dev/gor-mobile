@@ -64,7 +64,7 @@ program
 
 program
   .command("init")
-  .description("Install the gor-mobile workflow into the current repo (per-project)")
+  .description("Install gor-mobile into the current repo (per-project)")
   .option("--dry-run", "print planned actions; no filesystem changes")
   .option("-y, --yes", "assume yes to all prompts (non-interactive)")
   .option("--no-tui", "force plain-text prompts")

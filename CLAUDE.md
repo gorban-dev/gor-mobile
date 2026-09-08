@@ -139,7 +139,9 @@ When adding a new slash command or agent template (`templates/agents/foo.md`):
 
 ## Tests
 
-No automated tests for now. Verify changes by running:
+`npm test` runs 6 bash scripts (hooks idempotency, status line, ast-index
+guard, session-start compaction, init dir gate, 0.4.5→0.5.0 upgrade via
+repair and uninstall against the `v0.4.5` tag). Beyond that, verify by running:
 
     npm run build
     npx tsc --noEmit

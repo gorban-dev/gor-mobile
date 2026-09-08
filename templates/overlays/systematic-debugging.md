@@ -130,7 +130,7 @@ build AND the `debroid` CLI is installed (`gor-mobile setup` offers it;
 check with `which debroid`, source: github.com/PatilShreyas/debroid; the
 `debroid-cli` skill in this repo's skills dir carries the full command
 reference), gather RUNTIME evidence before forming hypotheses from static
-reads. Inside a `/gor-execute` run this is the step that replaces guessing:
+reads. Inside a plan execution (SDD / executing-plans) this is the step that replaces guessing:
 an implementer whose verification fails for a runtime reason has `debroid`
 available and pre-authorized, and a trapped variable value settles in one
 round what three edit-and-rebuild cycles do not:

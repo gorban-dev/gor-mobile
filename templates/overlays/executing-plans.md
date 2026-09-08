@@ -34,6 +34,35 @@ verification step instead. The only exception is an explicit user request for
 tests; if the user asked, write the test the task describes. Never write a test
 merely because the plan listed one, and never fabricate a new seam to test.
 
+### Execution gates (delta)
+
+- **Baseline pass, before Task 1.** Run every distinct verification command
+  the plan names once on the still-untouched tree. One that already fails
+  cannot judge a diff: drop it as a gate for this run, note
+  `Baseline: "<command>" fails on the clean tree — dropped as a gate` in the
+  checkpoint, list it under `Unverified:` in the final report. Skip only when
+  the user says so.
+- **A gate that stays red after two honest fix attempts is adjudicated.**
+  Re-run the command on the pre-task tree: `scripts/sdd-isolate BASE_SHA`
+  (BASE_SHA from `scripts/sdd-snapshot` taken before the task) prints a temp
+  dir holding exactly that tree — no checkout, stash or clone. Fails the same
+  way → the command is unusable: the task's code stands, the command goes to
+  `Unverified:`, the final report says `Needs manual verification: yes`.
+  Passes on the clean tree → the code is broken: stop, report, do not move
+  to the next task.
+- **Tooling contract** for every task you implement or delegate: the
+  `## Tooling contract` section of the
+  `gor-mobile-subagent-driven-development` skill's `implementer-prompt.md`
+  (docs-first for external APIs, `ast-index` over grep, gradle → `android
+  describe` → `android run --apks`, gestures via `android screen resolve` +
+  `adb shell input`, foreground-package check after a deploy, `debroid` for
+  runtime evidence before rewriting on a hypothesis, `BUILD SUCCESSFUL` in
+  the log, no composite build commands, isolation run via `sdd-isolate`).
+  Paste it into each Sonnet delegation prompt with the script path and
+  BASE_SHA filled in.
+- **Final report** lists `Unverified:` and `Needs manual verification:
+  yes|no`; when yes, tell the user which commands to run themselves.
+
 ### What NOT to delegate
 - Build config (`gradle`, CI, release machinery).
 - Tasks the plan flags "design decision" or "human review required".

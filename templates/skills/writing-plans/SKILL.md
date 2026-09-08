@@ -47,7 +47,7 @@ This structure informs the task decomposition. Each task should produce self-con
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** execute this plan with the `/gor-execute <this-plan-path>` workflow. On Codex (no workflows): REQUIRED SUB-SKILL superpowers:subagent-driven-development (recommended) or superpowers:executing-plans, task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -133,11 +133,9 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
 ## Execution Handoff
 
-After saving the plan, hand off to execution:
-
-- Claude: the `/gor-execute <plan-path>` workflow runs the plan
-  deterministically (per-task implementer, verification, combined review,
-  fix loop, final /gor-review gate). The gor-mobile overlay's handoff seam
-  (checkpoint + plan-approval dialog) governs how the session gets there.
-- Codex (no workflows): dispatch via superpowers:subagent-driven-development
-  (recommended) or superpowers:executing-plans, as before.
+After saving the plan, hand off to execution through the gor-mobile overlay's
+handoff seam below (checkpoint + plan-approval dialog). Execution runs the
+sub-skill named in the plan header — superpowers:subagent-driven-development
+(recommended: fresh implementer per task, one combined review per task,
+bounded fix loop, final review gate) or superpowers:executing-plans (the
+session implements, delegating small tasks). Same chain on Claude and Codex.

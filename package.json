@@ -1,6 +1,6 @@
 {
   "name": "gor-mobile",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "description": "Android-aware overlay installer for Claude Code and Codex — superpowers-style workflow",
   "type": "module",
   "bin": {
@@ -22,7 +22,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "clean": "rm -rf dist",
-    "test": "bash test/hooks-idempotency.sh && bash test/statusline.sh && bash test/ast-index-guard.test.sh && bash test/session-start-compaction.test.sh && bash test/init-dir-gate.test.sh"
+    "test": "bash test/hooks-idempotency.sh && bash test/statusline.sh && bash test/ast-index-guard.test.sh && bash test/session-start-compaction.test.sh && bash test/init-dir-gate.test.sh && bash test/upgrade-045.test.sh"
   },
   "repository": {
     "type": "git",

@@ -233,6 +233,67 @@ and `writing-plans` are **Skills** (invoke via the `Skill` tool);
 `{"status":"Agent type not found"}` for a review step, the dispatch went to the
 wrong tool — retry via `Skill(gor-mobile-requesting-code-review)`.
 
+### Execution gates (delta — carried over from the 0.4.x executor)
+
+Five rules the orchestrator applies in the task loop above. They cost no
+extra dispatch: everything here is a Bash call from this session or a
+decision on data a dispatch already returned.
+
+- **Baseline pass, before Task 1.** Collect every distinct verification
+  command the plan names (per task, plus the plan-wide one) and run each once
+  on the still-untouched tree. A command that fails there cannot judge a
+  diff: drop it as a gate for this run, record
+  `Baseline: "<command>" fails on the clean tree — dropped as a gate` in the
+  checkpoint, and list it under `Unverified:` in the final report. Skip the
+  pass only when the user says so ("без baseline" / "skip the baseline").
+- **A red gate enters the loop as a finding and is adjudicated, not looped
+  forever.** A verification run that fails after the implementer reports
+  DONE enters the fix loop as a Critical finding titled `verification
+  failed`; each fix round re-runs the command. Two early exits go to the
+  body's breaker as written there (per-finding park / BLOCKED rulings): an
+  implementer returning BLOCKED / NEEDS_CONTEXT on a fix round (after the
+  body's "provide the missing context and re-dispatch" once), and the no-op
+  guard below. Only the `verification failed` finding — at round 5, or on
+  that early exit — gets a different question with two rulings: (a) the
+  command is unusable on any tree (the implementer's isolation run on the
+  pre-task tree fails the same way, or the command names a destination/flag
+  that cannot exist) → the task's code stands, the gate is dropped, the
+  command goes to `Unverified:`, and the final report carries `Needs manual
+  verification: yes`; (b) the code is broken → the task is parked with a
+  recorded ruling and the plan stops. Confirm the claim yourself before
+  ruling (a): `scripts/sdd-isolate BASE_SHA` materializes the exact pre-task
+  tree in a temp dir (no checkout, stash, worktree or clone — a clone would
+  give HEAD, i.e. the tree before Task 1, not before this task); run the
+  command there. Every implementer dispatch carries the same script path
+  and BASE_SHA so the isolation run happens FIRST on an unexpected failure,
+  not after three rounds of repairing correct code.
+- **Process notes never gate the loop.** The reviewer's `Process notes`
+  section (or `processNotes` field where the harness returns one) — a
+  defect in the plan, the brief or the review context — an under-listed
+  `Conforms to:` line, a mislabelled step, an omitted canonical example) are
+  collected into the checkpoint under `Process notes:` and surfaced in the
+  final report, at any severity. They are never handed to an implementer as
+  findings and never counted as open. An implementer's `unfixable` entries
+  (finding number, verbatim title, why — the action item lies outside the
+  task's allowed paths) are removed from the open list and recorded as
+  process notes; no re-review is dispatched for them. A red verification
+  gate is never droppable this way — only the breaker above rules on it.
+- **A fix round that changed nothing goes to the breaker.** Compare the tree
+  SHA from `scripts/sdd-snapshot` before and after the fix dispatch. Equal
+  SHAs mean the round closed nothing; do not spend a re-review on it — go to
+  the breaker with the open findings (or, for a red gate, the ruling above).
+  Same for a gate that stayed red across a byte-identical round.
+- **Every implementer and fix dispatch carries the tooling contract** — the
+  `## Tooling contract` section of `implementer-prompt.md`. Fix rounds that
+  resume the original implementer inherit it; a fresh fix dispatch (rounds
+  4-5, or Codex) repeats it verbatim.
+
+**Final report additions:** after the final review, the completion entry in
+the checkpoint lists `Unverified:` (commands dropped by baseline or ruled
+unusable, each with its tail of output), `Process notes:` (deduplicated), and
+`Needs manual verification: yes|no`. When it is `yes`, tell the user which
+commands they must run themselves before treating the code as checked.
+
 ### Context compaction — checkpoint every verified task boundary
 
 The orchestrator's context grows across tasks (subagent results, verification
