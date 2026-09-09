@@ -1,6 +1,6 @@
 ---
 name: executing-plans
-description: Use when you have a written implementation plan to execute in a separate session with review checkpoints
+description: Use when the plan header's Execution mode names executing-plans — dependency-chained or mixed tasks the session implements itself, delegating only self-contained small tasks
 ---
 
 # Executing Plans
@@ -11,7 +11,7 @@ Load plan, review critically, execute all tasks, report when complete.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-**Note:** Tell your human partner that Superpowers works much better with access to subagents. The quality of its work will be significantly higher if run on a platform with subagent support (such as Claude Code or Codex). If subagents are available, use superpowers:subagent-driven-development instead of this skill.
+**Note:** The plan header's `**Execution mode:**` line names this skill because the tasks form a dependency chain, or no clear delegation boundary exists (the Execution Mode rule in writing-plans): one session keeps the chain of decisions that fresh subagent contexts lose. Do not switch to superpowers:subagent-driven-development on your own — if the plan looks mis-classified (every task self-contained, with its own inputs, result and verification), tell the user and let them choose.
 
 ## The Process
 

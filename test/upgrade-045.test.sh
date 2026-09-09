@@ -8,6 +8,7 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+CUR="$(node -p 'require("./package.json").version')"
 git rev-parse -q --verify v0.4.5 >/dev/null || { echo "skip: tag v0.4.5 not present"; exit 0; }
 OLD="$(mktemp -d)/gm-045"
 git worktree add -q "$OLD" v0.4.5
@@ -45,7 +46,7 @@ check "allowlist did not shrink"          '[ "$(jq ".permissions.allow|length" .
 check "marker: managed_workflows gone"    '[ "$(jq "has(\"managed_workflows\")" .gor-mobile/marker.json)" = false ]'
 check "marker: guideline not in managed_settings" '[ "$(jq ".managed_settings | index(\"workflowSizeGuideline\")" .gor-mobile/marker.json)" = null ]'
 check "14 gor-mobile-* skills"            '[ "$(ls -d .claude/skills/gor-mobile-* | wc -l | tr -d " ")" = 14 ]'
-check "marker version 0.5.0"              '[ "$(jq -r .version .gor-mobile/marker.json)" = 0.5.0 ]'
+check "marker version $CUR"               '[ "$(jq -r .version .gor-mobile/marker.json)" = "$CUR" ]'
 check "sdd-isolate installed"             '[ -x "$GOR_MOBILE_HOME/scripts/sdd-isolate" ]'
 check "doctor: no leftover warning"       '! "$ROOT/bin/gor-mobile" doctor 2>&1 | grep -qi leftover'
 

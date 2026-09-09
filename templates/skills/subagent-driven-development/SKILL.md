@@ -21,29 +21,19 @@ signatures) live in the brief — never retyped into the prompt.
 
 ## When to Use
 
-```dot
-digraph when_to_use {
-    "Have implementation plan?" [shape=diamond];
-    "Tasks mostly independent?" [shape=diamond];
-    "Stay in this session?" [shape=diamond];
-    "subagent-driven-development" [shape=box];
-    "executing-plans" [shape=box];
-    "Manual execution or brainstorm first" [shape=box];
+The plan header's `**Execution mode:**` line names this skill. The
+writing-plans skill chose it because every task is self-contained: inputs,
+result and verification are stated, and whatever a later task needs can be
+written into a brief. Do not re-decide here — if the tasks turn out to be a
+dependency chain, tell the user and let them choose; never switch skills
+silently.
 
-    "Have implementation plan?" -> "Tasks mostly independent?" [label="yes"];
-    "Have implementation plan?" -> "Manual execution or brainstorm first" [label="no"];
-    "Tasks mostly independent?" -> "Stay in this session?" [label="yes"];
-    "Tasks mostly independent?" -> "Manual execution or brainstorm first" [label="no - tightly coupled"];
-    "Stay in this session?" -> "subagent-driven-development" [label="yes"];
-    "Stay in this session?" -> "executing-plans" [label="no - parallel session"];
-}
-```
-
-**vs. Executing Plans (parallel session):**
-- Same session (no context switch)
-- Fresh subagent per task (no context pollution)
-- Two-stage review after each task: spec compliance first, then code quality
-- Faster iteration (no human-in-loop between tasks)
+**vs. Executing Plans:**
+- Fresh subagent per task: a bounded prompt, a cheaper model, no context
+  growth in the controller
+- Review after each task with a bounded fix loop
+- More dispatches, so more first-request tokens; the gain is isolation and
+  cost per task, not measured correctness or parallel speed
 
 ## The Process
 

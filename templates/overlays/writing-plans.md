@@ -201,8 +201,8 @@ plan exits through a handoff that offers clearing.
    directory for task briefs, reports, and review packages). Seed it with:
    - `Spec:` and `Plan:` — the two file paths.
    - A task table with every task `pending`.
-   - `Next action:` — Task 1, plus the execution mode (Subagent-Driven per
-     the plan header unless the user chose otherwise earlier).
+   - `Next action:` — Task 1, plus the execution mode copied from the plan
+     header's `**Execution mode:**` line.
    Execution fills in decisions/deviations/touched-files later. This must be
    on disk BEFORE the handoff: when the user picks the clear option, you do
    not get another turn.

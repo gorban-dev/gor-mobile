@@ -47,13 +47,15 @@ This structure informs the task decomposition. Each task should produce self-con
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use the sub-skill named in **Execution mode** below (superpowers:subagent-driven-development or superpowers:executing-plans) to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** [One sentence describing what this builds]
 
 **Architecture:** [2-3 sentences about approach]
 
 **Tech Stack:** [Key technologies/libraries]
+
+**Execution mode:** [executing-plans | subagent-driven-development] — [one line: which Execution Mode row fired, or "user's choice"]. Tasks: [N], files touched: [M], dependency chain: [yes | no].
 
 **Spec:** [path to the spec/design doc this plan implements — the plan
 argues from the spec, so the spec travels with it; executors read both]
@@ -131,11 +133,48 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
+## Execution Mode
+
+Every plan names its execution mode in the header. The choice is
+qualitative and follows the shape of the task list; no file count or task
+count selects a mode on its own. Decide it after the self-review, when the
+task list is final, taking the first row that matches:
+
+1. **The user chose a mode** (executing-plans, subagent-driven-development,
+   or fork inside executing-plans) → that mode. Record "user's choice".
+2. **The tasks form a dependency chain** — a task builds on decisions or
+   interfaces the previous task settles, the same files or interfaces are
+   reshaped more than once, or the work is a sequential refactor inside one
+   module → **executing-plans**. One session keeps the chain of decisions;
+   a fresh context has to be told every one of them, and nothing measured
+   shows a fresh implementer writing more correct code.
+3. **The tasks are self-contained** — each states its inputs, its result and
+   its verification, and every decision a later task needs can be written
+   into a brief or the progress checkpoint → **subagent-driven-development**.
+   The bounded scope is what a fresh prompt buys: a reason to isolate the
+   implementer and run it on a cheaper model, not a promise of higher
+   correctness or parallel speed.
+4. **Anything else** (mixed, small, no clear delegation boundary) →
+   **executing-plans**.
+
+What does NOT pick a mode: "10+ files", "3+ tasks", or a `Conforms to:`
+line. Record task count, files touched and whether a dependency chain
+exists in the header — they are observed parameters for later calibration,
+not triggers. `Conforms to:` stays a mandatory input for the reviewer in
+either mode; it says nothing about who implements.
+
+Write the mode and a one-line reason into the header's `**Execution mode:**`
+line. Never change the mode at execution time: the executor runs what the
+header names, and if the plan looks mis-classified it tells the user and
+lets them choose.
+
 ## Execution Handoff
 
 After saving the plan, hand off to execution through the gor-mobile overlay's
 handoff seam below (checkpoint + plan-approval dialog). Execution runs the
-sub-skill named in the plan header — superpowers:subagent-driven-development
-(recommended: fresh implementer per task, one combined review per task,
-bounded fix loop, final review gate) or superpowers:executing-plans (the
-session implements, delegating small tasks). Same chain on Claude and Codex.
+sub-skill named in the plan header's `**Execution mode:**` line —
+superpowers:subagent-driven-development (fresh implementer per task, one
+combined review per task, bounded fix loop, final review gate) or
+superpowers:executing-plans (the session implements, delegating
+self-contained small tasks; fork on the user's request). Same chain on
+Claude and Codex.

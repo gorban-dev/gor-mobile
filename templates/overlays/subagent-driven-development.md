@@ -85,9 +85,11 @@ user's default main model) when any of:
 Surface-level checks (lint-like summaries, "does this file compile-look
 right") can drop to `model = "haiku"` when explicitly called out.
 
-On Codex there is no per-dispatch model choice — the tiers map to
-`model_reasoning_effort`: haiku → `low`, sonnet → `medium`,
-session model → `high`.
+On Codex (0.153.4+) `spawn_agent` takes `model` and `reasoning_effort`
+per dispatch; when the harness exposes only the effort, map the tiers to
+`model_reasoning_effort`: haiku → `low`, sonnet → `medium`, session model
+→ `high`. Record the model the usage actually reports — a child can land
+on a different model than the UI shows.
 
 Always run the verification step yourself (orchestrator) after the
 subagent returns — do not trust its self-report. A Sonnet "DONE" without
@@ -186,9 +188,10 @@ load-bearing for the Codex second opinion:
   implementer redispatches with `model` omitted (inherits the session
   model). On Codex bump `model_reasoning_effort` one step
   (`low → medium → high`).
-- **Resume vs fresh:** rounds 1-3 resume the original implementer when the
-  harness supports messaging a finished subagent; Codex cannot — there,
-  every round is a fresh dispatch carrying the task text, the open
+- **Resume vs fresh:** rounds 1-3 resume the original implementer —
+  Claude by messaging the finished subagent, Codex by a follow-up to the
+  child agent (subagents V2). Only when the runtime has no follow-up does
+  a round become a fresh dispatch carrying the task text, the open
   findings, and the fix history (the skill body's fallback).
 - **Bookkeeping** lands in the checkpoint file
   `.gor-mobile/state/<plan-basename>/progress.md` inside the plan

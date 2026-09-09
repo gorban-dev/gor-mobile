@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.5.1 — 2026-09-09
+
+Run `gor-mobile repair` — the `writing-plans`, `subagent-driven-development`
+and `executing-plans` skills and the `executing-plans` /
+`subagent-driven-development` overlays changed.
+
+- **Execution mode is a qualitative choice, recorded in the plan; the
+  default is `executing-plans`.** The plan header gains an
+  `**Execution mode:**` line with the reason plus task count, files touched
+  and whether a dependency chain exists (observed parameters, not
+  triggers). `writing-plans` fills it after the self-review: the user's
+  explicit choice wins; a dependency chain or a sequential single-module
+  refactor → `executing-plans`; every task self-contained (inputs, result,
+  verification stated, later needs expressible in a brief) →
+  `subagent-driven-development`; anything else → `executing-plans`. No file
+  count, task count or `Conforms to:` line selects a mode. Basis:
+  `docs/research/2026-09-09-execution-mode.md` (38 sources) — no measurement
+  shows a fresh implementer writing more correct code, while the
+  independent reviewer both modes already run is supported (Cross-Context
+  Review, F1 28,6 % vs 24,6 %); Anthropic's 10+ files threshold is about
+  files *explored*, not changed.
+- **No silent mode switch.** `executing-plans` no longer tells the session
+  to jump to `subagent-driven-development` whenever subagents exist
+  (upstream issue #992); both executors run what the header names and
+  report a suspected mis-classification to the user instead.
+- **`executing-plans` delegates only self-contained tasks.** The ≤ 6 files
+  rule now also requires that the prompt can carry every decision the task
+  depends on; a task that needs an unrecorded session decision is done in
+  the session, or the decision is written to the checkpoint first. A
+  layer-touching task that the next task builds on gets its combined
+  review before the executor advances.
+- **`fork` inside `executing-plans`, user opt-in only (experimental).**
+  `Agent(subagent_type = "fork")` runs a dependent task with the full
+  session context inherited and its output isolated; the session model is
+  inherited (no override) and the actual model is recorded in the
+  checkpoint. Codex 0.153.4+: `spawn_agent` with `fork_turns = "all"`.
+  Never for reviewers. The executor never picks fork on its own.
+- **Codex facts corrected in the `subagent-driven-development` overlay:**
+  `spawn_agent` takes `model` / `reasoning_effort` per dispatch (verified in
+  `codex-rs` at `rust-v0.153.4`), and fix-loop rounds 1-3 resume the child
+  via follow-up instead of a fresh dispatch.
+
 ## 0.5.0 — 2026-09-08
 
 Run `gor-mobile repair` in each repo — required: it removes the 0.4.x

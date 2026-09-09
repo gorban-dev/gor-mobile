@@ -11,8 +11,11 @@ For every task in the plan, in order:
 
 1. Mark the TodoWrite entry `in_progress`.
 2. **Classify the task:**
-    - Pure code change on an enumerated set of files (create / modify known
-      paths, tests, wiring) with ≤ 6 files total → delegate to Sonnet:
+    - **Self-contained** — a pure code change on an enumerated set of files
+      (create / modify known paths, wiring) with ≤ 6 files total, AND the
+      prompt can carry everything the task depends on: the brief, the
+      interfaces earlier tasks settled, the reference files → delegate to
+      Sonnet:
 
             Task(
               subagent_type = "general-purpose",
@@ -20,12 +23,34 @@ For every task in the plan, in order:
               prompt        = <task-prompt-with-allowed-paths-and-refs>
             )
 
-    - Cross-module refactor, scope > 6 files, or the plan marks the task
-      as "design decision" / "human review required" → do it yourself
+      The file count alone does not qualify a task. A task that needs a
+      decision the session made but never wrote down (a shape settled while
+      implementing the previous task, a resolved ambiguity) is not
+      self-contained: write the decision into the checkpoint first and
+      delegate, or do it yourself.
+    - **Dependent** — cross-module refactor, scope > 6 files, the plan marks
+      the task "design decision" / "human review required", or the task
+      reshapes what the previous task just built → do it yourself
       (session model).
+    - **Fork (user opt-in only, experimental)** — when the user asked for
+      fork for this plan or this task, run a dependent task in
+      `Agent(subagent_type = "fork", prompt = <task scope + report path>)`
+      instead of in the session: the child inherits the full session
+      context (decisions included) and its tool output stays out of the
+      session. The model cannot be overridden (a fork inherits the session
+      model); record the actual model in the checkpoint. Codex 0.153.4+:
+      `spawn_agent` with `fork_turns = "all"`. Never pick fork yourself,
+      and never fork a reviewer — a reviewer must not inherit the author's
+      history. The child returns status, a one-line summary and the
+      decisions it made; write those into the checkpoint before the next
+      task.
 3. Run the task's verification step yourself (Gradle, compile check). A
    subagent "DONE" without a passing verification is not done.
-4. Mark TodoWrite `completed`, advance.
+4. **Review before dependents build on it.** If the task is layer-touching
+   (carries a `Conforms to:` line) and a later task builds on its shape,
+   dispatch the combined review (Review routing below) now, before
+   advancing — the next task must not build on an unreviewed shape.
+5. Mark TodoWrite `completed`, advance.
 
 **Skip baked-in test steps unless the user asked for tests.** If a task
 prescribes writing a failing test (a plan written before the TDD removal, or
@@ -68,6 +93,9 @@ merely because the plan listed one, and never fabricate a new seam to test.
 - Tasks the plan flags "design decision" or "human review required".
 - Anything where the allowed-paths list would balloon past ~6 files —
   the orchestrator handles those itself (session model).
+- A task whose prompt would need a session decision that is in neither the
+  brief nor the checkpoint — record the decision first, or do the task
+  yourself.
 
 ### Rules-pack usage
 Read section paths from `$HOME/.gor-mobile/rules/manifest.json → .sections`
