@@ -7,13 +7,12 @@ description: Use when starting any conversation - establishes how to find and us
 If you were dispatched as a subagent to execute a specific task, skip this skill.
 </SUBAGENT-STOP>
 
-<EXTREMELY-IMPORTANT>
-If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
-
-IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
-
-This is not negotiable. This is not optional. You cannot rationalize your way out of this.
-</EXTREMELY-IMPORTANT>
+Invoke the matching gor-mobile skill before the first tool call or
+clarifying question. The skills carry what the code does not show: the
+repo's Android conventions and layer examples, the docs-first and
+examples-first gates, the review routing and the no-git policy. A task that
+turns out not to need the skill costs one invocation; a task run without it
+reproduces the failures the gates exist for.
 
 ## The Rule
 
@@ -30,24 +29,14 @@ When multiple skills apply, process skills come first — they set the approach,
 - "Let's build X" → superpowers:brainstorming first, then implementation skills.
 - "Fix this bug" → superpowers:systematic-debugging first, then domain skills.
 
-## Red Flags
-
-These thoughts mean STOP—you're rationalizing:
+## Where the routing usually slips
 
 | Thought | Reality |
 |---------|---------|
-| "This is just a simple question" | Questions are tasks. Check for skills. |
-| "I need more context first" | Skill check comes BEFORE clarifying questions. |
-| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
-| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
-| "Let me gather information first" | Skills tell you HOW to gather information. |
-| "This doesn't need a formal skill" | If a skill exists, use it. |
-| "I remember this skill" | Skills evolve. Read current version. |
-| "This doesn't count as a task" | Action = task. Check for skills. |
-| "The skill is overkill" | Simple things become complex. Use it. |
-| "I'll just do this one thing first" | Check BEFORE doing anything. |
-| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
-| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+| "Let me grep / read the code first" | Structural lookups go through the ast-index skill; the guard hook denies bare-identifier greps anyway. |
+| "This is a one-line fix" | One-line fixes touch a layer, and the layer has a canonical shape. Route through the skill. |
+| "I know this Jetpack API" | Cutoff → APIs drift. The docs-first gate runs before any signature is written. |
+| "Another plugin's skill matched" | A foreign match does not replace the gor-mobile process skill; run both. |
 
 ## Platform Adaptation
 

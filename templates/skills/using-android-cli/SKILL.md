@@ -141,14 +141,11 @@ and the two behaviours their help text does not state:
 also removes). Outside a TTY it prints the list and installs nothing — never
 reach for it to install a skill yourself.
 
-> **Red Flag — STOP.** Reporting "there is no such skill" after searching only
-> `.claude/skills/`, the user skills folder and the plugin marketplaces. None
-> of the three sees the android catalog. Field case: a user asked to run
-> `r8-analyzer`, was told it did not exist, and `android skills find r8` had
-> it all along — while the stock `[[android-cli]]` skill sat in the same
-> session advertising "discover and install official Android skills" in its
-> own description. An installed, well-described skill is not a routing
-> guarantee; this rule is.
+Reporting "there is no such skill" after searching only `.claude/skills/`,
+the user skills folder and the plugin marketplaces is the routing failure
+this section exists for: none of the three sees the android catalog, and an
+installed, well-described stock skill is not a routing guarantee — this rule
+is.
 
 ## When `android` is missing or a command fails
 1. Do not silently fall back to `adb`/`./gradlew` for what the android CLI

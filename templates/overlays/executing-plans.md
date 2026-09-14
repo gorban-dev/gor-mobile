@@ -118,21 +118,9 @@ contract: read the referenced files before writing code. A layer-touching
 task with no artifact line is a plan defect — stop and fix the plan (run
 its examples-first gate), do not improvise references.
 
-> **Red Flag — STOP.** Dispatching or self-executing a layer-touching task
-> without reading its `Conforms to:` reference files. The code-quality
-> reviewer agents independently check diff shape against canonical
-> examples, so a skipped reference still surfaces downstream — attach and
-> read the files up front instead.
-
-### Override: no checkpoint commits
-
-The upstream skill body suggests committing at phase boundaries
-(review checkpoints between tasks). The gor-mobile overlay
-**overrides this**: never run `git commit` between tasks or phases,
-and never create branches / worktrees. All changes accumulate as
-uncommitted modifications in the working tree until the user decides
-to commit. Verification (`./gradlew :<module>:test ...`) still runs
-after every task — that's correctness gating, not git state.
+A skipped reference file still surfaces downstream — the reviewer checks
+diff shape against the canonical examples on its own — but as a fix round
+instead of a correct first pass; attach and read the files up front.
 
 ### Review routing — one combined review per checkpoint, Codex once at the end
 
@@ -147,11 +135,13 @@ overrun. Tier by task category: **non-behavioral** tasks (wiring / DI /
 resources / UI-flag — no input→output or state-transition logic) downgrade to
 `model = "haiku"` (Codex: effort `low`) with a reduced checklist (allowed-paths
 respected, compiles, diff shape); escalation triggers (large diff,
-security/auth/payments/crypto/IPC, an explicit deep-review ask) go to
-`Agent(gor-mobile-code-reviewer-deep)`, which runs on the session model.
+security/auth/payments/crypto/IPC, an explicit deep-review ask) go to the
+deep tier: `Agent(gor-mobile-code-reviewer)` with `model` omitted (session
+model) and the extra-scrutiny paragraph from the `requesting-code-review`
+overlay at the top of the prompt.
 
 **One Codex gate, at the end.** After the last plan task is implemented and
-verified — during Complete Development, before you present completion options —
+verified — during Complete Development, before you report completion —
 run a single final review over the whole change through
 `Skill(gor-mobile-requesting-code-review)`. That skill owns the two-pass mandate
 — the **deep** reviewer (session model) focused on cross-task properties

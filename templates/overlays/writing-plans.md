@@ -18,11 +18,11 @@ for tests (for a specific task or the whole feature), plan a normal test step
 for the tasks it covers, with real assertions against behavior. Absent that
 request, tests are not part of the plan.
 
-> **Red Flag — STOP.** Emitting "Step 1: Write the failing test" into a task by
-> reflex. The user did not ask for tests → the plan has no test step. Never
-> invent a new seam (a flag, an extracted helper) purely to make something
-> unit-testable; plan the minimal change and verify it, on-device where the
-> effect is only observable there.
+"Step 1: Write the failing test" emitted by reflex is the defect this section
+prevents: absent a user request the plan has no test step, and no new seam (a
+flag, an extracted helper) is invented to make something unit-testable — plan
+the minimal change and verify it, on-device where the effect is only
+observable there.
 
 ### Docs-first gate (plan phase) — cite the API source in every step
 
@@ -36,9 +36,9 @@ source for behavior). A step that pastes an API signature with no cited source
 the implementer to code a remembered, possibly-drifted signature. The
 Self-Review gate below verifies this and flags unsourced API signatures.
 
-> **Red Flag — STOP.** Emitting "full code" for a task from memory of the API.
-> If you cannot cite where a signature came from for the pinned version, you
-> have not verified it — resolve it via the ladder before writing the step.
+"Full code" written from memory of the API is the defect: a signature whose
+source for the pinned version you cannot cite is unverified — resolve it via
+the ladder before writing the step.
 
 ### Examples-first gate (plan phase) — every layer task carries its shape reference
 
@@ -98,14 +98,12 @@ resolves on disk, that no example whose kind of declaration the task creates
 is missing from the line, and that the task's code does not contradict the
 cited reference. A layer-touching task with none is a plan defect.
 
-> **Red Flag — STOP.** Writing a `Conforms to:` line from the first entry in
-> the layer's file list. The list is not ranked — read the files, then cite
-> the ones whose declarations this task reproduces.
-
-> **Red Flag — STOP.** A task that designs retry / caching / mapping logic
-> into a datasource when the cited layer example is a one-liner. That plan is
-> anchored on an external instruction, not the conventions — move the
-> behavior where the conventions put it, or escalate.
+The layer's file list is not ranked: a `Conforms to:` line copied from its
+first entry cites the wrong shape — read the files, then cite the ones whose
+declarations this task reproduces. And a task that designs retry / caching /
+mapping logic into a datasource whose cited example is a one-liner is
+anchored on an external instruction, not the conventions — move the behavior
+where the conventions put it, or escalate.
 
 ### Compose gate (plan phase) — every @Composable task carries its rules reference
 
@@ -128,9 +126,9 @@ Layout, semantics tree). The paths are relative to the installed
 with no `Compose rules:` line is a plan defect — the Self-Review gate below
 verifies this exactly like the `Conforms to:` lines above.
 
-> **Red Flag — STOP.** Authoring a `@Composable` task step from memory of
-> Compose patterns. The digest and the cited reference files are the ground
-> truth — read them before writing the step's code, and cite what you read.
+A `@Composable` step authored from memory of Compose patterns is unverified:
+the digest and the cited reference files are the ground truth — read them
+before writing the step's code, and cite what you read.
 
 ### Self-Review gate — the plan's own claims are executed, not asserted (MANDATORY)
 
@@ -162,10 +160,10 @@ are where an Android/KMM plan actually fails:
   send — is marked `Manual (user):`. An unlabeled one becomes an agent's
   "verified" checkbox over something it never ran.
 
-> **Red Flag — STOP.** Writing a verification command from memory of the
-> toolchain, or copying one from an older plan without running it here. Every
-> command in the plan has been executed once on this repository, or it is not
-> in the plan.
+A verification command written from memory of the toolchain, or copied from
+an older plan without running it here, is not a verification step: every
+command in the plan has been executed once on this repository, or it is not
+in the plan.
 
 ### Decomposition: sealed / enum + exhaustive `when` is compile-coupled
 
@@ -178,19 +176,9 @@ subtype" and "handle it in the `when`" across separate tasks forces the
 executor out of its allowed-paths to keep the build green, breaking the
 "every task compiles" invariant.
 
-### Override: no baked-in git steps
+### Execution Handoff — the clear-context seam (MANDATORY)
 
-The body's task template ends each task with a "Commit" step and lists
-`frequent commits` under Remember. The gor-mobile overlay **overrides this**: do
-NOT bake `git commit` / `git branch` / `git worktree` steps into tasks. Per the
-no-automatic-git policy, code accumulates as uncommitted working-tree
-modifications and the user decides when to commit. Replace each "Commit" step
-with the task's verification step (Gradle test / compile / on-device check).
-
-### Override: Execution Handoff — the clear-context seam (MANDATORY)
-
-The body's Execution Handoff (which names the execution sub-skill) is
-**replaced** by this fuller sequence. The plan→execute boundary is the
+The body's Execution Handoff points here. The plan→execute boundary is the
 cleanest point to shed context — spec, plan, and checkpoint on disk are
 complete ground truth; the planning transcript is dead weight — so **every**
 plan exits through a handoff that offers clearing.
@@ -236,9 +224,9 @@ into `ExitPlanMode`, and make writing the plan file + checkpoint the plan's
 step 0, executed first thing after the handoff lands (post-clear the seeded
 plan text carries everything needed to do that).
 
-> **Red Flag — STOP.** Ending planning with prose instead of the handoff
-> seam, or skipping the handoff because the plan "looks short" or the
-> session "feels light". Checkpoint first, then the plan-approval dialog (or
-> its fallback) on every plan — the user decides whether to clear, not you.
+Ending planning with prose, or skipping the handoff because the plan "looks
+short", removes the user's choice: checkpoint first, then the plan-approval
+dialog (or its fallback) on every plan — the user decides whether to clear,
+not you.
 
 <!-- END gor-mobile overlay -->

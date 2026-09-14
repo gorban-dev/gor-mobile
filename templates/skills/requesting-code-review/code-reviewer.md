@@ -17,15 +17,21 @@ You are reviewing code changes for production readiness.
 
 {PLAN_REFERENCE}
 
-## Git Range to Review
+## What to Review
 
-**Base:** {BASE_SHA}
-**Head:** {HEAD_SHA}
+**Base ref:** {BASE_REF}
+**Scope:** every change accumulated on the current branch — both committed
+and uncommitted in the working tree.
 
 ```bash
-git diff --stat {BASE_SHA}..{HEAD_SHA}
-git diff {BASE_SHA}..{HEAD_SHA}
+git status --short
+git diff --stat {BASE_REF}
+git diff {BASE_REF}
 ```
+
+`git diff {BASE_REF}` (no `..HEAD`, no `--cached`) compares the working tree
+against the base, so committed-on-branch commits and uncommitted
+modifications appear in one unified diff.
 
 ## Review Checklist
 
@@ -42,11 +48,9 @@ git diff {BASE_SHA}..{HEAD_SHA}
 - Performance implications?
 - Security concerns?
 
-**Testing:**
+**Testing (only when the user asked for tests — missing coverage is not a finding):**
 - Tests actually test logic (not mocks)?
 - Edge cases covered?
-- Integration tests where needed?
-- All tests passing?
 
 **Requirements:**
 - All plan requirements met?

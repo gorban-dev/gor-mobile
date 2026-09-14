@@ -17,11 +17,11 @@
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey" alt="platform">
 </p>
 
-A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Claude Code **and OpenAI Codex CLI**: a superpowers-style workflow (`brainstorm → plan → implement → review → verify`), a swappable rules pack, and two reviewer agents (Sonnet + a deep one on the session's main model). Everything runs on the host agent itself — no external inference, no local model runtime.
+A Node/TypeScript CLI that installs an Android/Kotlin-aware overlay on top of Claude Code **and OpenAI Codex CLI**: a superpowers-style workflow (`brainstorm → plan → implement → review → verify`), a swappable rules pack, and a reviewer agent (Sonnet by default, the session's main model for deep reviews). Everything runs on the host agent itself — no external inference, no local model runtime.
 
 Two-level install (since v0.3.0): `gor-mobile setup` provisions the machine once (`~/.gor-mobile/` rules + hook scripts, the Android CLI, and the user-level Codex workflow under `~/.codex/`, honoring `$CODEX_HOME`); `gor-mobile init` installs the Claude skills **per repo** under `<repo>/.claude/`. Skills are shared (cross-compatible `SKILL.md`); hooks, reviewer agents, and the global-instructions handling adapt to each agent's format. See [Targets](#targets-claude--codex).
 
-> Status: `v0.5.1` — pre-release scaffolding, under active development on `main`. See `CHANGELOG.md`.
+> Status: `v0.5.2` — pre-release scaffolding, under active development on `main`. See `CHANGELOG.md`.
 
 ## Requirements
 
@@ -77,7 +77,7 @@ Machine-wide prerequisites, nothing per-repo:
 2. **Google Android CLI** (https://developer.android.com/tools/agents) — **hard-mandatory**. Detects the `android` binary; if absent, installs it (macOS: `brew tap android/tap && brew install android-cli`; other platforms: Google's curl installer). Unsupported platforms fail with a clear error. Once present, validates a **capability contract** (required command names + a `>= 1.0.0` floor) against whatever version is installed — Google ships android CLI as always-latest, so no version is pinned.
 3. **ast-index CLI** — **soft check**. Detects `ast-index` on `PATH`; if missing, prints the install hint (`brew tap defendend/ast-index && brew install ast-index`) and continues. `setup` never fails on it.
 4. **Rules pack + hook scripts.** Clones the default pack (or `--rules <url>`) into `~/.gor-mobile/rules/` (`git pull --ff-only` if already cloned), records the source in `~/.config/gor-mobile/config.json`, and copies the shared hook scripts + the workflow-pointers snippet into `~/.gor-mobile/templates/`.
-5. **Claude status line (optional).** Classic (colored usage bars) or Cat (ASCII cat) or skip — a managed `statusLine` in `~/.claude/settings.json`. Never overwrites an existing one without asking.
+5. **Claude status line (optional).** Classic (colored usage bars) or Cat (ASCII cat) — both show the prompt-cache hit ratio on Claude Code ≥ 2.1.251 — or skip — a managed `statusLine` in `~/.claude/settings.json`. Never overwrites an existing one without asking.
 6. **Codex integration (user-level).** If `~/.codex/` exists (or `--target codex`): hooks → `hooks.json`, skills, TOML agents, the `AGENTS.md` managed section, `android init`, and the Codex status line — the full workflow, since Codex can't scope to a project.
 
 Flags: `--dry-run`, `--yes`/`-y`, `--no-tui`, `--advanced` (per-step confirm + editable rules URL), `--rules <url>`, `--skip-android-update`, `--target codex`.
@@ -233,11 +233,12 @@ the rules pack, and the exact verification step the orchestrator will run
 afterwards. The orchestrator stays in control of design decisions,
 verification, and anything the plan marks as "human review required". Each
 task gets one combined review (spec compliance + code quality in a single
-pass): the Sonnet reviewer (`gor-mobile-code-reviewer`) handles routine
-reviews, with a `haiku` downgrade for non-behavioral tasks; the deep reviewer
-(`gor-mobile-code-reviewer-deep`, `model: inherit` — the session's main
-model) takes large / security-sensitive diffs, explicit deep-review asks,
-and the cross-task-focused final review of a plan. When the OpenAI Codex plugin
+pass) by the one reviewer agent (`gor-mobile-code-reviewer`, `model:
+inherit`), tiered at dispatch: `model="sonnet"` for routine reviews,
+`model="haiku"` for non-behavioral tasks, and no override (the session's
+main model) plus an extra-scrutiny paragraph for large / security-sensitive
+diffs, explicit deep-review asks, and the cross-task-focused final review of
+a plan. When the OpenAI Codex plugin
 (`codex@openai-codex`) is installed, `requesting-code-review` adds a second,
 independent pass through Codex (standard `review`, or `adversarial-review`
 on the same escalation trigger) and merges its findings — a cross-model
@@ -266,7 +267,7 @@ which skills carry an Android-rules / Task(model=...) appendix.
 | `subagent-driven-development` | superpowers | rules + implementer → Sonnet + execution gates (baseline pass, unusable-gate breaker, process notes, no-op guard, tooling contract) |
 | `executing-plans` | superpowers | task-loop classification (self-contained → Sonnet / dependent → session model / fork on user request) + review before dependents build on a layer task + baseline pass + unusable-gate rule |
 | `dispatching-parallel-agents` | superpowers | — |
-| `requesting-code-review` | superpowers | Sonnet reviewer default, deep reviewer (session model) on escalation and for the final plan review; optional Codex second opinion when `codex@openai-codex` is installed |
+| `requesting-code-review` | superpowers | one reviewer agent: `model="sonnet"` by default, session model + extra-scrutiny paragraph on escalation and for the final plan review; optional Codex second opinion when `codex@openai-codex` is installed |
 | `receiving-code-review` | superpowers | — |
 | `verification-before-completion` | superpowers | — |
 | `systematic-debugging` | superpowers | rules + Phase 2 evidence → Sonnet (read-only) |
@@ -280,11 +281,13 @@ The 4 phase overlays (`brainstorming`, `executing-plans`,
 pointer at `[[gor-mobile-using-android-cli]]`, which holds the canonical
 phase→command mapping in one place.
 
-Agents:
-- `gor-mobile-code-reviewer` — Sonnet, dispatched via `requesting-code-review`.
-- `gor-mobile-code-reviewer-deep` — session model (`model: inherit`),
-  escalation path for large / security-sensitive diffs and the final
-  full-implementation review of a plan.
+Agent:
+- `gor-mobile-code-reviewer` — `model: inherit`; the flows pass
+  `model="sonnet"` (routine) or `"haiku"` (non-behavioral) at dispatch and
+  omit it for deep reviews (large / security-sensitive diffs, the final
+  full-implementation review of a plan), where the prompt opens with the
+  extra-scrutiny paragraph. Codex: one TOML at `medium`, `reasoning_effort =
+  "high"` per dispatch for the deep tier.
 
 ## Uninstall
 

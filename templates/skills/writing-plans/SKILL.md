@@ -7,13 +7,11 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 ## Overview
 
-Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. Frequent commits.
+Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to verify it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. No git steps — the user owns commits.
 
 Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well.
 
 **Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
-
-**Context:** This should be run in a dedicated worktree (created by brainstorming skill).
 
 **Save plans to:** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
 - (User preferences for plan location override this default)
@@ -38,7 +36,6 @@ This structure informs the task decomposition. Each task should produce self-con
 **Each step is one action (2-5 minutes):**
 - "Implement one focused change" - step
 - "Run the exact verification command and check its output" - step
-- "Commit" - step
 
 ## Plan Document Header
 
@@ -88,16 +85,13 @@ def function(input):
 
 - [ ] **Step 2: Verify**
 
-Run: `python -m app.cli function-input`
-Expected: prints `expected`
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add src/path/file.py
-git commit -m "feat: add specific feature"
-```
+Run: `./gradlew :<module>:compileDebugKotlin`
+Expected: `BUILD SUCCESSFUL` in the log
 ````
+
+A task ends with its verification step. Never add a commit, branch or
+worktree step: code accumulates uncommitted in the working tree and the
+user decides when and on which branch to commit.
 
 ## No Placeholders
 
@@ -113,7 +107,7 @@ Every step must contain the actual content an engineer needs. These are **plan f
 - Exact file paths always
 - Complete code in every step — if a step changes code, show the code
 - Exact commands with expected output
-- DRY, YAGNI, frequent commits
+- DRY, YAGNI, no git steps
 
 ## Self-Review
 

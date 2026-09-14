@@ -67,13 +67,10 @@ The `<implementer-prompt>` must contain:
   specifies it). Restating code from a paraphrase is where standard widths,
   paddings, and named arguments silently vanish.
 
-> **Red Flag — STOP.** Dispatching an implementer, combined-review, or scoped
-> re-review prompt for a layer-touching task without its `Conforms to:`
-> reference files attached.
-> This mandate has already been skipped silently in the field once — the
-> code-quality reviewer agents now independently check diff shape against
-> canonical examples, so a defect from a skipped dispatch still surfaces
-> downstream. Attach the files.
+An implementer, combined-review or scoped re-review prompt for a
+layer-touching task without its `Conforms to:` files attached is the
+dispatch defect the reviewer's examples tripwire exists to catch: the
+defect still surfaces, but as a fix round instead of a correct first pass.
 
 **Escalate to the session model** (omit `model` — the subagent inherits the
 user's default main model) when any of:
@@ -112,16 +109,6 @@ Doc paths land in the gitignored project-local workspace:
 `.gor-mobile/specs/YYYY-MM-DD-<topic>-design.md`
 `.gor-mobile/plans/YYYY-MM-DD-<feature>.md`.
 
-### Override: no automatic commits, branches, or worktrees
-
-Never run `git commit`, `git branch`, `git checkout`, or
-`git worktree add` between subagent tasks. Implementer-task diffs
-accumulate as uncommitted modifications in the working tree across
-the entire plan. The user reviews `git diff` and commits / branches /
-pushes at their own discretion. If the user explicitly asks for a
-worktree or branch, run the requested git command — otherwise do
-nothing.
-
 ### Review routing — ONE combined review per task, Codex once at the end
 
 Each task gets exactly **one** review dispatch; the final full-implementation
@@ -129,10 +116,8 @@ review routes through `requesting-code-review`. The distinction is
 load-bearing for the Codex second opinion:
 
 - **Combined per-task review** — dispatch `Agent(gor-mobile-code-reviewer)`
-  directly, once per task, with a prompt that carries BOTH checklists as two
-  separate report sections. Do **NOT** dispatch a separate spec reviewer —
-  the `./spec-reviewer-prompt.md` step from the skill body is folded into
-  section 1 here (override):
+  directly, once per task, with `./combined-review-prompt.md`, which carries
+  BOTH checklists as two separate report sections:
   1. **Spec compliance** — code vs the task spec **verbatim**, including
      modifier chains and argument lists (the Fidelity note above), against
      the plan text, never a paraphrase.
@@ -162,10 +147,12 @@ load-bearing for the Codex second opinion:
     `model = "haiku"` (Codex: effort `low`) with a reduced checklist:
     allowed-paths respected, compiles, diff shape vs the reference files.
     Nothing else.
-  - Default → the reviewer agent's own model (Sonnet; Codex: `medium`).
+  - Default → `model = "sonnet"` (Codex: `medium`).
   - Escalation triggers (diff > ~400 LOC in one task,
-    security/auth/payments/crypto/IPC, explicit deep-review ask) →
-    `Agent(gor-mobile-code-reviewer-deep)`, which runs on the session model.
+    security/auth/payments/crypto/IPC, explicit deep-review ask) → the deep
+    tier: same agent, `model` omitted (session model), the extra-scrutiny
+    paragraph from the `requesting-code-review` overlay at the top of the
+    prompt.
 
 **Fix-loop routing (the skill body's The Fix Loop, mapped to gor-mobile):**
 
@@ -198,7 +185,7 @@ load-bearing for the Codex second opinion:
   workspace (see Context compaction below): the per-round
   `Task <N>: fix round <R>/5 (…)` line, deferred minors, parked rulings,
   and `Task <N>: BLOCKED — <reason>`. There is no separate ledger.
-- **No commits between rounds** (the override above stands): fix diffs
+- **No commits between rounds**: fix diffs
   accumulate uncommitted like task diffs, so the re-review scopes by the
   fix-range review package — `scripts/sdd-snapshot` after the fix,
   `scripts/review-package` from the snapshot the previous review saw —
@@ -231,7 +218,7 @@ touched for `artifact_ttl_days` (`.gor-mobile/marker.json`, default 30 days).
 
 **Tool disambiguation** (upstream bug obra/superpowers#1077): `requesting-code-review`
 and `writing-plans` are **Skills** (invoke via the `Skill` tool);
-`gor-mobile-code-reviewer` / `gor-mobile-code-reviewer-deep` are **Agents**
+`gor-mobile-code-reviewer` is an **Agent**
 (dispatch via the `Agent` tool with `subagent_type`). If you see
 `{"status":"Agent type not found"}` for a review step, the dispatch went to the
 wrong tool — retry via `Skill(gor-mobile-requesting-code-review)`.

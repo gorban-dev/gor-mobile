@@ -57,6 +57,9 @@ five_pct=$(   echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // e
 five_reset=$( echo "$input" | jq -r '.rate_limits.five_hour.resets_at       // empty')
 week_pct=$(   echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
 week_reset=$( echo "$input" | jq -r '.rate_limits.seven_day.resets_at       // empty')
+# prompt_cache is present from Claude Code 2.1.251; hit_ratio is a 0..1 fraction
+# (a value above 1 is read as a percentage, in case the scale changes).
+cache_hit=$(  echo "$input" | jq -r '.prompt_cache.hit_ratio                  // empty')
 
 lines=()
 
@@ -66,7 +69,14 @@ if [ -n "$used_pct" ] && [ -n "$ctx_size" ]; then
   ctx_k=$(( ctx_size / 1000 ))
   col=$(color_for_pct "$pct_int")
   bar=$(make_bar "$pct_int" "$col")
-  lines+=("$(printf "${GRAY}Context  ${RESET}${bar}${RESET}  ${WHITE}%d%%${RESET} ${GRAY}of %sk${RESET}" "$pct_int" "$ctx_k")")
+  cache_str=""
+  if [ -n "$cache_hit" ]; then
+    cache_pct=$(awk -v r="$cache_hit" 'BEGIN { if (r > 1) printf "%d", r + 0.5; else printf "%d", r * 100 + 0.5 }')
+    # a low hit ratio is the warning state, so the color scale is inverted
+    cache_col=$(color_for_pct "$(( 100 - cache_pct ))")
+    cache_str="$(printf "  ${GRAY}cache${RESET} %b%d%%${RESET}" "$cache_col" "$cache_pct")"
+  fi
+  lines+=("$(printf "${GRAY}Context  ${RESET}${bar}${RESET}  ${WHITE}%d%%${RESET} ${GRAY}of %sk${RESET}%b" "$pct_int" "$ctx_k" "$cache_str")")
 fi
 
 # --- 5-hour limit line ---

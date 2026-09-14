@@ -28,19 +28,11 @@ Load `core` + `debug-*` sections from `$HOME/.gor-mobile/rules/` via
   no Write.
 - **Phase 3 — hypothesis formation.** Main orchestrator (session model).
   Causal reasoning over the evidence is not worth a round-trip.
-- **Phase 4 — reproduce + fix.** The body's Phase 4 Step 1 ("Create Failing
-  Test Case — MUST have before fixing") is **overridden**: do NOT write a test
-  by default. Reproduce the bug however is cheapest (a manual repro, a log, a
-  throwaway script), fix the root cause, and verify the fix via the task's
-  Gradle/on-device check (per `[[gor-mobile-using-android-cli]]` where
-  relevant; Codex: `[[gor-mobile-verification-before-completion]]`). Write a
-  regression test **only if the user explicitly asks** for one.
-
-  > **Red Flag — STOP.** Creating a `*Test*` file, or going "I'll go
-  > test-first," because "the debugging skill said MUST create a failing test."
-  > The user did not ask for a test → do not write one. And never reshape the
-  > bug into a fresh seam (extract a helper, add a model flag) just to have
-  > something to unit-test: fix it as it stands.
+- **Phase 4 — reproduce + fix.** Main orchestrator. Verify the fix via the
+  task's Gradle/on-device check (per `[[gor-mobile-using-android-cli]]` where
+  relevant; Codex: `[[gor-mobile-verification-before-completion]]`). Never
+  reshape the bug into a fresh seam (extract a helper, add a model flag) just
+  to have something to unit-test: fix it as it stands.
 
 ### Docs-first before hypothesis — know how it SHOULD behave (Phase 1→2, before Phase 3)
 
@@ -66,10 +58,9 @@ the Phase 3 hypothesis — "the docs say X must be Y; the code does Z" — inste
 "I think X is wrong." Pass the doc/source findings to the Sonnet
 evidence-gathering subagent as part of its report.
 
-> **Red Flag — STOP.** Proposing a fix for a framework/library symptom while
-> your model of "how it should work" comes from memory. Cutoff → component
-> behavior drifts across versions. Read the docs/artifact for the pinned version
-> first, then hypothesize.
+A fix proposed while your model of "how it should work" comes from memory is
+a guess: component behavior drifts across versions, so read the
+docs/artifact for the pinned version first, then hypothesize.
 
 ### Android CLI — phase command mapping
 
@@ -119,9 +110,9 @@ because the destination demanded an architecture slice the project had not
 built since a KMM target was removed three weeks earlier. One isolation run
 would have replaced all three rounds.
 
-> **Red Flag — STOP.** "Let me try one more fix and see if the build goes
-> green." Three iterations of guessing cost more than one baseline run, and a
-> command that cannot pass on any tree never goes green.
+"One more fix and the build goes green" is the thought to stop on: three
+guesses cost more than one baseline run, and a command that cannot pass on
+any tree never goes green.
 
 ### Runtime evidence first — debroid (when the bug reproduces on a device)
 

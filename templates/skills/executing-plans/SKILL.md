@@ -32,9 +32,12 @@ For each task:
 ### Step 3: Complete Development
 
 After all tasks complete and verified:
-- Announce: "I'm using the finishing-a-development-branch skill to complete this work."
-- **REQUIRED SUB-SKILL:** Use superpowers:finishing-a-development-branch
-- Follow that skill to verify tests, present options, execute choice
+- Run the final full-implementation review through
+  superpowers:requesting-code-review (the overlay's Review routing names
+  the reviewer and the Codex pass).
+- Report completion. The working tree stays uncommitted: this skill never
+  runs `git commit`, `git branch`, `git checkout` or `git worktree add`
+  between tasks or at the end — the user decides what to commit and where.
 
 ## When to Stop and Ask for Help
 
@@ -60,11 +63,11 @@ After all tasks complete and verified:
 - Don't skip verifications
 - Reference skills when plan says to
 - Stop when blocked, don't guess
-- Never start implementation on main/master branch without explicit user consent
+- No git operations between tasks or phases; verification after every task
+  is the correctness gate, not git state
 
 ## Integration
 
 **Required workflow skills:**
-- **superpowers:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
 - **superpowers:writing-plans** - Creates the plan this skill executes
-- **superpowers:finishing-a-development-branch** - Complete development after all tasks
+- **superpowers:requesting-code-review** - The final full-implementation review

@@ -64,19 +64,7 @@ function transformSkillBody(content: string): string {
     )
     .replace(/all 5 tasks/g, "all tasks")
     .replace(/docs\/superpowers\/specs\//g, ".gor-mobile/specs/")
-    .replace(/docs\/superpowers\/plans\//g, ".gor-mobile/plans/")
-    .replace(
-      /^[ \t]*-[^\n]*(using-git-worktrees|finishing-a-development-branch)[^\n]*\n/gm,
-      ""
-    )
-    .replace(
-      /"Use gor-mobile-finishing-a-development-branch"/g,
-      '"User decides next step"'
-    )
-    .replace(
-      /Use gor-mobile-finishing-a-development-branch/g,
-      "User decides next step"
-    );
+    .replace(/docs\/superpowers\/plans\//g, ".gor-mobile/plans/");
 }
 
 export interface InstallSkillsResult {
@@ -137,6 +125,10 @@ export function installAgents(target: TargetSpec): string[] {
   const ext = `.${target.agentFormat}`;
   const src = join(gorMobileRoot(), "templates", srcSub);
   const copied: string[] = [];
+  // Until 0.5.1 a second reviewer agent differed only by model tier; one agent
+  // plus a per-dispatch model override replaced it.
+  const stale = join(target.agentsDir, `gor-mobile-code-reviewer-deep${ext}`);
+  if (existsSync(stale)) rmSync(stale);
   if (!existsSync(src)) return copied;
   for (const name of readdirSync(src)) {
     if (!name.endsWith(ext)) continue;

@@ -12,9 +12,14 @@ Dispatch superpowers:code-reviewer subagent to catch issues before they cascade.
 ## When to Request Review
 
 **Mandatory:**
-- After each task in subagent-driven development
-- After completing major feature
+- The final full-implementation review of a plan (subagent-driven
+  development and executing-plans route here after their last task)
+- After completing a major feature outside a plan
 - Before merge to main
+
+Per-task reviews inside a plan do not use this skill: the executor skills
+dispatch the reviewer agent directly, once per task, with the task's
+brief and review package (their overlays name the routing).
 
 **Optional but valuable:**
 - When stuck (fresh perspective)
@@ -23,11 +28,18 @@ Dispatch superpowers:code-reviewer subagent to catch issues before they cascade.
 
 ## How to Request
 
-**1. Get git SHAs:**
-```bash
-BASE_SHA=$(git rev-parse HEAD~1)  # or origin/main
-HEAD_SHA=$(git rev-parse HEAD)
-```
+**1. Resolve the base ref.** gor-mobile flows do not commit between tasks,
+so the work under review is the branch's committed changes plus the
+uncommitted working tree — never a `SHA..SHA` range, which is empty when
+nothing was committed. Try in order and store the result as `<BASE_REF>`:
+- `git symbolic-ref refs/remotes/origin/HEAD`, stripping
+  `refs/remotes/origin/` (gives `main` or `master`).
+- `origin/main` if the remote ref exists.
+- `main`, then `master`.
+- If none resolve, ask the user for the base branch.
+
+**Skip the review when the diff is empty:** `git diff --quiet <BASE_REF>`
+exiting 0 means there is nothing to review yet — do not spend a dispatch.
 
 **2. Dispatch code-reviewer subagent:**
 
@@ -36,8 +48,7 @@ Use Task tool with superpowers:code-reviewer type, fill template at `code-review
 **Placeholders:**
 - `{WHAT_WAS_IMPLEMENTED}` - What you just built
 - `{PLAN_OR_REQUIREMENTS}` - What it should do
-- `{BASE_SHA}` - Starting commit
-- `{HEAD_SHA}` - Ending commit
+- `{BASE_REF}` - The base ref resolved above (a ref name, not a SHA)
 - `{DESCRIPTION}` - Brief summary
 
 **3. Act on feedback:**
@@ -53,14 +64,13 @@ Use Task tool with superpowers:code-reviewer type, fill template at `code-review
 
 You: Let me request code review before proceeding.
 
-BASE_SHA=$(git log --oneline | grep "Task 1" | head -1 | awk '{print $1}')
-HEAD_SHA=$(git rev-parse HEAD)
+BASE_REF=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's#refs/remotes/origin/##')
+git diff --quiet "$BASE_REF" || echo "changes to review"
 
 [Dispatch superpowers:code-reviewer subagent]
   WHAT_WAS_IMPLEMENTED: Verification and repair functions for conversation index
   PLAN_OR_REQUIREMENTS: Task 2 from docs/superpowers/plans/deployment-plan.md
-  BASE_SHA: a7981ec
-  HEAD_SHA: 3df7661
+  BASE_REF: main
   DESCRIPTION: Added verifyIndex() and repairIndex() with 4 issue types
 
 [Subagent returns]:
@@ -76,14 +86,9 @@ You: [Fix progress indicators]
 
 ## Integration with Workflows
 
-**Subagent-Driven Development:**
-- Review after EACH task
-- Catch issues before they compound
-- Fix before moving to next task
-
-**Executing Plans:**
-- Review after each task or at natural checkpoints
-- Get feedback, apply, continue
+**Subagent-Driven Development / Executing Plans:**
+- Per-task combined reviews are dispatched by those skills directly
+- This skill runs once, on the finished implementation
 
 **Ad-Hoc Development:**
 - Review before merge

@@ -61,100 +61,43 @@ detection (`$CODEX_COMPANION`) and dispatch live here and nowhere else.
 
 ### Reviewer selection
 
-Default path — dispatch the Sonnet reviewer:
+One reviewer agent, two tiers chosen at dispatch. Default path — Sonnet:
 
-    Task(subagent_type = "gor-mobile-code-reviewer", prompt = <review-prompt>)
+    Agent(subagent_type = "gor-mobile-code-reviewer", model = "sonnet", prompt = <review-prompt>)
 
-Escalate to the deep reviewer when any of:
+Deep review when any of:
 - Diff exceeds ~400 LOC changed.
 - The change touches security, auth, payments, crypto, IPC, or binder code.
 - The user explicitly asks for a "deep" / "thorough" review.
 - This is the **final full-implementation review** of a plan (see below).
 
-        Task(subagent_type = "gor-mobile-code-reviewer-deep", prompt = <review-prompt>)
+Omit `model` (the agent declares `model: inherit`, so it runs on the
+session's main model — whatever the user set as their default, never a
+pinned model) and open the `<review-prompt>` with this paragraph:
 
-Both reviewers share a system prompt; the deep variant carries extra
-scrutiny instructions and runs on the session's main model
-(`model: inherit` — whatever the user set as their default), never a pinned
-model. On Codex the tiers map to reasoning effort instead: standard
-reviewer → `medium`, deep → `high`.
+    Extra scrutiny mode. You were dispatched because the change carries
+    higher-than-usual risk: large diff (>400 LOC), security / auth /
+    payments / crypto / IPC / binder surface area, or the user explicitly
+    asked for a deep pass. Spend proportional budget: re-read the relevant
+    call-sites, trace data flow across module boundaries, and probe for the
+    non-obvious failure modes (race conditions, partial-failure handling,
+    injection surfaces, privilege escalation, token / session lifecycle,
+    serialization boundaries, backwards-compatibility traps). Do not stop
+    at surface-level style and naming — assume the ordinary reviewer
+    already did that pass.
+
+        Agent(subagent_type = "gor-mobile-code-reviewer", prompt = <extra-scrutiny paragraph + review-prompt>)
+
+On Codex the tiers map to `reasoning_effort` on `spawn_agent` instead:
+default → the agent's `medium`, deep → `high`, same paragraph in the prompt.
 
 **Final full-implementation review of a plan** (routed here by
 `subagent-driven-development` / `executing-plans` after all tasks pass):
-dispatch the **deep** reviewer, and direct its `<review-prompt>` at
+dispatch the deep tier, and direct its `<review-prompt>` at
 cross-task properties — consistency between tasks, architecture drift,
 duplication, dead leftovers. Do not re-litigate findings the per-task
 combined reviews already approved: per-task-scope issues were their job;
 the whole-diff synthesis is this pass's.
-
-### Override: review the working tree, not a SHA range
-
-gor-mobile cycles do not commit between tasks (see the overlays for
-`executing-plans` and `subagent-driven-development`). The upstream reviewer
-prompt template at
-`requesting-code-review/code-reviewer.md` (and the dispatch templates
-referenced from `subagent-driven-development/*-reviewer-prompt.md`)
-assumes a `BASE_SHA..HEAD_SHA` range. With no commits, that range is
-empty and the reviewer sees nothing.
-
-Override the placeholder substitution for **every** reviewer dispatch
-(through this skill, through `subagent-driven-development` flow, or
-otherwise):
-
-1. **Resolve the base ref** at dispatch time. Try in order:
-   - `git symbolic-ref refs/remotes/origin/HEAD` and strip
-     `refs/remotes/origin/` (gives e.g. `main` or `master`).
-   - `origin/main` if the remote ref exists.
-   - `main`, then `master`.
-   - If none resolve, ask the user for the base branch and use that.
-
-   Store the result as `<BASE_REF>`.
-
-2. **Fill the upstream prompt template** with:
-   - `{BASE_SHA}` ← `<BASE_REF>` (a ref name, not a SHA).
-   - `{HEAD_SHA}` ← the literal string `WORKING_TREE`.
-
-3. **Replace the "Git Range to Review" block** in the filled prompt
-   from:
-
-        ## Git Range to Review
-
-        **Base:** {BASE_SHA}
-        **Head:** {HEAD_SHA}
-
-        ```bash
-        git diff --stat {BASE_SHA}..{HEAD_SHA}
-        git diff {BASE_SHA}..{HEAD_SHA}
-        ```
-
-   to:
-
-        ## What to Review
-
-        **Base ref:** <BASE_REF>
-        **Scope:** every change accumulated on the current branch —
-        both committed and uncommitted in the working tree.
-
-        ```bash
-        git status --short
-        git diff --stat <BASE_REF>
-        git diff <BASE_REF>
-        ```
-
-   `git diff <BASE_REF>` (no `..HEAD`, no `--cached`) compares the
-   working tree against the base, so committed-on-branch commits and
-   uncommitted modifications appear in one unified diff — exactly the
-   set of changes the gor-mobile user is about to inspect.
-
-4. **Skip review when the diff is empty.** Before dispatch, run
-   `git diff --quiet <BASE_REF>`. If it exits 0, there is nothing to
-   review yet — do not spend a Task call. This prevents per-task no-op
-   review dispatches inside `subagent-driven-development` when an
-   implementer subagent ran but produced no working-tree change.
-
-The reviewer agents (`gor-mobile-code-reviewer`,
-`gor-mobile-code-reviewer-deep`) are unchanged — their system prompts
-are generic about review and accept whatever diff the caller passes.
 
 ### Codex second opinion — MANDATORY when the `codex` plugin is installed
 
@@ -226,16 +169,11 @@ this pass is `$CODEX_COMPANION` being empty (plugin absent).
    reference and surface the conflict to the user rather than silently
    dropping one.
 
-### Red Flags (Codex pass)
-
-**Never:**
-- Announce "I'll check for Codex" / "running Codex in parallel" and then
-  move on without actually dispatching it. Detect, then dispatch, in the
-  same breath.
-- Treat a present-but-unused Codex plugin as "good enough." If
-  `$CODEX_COMPANION` resolved, the pass runs — it is not a judgement call.
-- Report review findings to the user before the Codex pass has returned
-  (or been confirmed absent).
+The three ways this gate fails: announcing "I'll check for Codex" and moving
+on without dispatching (detect, then dispatch, in the same breath); treating
+a present-but-unused plugin as good enough (if `$CODEX_COMPANION` resolved,
+the pass runs); reporting findings before the Codex pass has returned or
+been confirmed absent.
 
 ### Context compaction — review outcome is a safe boundary
 

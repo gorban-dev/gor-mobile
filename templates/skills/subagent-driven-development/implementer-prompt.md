@@ -30,28 +30,23 @@ Task tool (general-purpose):
 
     ## Before You Begin
 
-    If you have questions about:
-    - The requirements or acceptance criteria
-    - The approach or implementation strategy
-    - Dependencies or assumptions
-    - Anything unclear in the task description
-
-    **Ask them now.** Raise any concerns before starting work.
+    You cannot ask the controller a question mid-task: your only channel
+    back is your final reply. If the brief leaves a requirement, an
+    acceptance criterion, a dependency or an approach ambiguous, return
+    **NEEDS_CONTEXT** with the exact question before editing anything —
+    the controller answers and re-dispatches you. Do not resolve the
+    ambiguity by guessing.
 
     ## Your Job
 
-    Once you're clear on requirements:
     1. Implement exactly what the task specifies
     2. Write tests only if the user explicitly asked for them
-    3. Verify implementation works
-    4. Commit your work
-    5. Self-review (see below)
-    6. Report back
+    3. Run the verification command named in the brief and put its tail in
+       the report
+    4. Self-review (see below)
+    5. Report back
 
     Work from: [directory]
-
-    **While you work:** If you encounter something unexpected or unclear, **ask questions**.
-    It's always OK to pause and clarify. Don't guess or make assumptions.
 
     ## Code Organization
 
@@ -115,47 +110,31 @@ Task tool (general-purpose):
       for any finding whose action item lies outside your allowed paths:
       its number, verbatim title, and why.
 
-    ## When You're in Over Your Head
+    ## When to Stop
 
-    It is always OK to stop and say "this is too hard for me." Bad work is worse than
-    no work. You will not be penalized for escalating.
-
-    **STOP and escalate when:**
-    - The task requires architectural decisions with multiple valid approaches
-    - You need to understand code beyond what was provided and can't find clarity
-    - You feel uncertain about whether your approach is correct
-    - The task involves restructuring existing code in ways the plan didn't anticipate
-    - You've been reading file after file trying to understand the system without progress
-
-    **How to escalate:** Report back with status BLOCKED or NEEDS_CONTEXT. Describe
-    specifically what you're stuck on, what you've tried, and what kind of help you need.
-    The controller can provide more context, re-dispatch with a more capable model,
-    or break the task into smaller pieces.
+    Return **BLOCKED** or **NEEDS_CONTEXT** instead of continuing when the
+    task needs an architectural decision with several valid approaches,
+    needs code or context you were not given and cannot locate, or requires
+    restructuring the plan did not anticipate. State what you are stuck on,
+    what you tried, and what would unblock you; the controller supplies
+    context, re-dispatches on a more capable model, or splits the task.
+    Unsure work reported as DONE costs a review round and a fix round; the
+    same doubt reported as DONE_WITH_CONCERNS costs one line.
 
     ## Before Reporting Back: Self-Review
 
-    Review your work with fresh eyes. Ask yourself:
+    Check, against the brief and the report you are about to write:
 
-    **Completeness:**
-    - Did I fully implement everything in the spec?
-    - Did I miss any requirements?
-    - Are there edge cases I didn't handle?
+    - Every requirement in the brief is implemented, with the brief's exact
+      values (numbers, strings, signatures) — not paraphrased.
+    - Every edit is inside the allowed paths, and nothing was built beyond
+      the brief (YAGNI).
+    - New code follows the reference files and the existing patterns of the
+      files it touches.
+    - The verification command ran and its result is in the report.
+    - Tests, if the user asked for them, assert behavior rather than mocks.
 
-    **Quality:**
-    - Is this my best work?
-    - Are names clear and accurate (match what things do, not how they work)?
-    - Is the code clean and maintainable?
-
-    **Discipline:**
-    - Did I avoid overbuilding (YAGNI)?
-    - Did I only build what was requested?
-    - Did I follow existing patterns in the codebase?
-
-    **Testing (only if the user asked for tests):**
-    - Do tests actually verify behavior (not just mock behavior)?
-    - Are tests comprehensive?
-
-    If you find issues during self-review, fix them now before reporting.
+    Fix what the check finds before reporting.
 
     ## Report Format
 

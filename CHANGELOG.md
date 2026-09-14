@@ -1,5 +1,88 @@
 # Changelog
 
+## 0.5.2 — 2026-09-14
+
+Run `gor-mobile repair` — every phase skill body, six overlays, both hook
+scripts, both status lines, the implementer and reviewer prompt templates and
+the reviewer agent changed; `gor-mobile-code-reviewer-deep` is removed.
+
+- **One reviewer agent, tiered at dispatch.** `gor-mobile-code-reviewer-deep`
+  differed from `gor-mobile-code-reviewer` by one paragraph and a `model`
+  line, and its 1 KB `<example>` dialogue rode in every session's context.
+  Claude Code resolves a per-invocation `model` above the agent's frontmatter
+  and Codex takes `reasoning_effort` per `spawn_agent`, so the flows now pass
+  `model="sonnet"` (routine), `"haiku"` (non-behavioral) or nothing (session
+  model, deep) to the one agent, which declares `model: inherit`; the
+  extra-scrutiny paragraph opens the deep `<review-prompt>` (its text lives
+  in the `requesting-code-review` overlay). Both agent descriptions are
+  rewritten as contracts without fake dialogue. `repair` / `init` delete the
+  stale `-deep.md` / `-deep.toml`.
+- **Skill-routing reminder once per session, at normal volume.** The
+  UserPromptSubmit hook injected ~360 tokens on every prompt, and the copies
+  stayed in the transcript (Claude Code issue #40216). It now writes a flag
+  keyed by `session_id` under `.gor-mobile/state/` and stays silent on later
+  prompts; every SessionStart (startup, compact, clear, resume) clears the
+  flags, so a fresh context gets the reminder once more. The text keeps the
+  routing table and the no-git line, and drops "CRITICAL … overrides default
+  behavior" / "ALWAYS runs". Outside a gor-mobile repo (Codex user-level
+  without a marker) the behavior is unchanged.
+- **`using-superpowers` speaks plainly.** "1% chance… ABSOLUTELY MUST… not
+  negotiable… cannot rationalize" is replaced by one paragraph with the
+  reason (the skills carry what the code does not show), and the 12-row
+  rationalization table by four rows that name where Android-session routing
+  actually slips. The SessionStart envelope is `<gor-mobile-skill-discipline>`
+  instead of `<EXTREMELY_IMPORTANT>`. Basis: Anthropic's audit guidance —
+  emphasis written for under-triggering models over-triggers on current ones.
+- **Red Flag — STOP blocks folded into their rules.** Sixteen blockquotes
+  across the overlays and `using-android-cli` (seven in `writing-plans`
+  alone) each became one sentence attached to the rule it guarded; the
+  incident narratives inside them are gone. The one upstream "Red Flags"
+  section per skill body stays. The gates themselves (docs-first,
+  examples-first, baseline pass, handoff seam, catalog lookup) are unchanged.
+- **Status lines show the prompt-cache hit ratio.** Both `statusline-command.sh`
+  and `statusline-cat.sh` read `prompt_cache.hit_ratio` (Claude Code ≥
+  2.1.251) and append `cache NN%` to the context line, colored inversely
+  (a low ratio is the warning). Older Claude Code: the segment is absent.
+
+- **Contradictions between a skill body and its overlay are gone.** Audit
+  against Anthropic's "Reducing cost and improving performance with Claude
+  Platform" (2026-09): seven `Override` blocks told the model the opposite
+  of what the body above had just said (commit steps, "commit the design
+  document", a spec-approval gate removed on Claude, a SHA-range review, a
+  Phase 4 failing-test step the body no longer even contained). The rule now
+  lives in the body once and the override text is deleted: `writing-plans`
+  ends every task with its verification step and has no git steps;
+  `brainstorming` leaves the spec uncommitted and runs the User Review Gate
+  on Codex only; `executing-plans` and `subagent-driven-development` state
+  the no-git rule themselves; `requesting-code-review` resolves `<BASE_REF>`
+  and reviews the working tree in its own body and template; the
+  `systematic-debugging` overlay stops overriding a step that does not exist.
+  References to the removed `using-git-worktrees` /
+  `finishing-a-development-branch` skills and to "never start on main/master"
+  are gone from the bodies, and the install-time rewrites that patched them
+  out are removed with them.
+- **One combined per-task review, everywhere.** The `subagent-driven-development`
+  body described two reviewers (spec, then quality) while its overlay
+  dispatched one; `code-quality-reviewer-prompt.md` demanded a Codex pass per
+  task while the overlay forbade it. `spec-reviewer-prompt.md` and
+  `code-quality-reviewer-prompt.md` are replaced by `combined-review-prompt.md`
+  (two report sections, process notes, no Codex — Codex runs once, at the
+  final review). Process graph, example, red flags and cost notes follow.
+- **Implementer prompt: no impossible contracts.** "Commit your work" sat in
+  the same prompt as "never run git commit"; "ask questions now" and "it's
+  always OK to pause" assumed a channel a subagent does not have. The prompt
+  now says what is true: return `NEEDS_CONTEXT` before editing when the
+  brief is ambiguous, `BLOCKED` when the task exceeds it; step 4 runs the
+  brief's verification command. The self-review is five checks against the
+  brief instead of "is this my best work?".
+- **Reviewer agents (Claude `.md` + Codex `.toml`):** the upstream
+  "file headers, function documentation and inline comments are present"
+  checklist contradicted the rules pack (comments only where the why is
+  non-obvious) and produced documentation findings; "ask the coding agent to
+  confirm" and "always acknowledge what was done well" assumed a
+  back-channel and spent tokens on praise. Replaced by a conventions check,
+  a deviation-as-finding rule and "findings first, process notes after".
+
 ## 0.5.1 — 2026-09-09
 
 Run `gor-mobile repair` — the `writing-plans`, `subagent-driven-development`

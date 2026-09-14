@@ -41,10 +41,10 @@ Do this *before* comparing approaches: the "right" approach often hinges on
 what the pinned library version actually ships (e.g. a ready-made
 `media3-ui-compose` composable you would not know about from memory).
 
-> **Red Flag — STOP.** Writing "use `PlayerView` / `ContentFrame` / `NavHost`
-> …" into a spec because you remember the API. Cutoff → library APIs drift.
-> Read the docs/artifact for the pinned version first, then describe how to
-> build the feature.
+Writing "use `PlayerView` / `NavHost`" into a spec from memory is the
+failure this gate exists for: library APIs drift past the cutoff, so read
+the docs/artifact for the pinned version first, then describe how to build
+the feature.
 
 ### Examples-first gate (spec phase) — MANDATORY before comparing approaches
 
@@ -87,27 +87,10 @@ Never fabricate: citing an example file that does not exist in the current
 pack, or describing a "canonical shape" from memory of the default pack, is
 the same defect class as coding a remembered API signature.
 
-> **Red Flag — STOP.** Designing a datasource / ViewModel / repository around
-> a protocol, ticket, or backend instruction without having read that layer's
-> `Example*.kt` (or its absence-ladder substitute). The layer example vetoes
-> remembered or externally-anchored shapes.
-
-### Override: no automatic commits, branches, or worktrees
-
-The upstream skill body instructs you to "commit the design document to
-git" and to create branches/worktrees for isolation. The gor-mobile
-overlay **overrides this** for every invocation, regardless of project
-size or perceived complexity:
-
-- Write the spec file to `.gor-mobile/specs/...` and stop.
-- Never run `git commit`, `git branch`, `git checkout`, or
-  `git worktree add` from inside this skill.
-- All artefacts (spec, plan, code) accumulate as uncommitted
-  modifications in the current working tree. The user reviews
-  `git status` / `git diff` at their own pace and commits when ready.
-
-Then proceed with checklist step 9 (invoke writing-plans) on the
-current branch, unchanged.
+A datasource / ViewModel / repository designed around a protocol, ticket or
+backend instruction before that layer's `Example*.kt` (or its absence-ladder
+substitute) has been read is anchored on the wrong thing: the layer example
+vetoes remembered and externally-anchored shapes.
 
 ### Android CLI — phase command mapping
 
@@ -138,20 +121,5 @@ hundreds of K of characters (context overflow), and a root screenshot returns
 dozens of mockups with little usable signal. If the ticket already describes
 the screen sufficiently in text, do not descend into Figma for pixel details —
 spend the tokens on the docs-first API research instead.
-
-### Override (Claude only): no spec-approval gate — the pipeline is the net
-
-On Claude, the body's step 8 ("User reviews written spec") and its User
-Review Gate are REMOVED: after the design sections are approved in dialogue
-(step 5 stays — that approval is the human decision point), write the spec,
-run the self-review, and invoke writing-plans immediately. Do not ask the
-user to review the spec file. The plan is likewise written without an
-approval pause; the single human stop of the whole chain is the
-plan-approval dialog at the writing-plans handoff (ExitPlanMode), and the
-execution sub-skill's gates (spec-compliance review per task, bounded fix
-loop, final `requesting-code-review` gate with Codex) are the safety net
-behind it.
-
-On Codex the body's gates stay exactly as written.
 
 <!-- END gor-mobile overlay -->

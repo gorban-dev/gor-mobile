@@ -5,11 +5,11 @@ description: Use when executing implementation plans with independent tasks in t
 
 # Subagent-Driven Development
 
-Execute plan by dispatching fresh subagent per task, with two-stage review after each: spec compliance review first, then code quality review.
+Execute plan by dispatching fresh subagent per task, with one combined review after each: spec compliance and code quality in a single dispatch, reported as two sections.
 
 **Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
 
-**Core principle:** Fresh subagent per task + two-stage review (spec then quality) = high quality, fast iteration
+**Core principle:** Fresh subagent per task + one combined review (spec and quality) = high quality, fast iteration
 
 **Artifacts travel as files.** Everything you paste into a dispatch prompt —
 and everything a subagent prints back — stays resident in your context for
@@ -44,43 +44,34 @@ digraph process {
     subgraph cluster_per_task {
         label="Per Task";
         "Dispatch implementer subagent (./implementer-prompt.md)" [shape=box];
-        "Implementer subagent asks questions?" [shape=diamond];
-        "Answer questions, provide context" [shape=box];
-        "Implementer subagent implements, tests, commits, self-reviews" [shape=box];
+        "Implementer returns NEEDS_CONTEXT?" [shape=diamond];
+        "Answer the question, provide context" [shape=box];
+        "Implementer subagent implements, verifies, self-reviews" [shape=box];
         "Generate review package (scripts/sdd-snapshot + scripts/review-package)" [shape=box];
-        "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)" [shape=box];
-        "Spec reviewer subagent confirms code matches spec?" [shape=diamond];
-        "Fix loop: implementer fixes spec gaps (round R of 5)" [shape=box];
-        "Dispatch code quality reviewer subagent (./code-quality-reviewer-prompt.md)" [shape=box];
-        "Code quality reviewer subagent approves?" [shape=diamond];
-        "Fix loop: implementer fixes quality issues (round R of 5)" [shape=box];
+        "Dispatch combined reviewer subagent (./combined-review-prompt.md)" [shape=box];
+        "Both sections clean (spec compliance + code quality)?" [shape=diamond];
+        "Fix loop: implementer fixes findings (round R of 5)" [shape=box];
         "Mark task complete in TodoWrite" [shape=box];
     }
 
     "Setup: workspace (scripts/sdd-workspace), read plan once, create TodoWrite" [shape=box];
     "More tasks remain?" [shape=diamond];
-    "Dispatch final code reviewer subagent for entire implementation" [shape=box];
-    "Use superpowers:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
+    "Final full-implementation review via superpowers:requesting-code-review" [shape=box style=filled fillcolor=lightgreen];
 
     "Setup: workspace (scripts/sdd-workspace), read plan once, create TodoWrite" -> "Dispatch implementer subagent (./implementer-prompt.md)";
-    "Dispatch implementer subagent (./implementer-prompt.md)" -> "Implementer subagent asks questions?";
-    "Implementer subagent asks questions?" -> "Answer questions, provide context" [label="yes"];
-    "Answer questions, provide context" -> "Dispatch implementer subagent (./implementer-prompt.md)";
-    "Implementer subagent asks questions?" -> "Implementer subagent implements, tests, commits, self-reviews" [label="no"];
-    "Implementer subagent implements, tests, commits, self-reviews" -> "Generate review package (scripts/sdd-snapshot + scripts/review-package)";
-    "Generate review package (scripts/sdd-snapshot + scripts/review-package)" -> "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)";
-    "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)" -> "Spec reviewer subagent confirms code matches spec?";
-    "Spec reviewer subagent confirms code matches spec?" -> "Fix loop: implementer fixes spec gaps (round R of 5)" [label="no"];
-    "Fix loop: implementer fixes spec gaps (round R of 5)" -> "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)" [label="scoped re-review (./re-review-prompt.md)"];
-    "Spec reviewer subagent confirms code matches spec?" -> "Dispatch code quality reviewer subagent (./code-quality-reviewer-prompt.md)" [label="yes"];
-    "Dispatch code quality reviewer subagent (./code-quality-reviewer-prompt.md)" -> "Code quality reviewer subagent approves?";
-    "Code quality reviewer subagent approves?" -> "Fix loop: implementer fixes quality issues (round R of 5)" [label="no"];
-    "Fix loop: implementer fixes quality issues (round R of 5)" -> "Dispatch code quality reviewer subagent (./code-quality-reviewer-prompt.md)" [label="scoped re-review (./re-review-prompt.md)"];
-    "Code quality reviewer subagent approves?" -> "Mark task complete in TodoWrite" [label="yes"];
+    "Dispatch implementer subagent (./implementer-prompt.md)" -> "Implementer returns NEEDS_CONTEXT?";
+    "Implementer returns NEEDS_CONTEXT?" -> "Answer the question, provide context" [label="yes"];
+    "Answer the question, provide context" -> "Dispatch implementer subagent (./implementer-prompt.md)";
+    "Implementer returns NEEDS_CONTEXT?" -> "Implementer subagent implements, verifies, self-reviews" [label="no"];
+    "Implementer subagent implements, verifies, self-reviews" -> "Generate review package (scripts/sdd-snapshot + scripts/review-package)";
+    "Generate review package (scripts/sdd-snapshot + scripts/review-package)" -> "Dispatch combined reviewer subagent (./combined-review-prompt.md)";
+    "Dispatch combined reviewer subagent (./combined-review-prompt.md)" -> "Both sections clean (spec compliance + code quality)?";
+    "Both sections clean (spec compliance + code quality)?" -> "Fix loop: implementer fixes findings (round R of 5)" [label="no"];
+    "Fix loop: implementer fixes findings (round R of 5)" -> "Both sections clean (spec compliance + code quality)?" [label="scoped re-review (./re-review-prompt.md)"];
+    "Both sections clean (spec compliance + code quality)?" -> "Mark task complete in TodoWrite" [label="yes"];
     "Mark task complete in TodoWrite" -> "More tasks remain?";
     "More tasks remain?" -> "Dispatch implementer subagent (./implementer-prompt.md)" [label="yes"];
-    "More tasks remain?" -> "Dispatch final code reviewer subagent for entire implementation" [label="no"];
-    "Dispatch final code reviewer subagent for entire implementation" -> "Use superpowers:finishing-a-development-branch";
+    "More tasks remain?" -> "Final full-implementation review via superpowers:requesting-code-review" [label="no"];
 }
 ```
 
@@ -159,7 +150,7 @@ Three dispatch rules keep reviews honest:
 
 Implementer subagents report one of four statuses. Handle each appropriately:
 
-**DONE:** Proceed to spec compliance review.
+**DONE:** Run the task's verification command yourself, then proceed to the combined review.
 
 **DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
 
@@ -250,8 +241,7 @@ a silent discard is forbidden.
 ## Prompt Templates
 
 - `./implementer-prompt.md` - Dispatch implementer subagent
-- `./spec-reviewer-prompt.md` - Dispatch spec compliance reviewer subagent
-- `./code-quality-reviewer-prompt.md` - Dispatch code quality reviewer subagent
+- `./combined-review-prompt.md` - Dispatch the combined (spec compliance + code quality) reviewer subagent
 - `./re-review-prompt.md` - Dispatch scoped re-review after a fix round
 
 ## Scripts
@@ -286,16 +276,13 @@ You: "User level (~/.config/superpowers/hooks/)"
 Implementer: "Got it. Implementing now..."
 [Later] Implementer:
   - Implemented install-hook command
-  - Added tests, 5/5 passing
+  - Verification: ./gradlew :app:compileDebugKotlin — BUILD SUCCESSFUL
   - Self-review: Found I missed --force flag, added it
-  - Committed
 
-[Snapshot HEAD; run scripts/review-package; dispatch spec reviewer with
- brief + report + package paths]
-Spec reviewer: ✅ Spec compliant - all requirements met, nothing extra
-
-[Dispatch code quality reviewer with the same package]
-Code reviewer: Strengths: Good test coverage, clean. Issues: None. Approved.
+[Re-run the verification; snapshot HEAD; run scripts/review-package;
+ dispatch the combined review with brief + report + package paths]
+Reviewer: Spec compliance ✅ — all requirements met, nothing extra.
+  Code quality: no findings. Approved.
 
 [Mark Task 1 complete]
 
@@ -307,42 +294,33 @@ Task 2: Recovery modes
 Implementer: [No questions, proceeds]
 Implementer:
   - Added verify/repair modes
-  - 8/8 tests passing
+  - Verification: ./gradlew :app:compileDebugKotlin — BUILD SUCCESSFUL
   - Self-review: All good
-  - Committed
 
-[Snapshot HEAD; run scripts/review-package; dispatch spec reviewer]
-Spec reviewer: ❌ Issues:
+[Re-run the verification; snapshot HEAD; run scripts/review-package;
+ dispatch the combined review]
+Reviewer: Spec compliance ❌:
   - Missing: Progress reporting (spec says "report every 100 items")
   - Extra: Added --json flag (not requested)
+  Code quality (Important): Magic number (100)
 
-[Fix round 1/5: resume implementer with both findings]
-Implementer: Removed --json flag, added progress reporting
+[Fix round 1/5: resume implementer with all three findings]
+Implementer: Removed --json flag, added progress reporting, extracted
+  PROGRESS_INTERVAL constant
 
-[Snapshot; run scripts/review-package over the fix range]
-[Dispatch scoped re-review (./re-review-prompt.md)]
+[Re-run the verification; snapshot; run scripts/review-package over the
+ fix range; dispatch scoped re-review (./re-review-prompt.md)]
 Re-reviewer: Missing progress reporting — ADDRESSED (src/recovery.js:41).
-  Extra --json flag — ADDRESSED (removed). New breakage: none.
-  Verdict: all findings addressed.
-
-[Dispatch code quality reviewer]
-Code reviewer: Strengths: Solid. Issues (Important): Magic number (100)
-
-[Fix round 1/5: resume implementer]
-Implementer: Extracted PROGRESS_INTERVAL constant
-
-[Snapshot; run scripts/review-package over the fix range]
-[Dispatch scoped re-review (./re-review-prompt.md)]
-Re-reviewer: Magic number — ADDRESSED (src/recovery.js:7). Verdict: all
-  findings addressed.
+  Extra --json flag — ADDRESSED (removed). Magic number — ADDRESSED
+  (src/recovery.js:7). New breakage: none. Verdict: all findings addressed.
 
 [Mark Task 2 complete]
 
 ...
 
 [After all tasks]
-[Dispatch final code-reviewer]
-Final reviewer: All requirements met, ready to merge
+[Skill(requesting-code-review): deep reviewer + Codex pass over the whole diff]
+Final review: All requirements met, ready to merge
 
 Done!
 ```
@@ -352,7 +330,7 @@ Done!
 **vs. Manual execution:**
 - Fresh context per task (no confusion)
 - Parallel-safe (subagents don't interfere)
-- Subagent can ask questions (before AND during work)
+- Subagent can ask questions before work (a NEEDS_CONTEXT round trip)
 
 **vs. Executing Plans:**
 - Same session (no handoff)
@@ -368,13 +346,13 @@ Done!
 
 **Quality gates:**
 - Self-review catches issues before handoff
-- Two-stage review: spec compliance, then code quality
+- One combined review per task: spec compliance and code quality
 - Review loops ensure fixes actually work
 - Spec compliance prevents over/under-building
 - Code quality ensures implementation is well-built
 
 **Cost:**
-- More subagent invocations (implementer + 2 reviewers per task)
+- More subagent invocations (implementer + 1 reviewer per task)
 - Controller does more prep work (extracting all tasks upfront)
 - Review loops add iterations
 - But catches issues early (cheaper than debugging later)
@@ -382,8 +360,9 @@ Done!
 ## Red Flags
 
 **Never:**
-- Start implementation on main/master branch without explicit user consent
-- Skip reviews (spec compliance OR code quality)
+- Run `git commit`, `git branch`, `git checkout` or `git worktree add`
+  between tasks — diffs accumulate uncommitted; the user commits
+- Skip the combined review
 - Proceed with unfixed issues
 - Dispatch multiple implementation subagents in parallel (conflicts)
 - Make a subagent read the whole plan file (run scripts/task-brief; hand it
@@ -393,10 +372,9 @@ Done!
 - Dispatch a reviewer without a review-package file
 - Skip scene-setting context (subagent needs to understand where task fits)
 - Ignore subagent questions (answer before letting them proceed)
-- Accept "close enough" on spec compliance (spec reviewer found issues = not done)
+- Accept "close enough" on spec compliance (the spec-compliance section found issues = not done)
 - Skip review loops (reviewer found issues = fix round + scoped re-review)
 - Let implementer self-review replace actual review (both are needed)
-- **Start code quality review before spec compliance is ✅** (wrong order)
 - Move to next task while either review has open issues
 
 **If subagent asks questions:**
@@ -418,10 +396,8 @@ Done!
 ## Integration
 
 **Required workflow skills:**
-- **superpowers:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
 - **superpowers:writing-plans** - Creates the plan this skill executes
-- **superpowers:requesting-code-review** - Code review template for reviewer subagents
-- **superpowers:finishing-a-development-branch** - Complete development after all tasks
+- **superpowers:requesting-code-review** - The final full-implementation review
 
 **Alternative workflow:**
 - **superpowers:executing-plans** - Use for parallel session instead of same-session execution

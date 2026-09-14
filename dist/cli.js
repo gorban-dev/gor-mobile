@@ -5,7 +5,7 @@ import { Command } from "commander";
 import { homedir } from "os";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-var GOR_MOBILE_VERSION = "0.5.1";
+var GOR_MOBILE_VERSION = "0.5.2";
 var HOME = homedir();
 var GOR_MOBILE_HOME = process.env.GOR_MOBILE_HOME ?? join(HOME, ".gor-mobile");
 var GOR_MOBILE_RULES_DIR = join(GOR_MOBILE_HOME, "rules");
@@ -1253,16 +1253,7 @@ function transformSkillBody(content) {
   ).replace(
     /~\/\.config\/superpowers\/worktrees/g,
     "~/.config/gor-mobile/worktrees"
-  ).replace(/all 5 tasks/g, "all tasks").replace(/docs\/superpowers\/specs\//g, ".gor-mobile/specs/").replace(/docs\/superpowers\/plans\//g, ".gor-mobile/plans/").replace(
-    /^[ \t]*-[^\n]*(using-git-worktrees|finishing-a-development-branch)[^\n]*\n/gm,
-    ""
-  ).replace(
-    /"Use gor-mobile-finishing-a-development-branch"/g,
-    '"User decides next step"'
-  ).replace(
-    /Use gor-mobile-finishing-a-development-branch/g,
-    "User decides next step"
-  );
+  ).replace(/all 5 tasks/g, "all tasks").replace(/docs\/superpowers\/specs\//g, ".gor-mobile/specs/").replace(/docs\/superpowers\/plans\//g, ".gor-mobile/plans/");
 }
 function installSkills(target) {
   ensureDir(target.skillsDir);
@@ -1309,6 +1300,8 @@ function installAgents(target) {
   const ext = `.${target.agentFormat}`;
   const src = join7(gorMobileRoot(), "templates", srcSub);
   const copied = [];
+  const stale = join7(target.agentsDir, `gor-mobile-code-reviewer-deep${ext}`);
+  if (existsSync8(stale)) rmSync2(stale);
   if (!existsSync8(src)) return copied;
   for (const name of readdirSync3(src)) {
     if (!name.endsWith(ext)) continue;

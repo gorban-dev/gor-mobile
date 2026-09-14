@@ -26,9 +26,9 @@ You MUST create a task for each of these items and complete them in order:
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
+6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` (uncommitted — the user owns commits)
 7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-8. **User reviews written spec** — ask user to review the spec file before proceeding
+8. **User reviews written spec** — Codex only; on Claude go straight to step 9 (see User Review Gate below)
 9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
@@ -44,7 +44,7 @@ digraph brainstorming {
     "User approves design?" [shape=diamond];
     "Write design doc" [shape=box];
     "Spec self-review\n(fix inline)" [shape=box];
-    "User reviews spec?" [shape=diamond];
+    "User reviews spec? (Codex only)" [shape=diamond];
     "Invoke writing-plans skill" [shape=doublecircle];
 
     "Explore project context" -> "Visual questions ahead?";
@@ -57,9 +57,9 @@ digraph brainstorming {
     "User approves design?" -> "Present design sections" [label="no, revise"];
     "User approves design?" -> "Write design doc" [label="yes"];
     "Write design doc" -> "Spec self-review\n(fix inline)";
-    "Spec self-review\n(fix inline)" -> "User reviews spec?";
-    "User reviews spec?" -> "Write design doc" [label="changes requested"];
-    "User reviews spec?" -> "Invoke writing-plans skill" [label="approved"];
+    "Spec self-review\n(fix inline)" -> "User reviews spec? (Codex only)";
+    "User reviews spec? (Codex only)" -> "Write design doc" [label="changes requested"];
+    "User reviews spec? (Codex only)" -> "Invoke writing-plans skill" [label="approved / Claude"];
 }
 ```
 
@@ -111,7 +111,10 @@ digraph brainstorming {
 - Write the validated design (spec) to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
   - (User preferences for spec location override this default)
 - Use elements-of-style:writing-clearly-and-concisely skill if available
-- Commit the design document to git
+- Leave the spec uncommitted. Never run `git commit`, `git branch`,
+  `git checkout` or `git worktree add` from this skill: every artefact
+  (spec, plan, code) accumulates in the working tree and the user commits
+  at their own pace.
 
 **Spec Self-Review:**
 After writing the spec document, look at it with fresh eyes:
@@ -123,12 +126,14 @@ After writing the spec document, look at it with fresh eyes:
 
 Fix any issues inline. No need to re-review — just fix and move on.
 
-**User Review Gate:**
-After the spec review loop passes, ask the user to review the written spec before proceeding:
+**User Review Gate (Codex only):**
+On Codex, after the spec review loop passes, ask the user to review the written spec before proceeding:
 
-> "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
+> "Spec written to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
 
 Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once the user approves.
+
+On Claude there is no spec-approval pause: the design sections were approved in dialogue (step 5), and the single human stop of the chain is the plan-approval dialog at the writing-plans handoff. The execution sub-skill's gates (spec-compliance review per task, bounded fix loop, final review with Codex) are the net behind it. Write the spec, run the self-review, and invoke writing-plans immediately.
 
 **Implementation:**
 

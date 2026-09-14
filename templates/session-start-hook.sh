@@ -10,8 +10,8 @@
 #     installs kept it at .gor-mobile.json). No marker → stay silent (this repo
 #     did not run `gor-mobile init`).
 #
-# The injection is two blocks so the <EXTREMELY_IMPORTANT> envelope closes on the
-# skill-discipline rules — the signal the model anchors on.
+# The injection is two blocks so the skill-discipline envelope closes on the
+# routing rules — the signal the model anchors on.
 
 set -euo pipefail
 
@@ -41,6 +41,10 @@ done
 
 platform=""
 [[ -n "$marker" ]] && platform="$(jq -r '.platform // empty' "$marker" 2>/dev/null || true)"
+
+# The UserPromptSubmit reminder fires once per session (flag keyed by
+# session_id); every session start — startup, compact, clear, resume — re-arms it.
+[[ -n "$root" ]] && rm -f "$root/.gor-mobile/state"/.reminded-* 2>/dev/null || true
 if [[ -n "${GORM_SKILLS_DIR:-}" ]]; then
     # Codex user-level: always inject.
     skills_dir="$GORM_SKILLS_DIR"
@@ -319,13 +323,13 @@ read it and its referenced plan/spec before continuing.
     fi
 fi
 
-injection="<EXTREMELY_IMPORTANT>
+injection="<gor-mobile-skill-discipline>
 You have gor-mobile superpowers.
 
 **Below is the full content of your 'gor-mobile-using-superpowers' skill - your introduction to using skills. For all other skills, invoke them by name:**
 
 ${content}
-</EXTREMELY_IMPORTANT>
+</gor-mobile-skill-discipline>
 
 <gor-mobile-workflow-pointers>
 ${pointers}

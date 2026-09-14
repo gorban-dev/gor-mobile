@@ -25,11 +25,6 @@ prints the substitute command; do not phrase around the guard — rephrase
 the question to ast-index. grep remains correct for literals: string
 resources (`R.string.foo`), log messages, XML/manifest content, comments.
 
-> **Red Flag — STOP.** Typing `grep <BareIdentifier>` (or the Grep tool
-> with an identifier pattern) in an ast-index repo. That is a structural
-> query wearing a text-search costume — run `ast-index usages/symbol`
-> instead.
-
 ### Counting: the default limit truncates the answer
 
 `ast-index usages` and `ast-index callers` both default to `--limit 50`, and

@@ -68,6 +68,9 @@ week_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // 0')
 week_reset=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')
 model_name=$(echo "$input" | jq -r '.model.display_name // empty')
 model_raw=$(echo "$input" | jq -r '.model.id // empty')
+# prompt_cache is present from Claude Code 2.1.251; hit_ratio is a 0..1 fraction
+# (a value above 1 is read as a percentage, in case the scale changes).
+cache_hit=$(echo "$input" | jq -r '.prompt_cache.hit_ratio // empty')
 
 # ---- integers ----
 used_int=$(printf '%.0f' "$used_pct" 2>/dev/null || echo 0)
@@ -142,6 +145,14 @@ if [ -n "$week_reset" ] && [ "$week_reset" != "null" ]; then
   week_reset_str="${GRY}$(date -r "$week_reset" '+%b %d' 2>/dev/null)${RST}"
 fi
 
+# ---- prompt cache hit ratio (low is the warning state, so the scale is inverted) ----
+cache_str=""
+if [ -n "$cache_hit" ]; then
+  cache_pct=$(awk -v r="$cache_hit" 'BEGIN { if (r > 1) printf "%d", r + 0.5; else printf "%d", r * 100 + 0.5 }')
+  cache_col=$(color_for_pct "$(( 100 - cache_pct ))")
+  cache_str="  ${GRY}cache${RST} ${cache_col}${cache_pct}%${RST}"
+fi
+
 # ---- peak / off-peak tag ----
 if is_peak; then
   peak_tag="${RED}▲ peak${RST}"
@@ -181,7 +192,7 @@ printf '%s%s%s%s%s\n' "$face_pad" "$YEL" "$cat_face" "$RST" "$cat_extra"
 # Line 3: model (ctx) + bar + pct%
 ctx_label_str=""
 [ -n "$ctx_label" ] && ctx_label_str=" ${GRY}(${ctx_label})${RST}"
-printf '%s%s%s%s %s %s%s%%%s\n' "$WHT" "$model_name" "$RST" "$ctx_label_str" "$ctx_bar" "$ctx_col" "$used_int" "$RST"
+printf '%s%s%s%s %s %s%s%%%s%s\n' "$WHT" "$model_name" "$RST" "$ctx_label_str" "$ctx_bar" "$ctx_col" "$used_int" "$RST" "$cache_str"
 
 # Line 4: 5h | 7d | session
 line4="${GRY}5h${RST} ${five_bar} ${five_col}${five_int}%${RST}"

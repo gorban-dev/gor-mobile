@@ -184,8 +184,8 @@ You MUST complete each phase before proceeding to the next.
    - No bundled refactoring
 
 3. **Verify Fix**
-   - Test passes now?
-   - No other tests broken?
+   - The repro no longer triggers?
+   - The task's verification (Gradle / on-device check) is green?
    - Issue actually resolved?
 
 4. **If Fix Doesn't Work**
@@ -217,7 +217,7 @@ If you catch yourself thinking:
 - "Quick fix for now, investigate later"
 - "Just try changing X and see if it works"
 - "Add multiple changes, run tests"
-- "Skip the test, I'll manually verify"
+- "Skip the repro, I'll just change it and see"
 - "It's probably X, let me fix that"
 - "I don't fully understand but this might work"
 - "Pattern says X but I'll adapt it differently"
