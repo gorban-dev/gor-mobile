@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, statSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cleanupStale, removeProjectKeys } from "../lib/sandbox.mjs";
+import { acquireLock, cleanupStale, releaseLock, removeProjectKeys } from "../lib/sandbox.mjs";
 
 test("stale registry cleanup", () => {
   const d = mkdtempSync(join(tmpdir(), "reg-"));
@@ -26,7 +26,20 @@ test("removeProjectKeys deletes only listed keys and skips write when nothing ch
   const raw = readFileSync(claudeJson, "utf8");
   assert.deepEqual(JSON.parse(raw), { projects: { "/b": { k: 1 } } });
   assert.ok(raw.includes('\n  "projects"'));
+  assert.deepEqual(readdirSync(d), ["claude.json"]);
   const mtime = statSync(claudeJson).mtimeMs;
   removeProjectKeys(["/nope"], claudeJson);
   assert.equal(statSync(claudeJson).mtimeMs, mtime);
+});
+
+test("lock: live pid blocks, stale pid is replaced", () => {
+  const lock = join(mkdtempSync(join(tmpdir(), "lk-")), ".lock");
+  acquireLock(lock);
+  assert.equal(readFileSync(lock, "utf8"), String(process.pid));
+  assert.throws(() => acquireLock(lock), new RegExp(`another eval run is active \\(pid ${process.pid}\\)`));
+  releaseLock(lock);
+  writeFileSync(lock, "999999999");
+  acquireLock(lock);
+  assert.equal(readFileSync(lock, "utf8"), String(process.pid));
+  releaseLock(lock);
 });
