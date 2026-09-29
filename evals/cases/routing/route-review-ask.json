@@ -1,0 +1,27 @@
+{
+  "name": "route-review-ask",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "prompt": "Проверь код ProfileViewModel",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "graders": [
+    {
+      "first_skill": {
+        "any_of": [
+          "gor-mobile-requesting-code-review"
+        ]
+      }
+    }
+  ]
+}

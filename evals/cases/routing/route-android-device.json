@@ -1,0 +1,28 @@
+{
+  "name": "route-android-device",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "prompt": "Запусти приложение на эмуляторе и сделай скриншот профиля",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "graders": [
+    {
+      "first_skill": {
+        "any_of": [
+          "gor-mobile-using-android-cli",
+          "android-cli"
+        ]
+      }
+    }
+  ]
+}

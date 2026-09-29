@@ -1,0 +1,24 @@
+{
+  "name": "review-clean",
+  "split": "test",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "runs": 3,
+  "prompt": "Проверь мои незакоммиченные изменения в ProfileView.",
+  "max_turns": 30,
+  "files": {
+    "app/src/main/java/com/company/app/feature/profile/presentation/view/ProfileView.kt": "package com.company.app.feature.profile.presentation.view\n\nimport androidx.compose.foundation.layout.Box\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.fillMaxSize\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.material3.Button\nimport androidx.compose.material3.CircularProgressIndicator\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.ui.Alignment\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.tooling.preview.Preview\nimport androidx.compose.ui.unit.dp\nimport com.company.app.feature.profile.presentation.viewmodel.ProfileViewEvent\nimport com.company.app.feature.profile.presentation.viewmodel.ProfileViewState\n\n@Composable\nfun ProfileView(\n    viewState: ProfileViewState,\n    eventHandler: (ProfileViewEvent) -> Unit\n) {\n    Box(modifier = Modifier.fillMaxSize()) {\n        when {\n            viewState.isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))\n            viewState.error != null -> Text(\n                text = viewState.error,\n                modifier = Modifier.align(Alignment.Center).padding(16.dp)\n            )\n            else -> Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {\n                Text(text = viewState.name)\n                Text(text = viewState.email)\n                Button(onClick = { eventHandler(ProfileViewEvent.OnEditClicked) }) {\n                    Text(text = \"Edit profile\")\n                }\n            }\n        }\n    }\n}\n\n@Preview(showBackground = true)\n@Composable\nprivate fun ProfileViewPreview() {\n    ProfileView(\n        viewState = ProfileViewState(name = \"Ann\", email = \"ann@example.com\"),\n        eventHandler = {}\n    )\n}"
+  },
+  "graders": [
+    {
+      "judge": {
+        "rubric": [
+          "The review reports no Critical findings."
+        ]
+      }
+    }
+  ]
+}

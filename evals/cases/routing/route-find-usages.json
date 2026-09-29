@@ -1,0 +1,25 @@
+{
+  "name": "route-find-usages",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "prompt": "Где используется IProfileRepository?",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "graders": [
+    {
+      "no_skill": {
+        "matching": "brainstorming|writing-plans|systematic-debugging"
+      }
+    }
+  ]
+}

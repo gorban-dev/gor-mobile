@@ -1,0 +1,25 @@
+{
+  "name": "neg-general",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "empty",
+  "prompt": "Чем StateFlow отличается от SharedFlow?",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "graders": [
+    {
+      "no_skill": {
+        "matching": "brainstorming|writing-plans|systematic-debugging|requesting-code-review"
+      }
+    }
+  ]
+}

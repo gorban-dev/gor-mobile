@@ -1,0 +1,25 @@
+{
+  "name": "review-layer-defect",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "runs": 3,
+  "prompt": "Проверь мои незакоммиченные изменения в ProfileViewModel.",
+  "max_turns": 30,
+  "files": {
+    "app/src/main/java/com/company/app/feature/profile/presentation/viewmodel/ProfileViewModel.kt": "package com.company.app.feature.profile.presentation.viewmodel\n\nimport androidx.lifecycle.viewModelScope\nimport com.company.app.common.base.BaseSharedViewModel\nimport com.company.app.feature.profile.domain.repository.IProfileRepository\nimport kotlinx.coroutines.launch\n\nclass ProfileViewModel(\n    private val repository: IProfileRepository\n) : BaseSharedViewModel<ProfileViewState, ProfileViewAction, ProfileViewEvent>(\n    initialState = ProfileViewState()\n) {\n\n    override fun handleEvent(event: ProfileViewEvent) {\n        when (event) {\n            is ProfileViewEvent.LoadProfile -> loadProfile()\n            is ProfileViewEvent.OnEditClicked -> sendAction(ProfileViewAction.NavigateToEdit)\n        }\n    }\n\n    private fun loadProfile() {\n        viewModelScope.launch {\n            updateState { it.copy(isLoading = true, error = null) }\n            try {\n                val data = repository.getProfile()\n                updateState { it.copy(isLoading = false, name = data.name, email = data.email) }\n            } catch (e: Exception) {\n                updateState { it.copy(isLoading = false, error = e.message) }\n            }\n        }\n    }\n}\n"
+  },
+  "graders": [
+    {
+      "judge": {
+        "rubric": [
+          "The review flags that ProfileViewModel depends on IProfileRepository directly instead of GetProfileUseCase.",
+          "That finding is rated Critical or Important."
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "route-exec-sdd",
+  "split": "test",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "prompt": "Выполни план docs/plans/avatar.md",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "files": {
+    "docs/plans/avatar.md": "# Avatar — implementation plan\n\n**Execution mode:** subagent-driven-development — every task is self-contained (inputs, result, verification stated). Tasks: 3, files touched: 3, dependency chain: no.\n\n### Task 1: add AvatarResponse\n\n### Task 2: AvatarRemoteDataSource\n\n### Task 3: AvatarView\n"
+  },
+  "graders": [
+    {
+      "first_skill": {
+        "any_of": [
+          "gor-mobile-subagent-driven-development"
+        ]
+      }
+    }
+  ]
+}

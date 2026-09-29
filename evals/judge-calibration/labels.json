@@ -1,0 +1,22 @@
+{
+  "p1.md": [
+    true,
+    true
+  ],
+  "p2.md": [
+    false,
+    true
+  ],
+  "p3.md": [
+    true,
+    false
+  ],
+  "p4.md": [
+    false,
+    false
+  ],
+  "p5.md": [
+    true,
+    true
+  ]
+}

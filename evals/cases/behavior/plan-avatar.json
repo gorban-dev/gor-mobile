@@ -1,0 +1,43 @@
+{
+  "name": "plan-avatar",
+  "split": "test",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "runs": 3,
+  "prompt": "Напиши план реализации по docs/specs/avatar.md. Spec утверждён, вопросов нет — сразу план.",
+  "max_turns": 60,
+  "timeout_s": 1800,
+  "files": {
+    "docs/specs/avatar.md": "# Аватар в профиле\n\n## Цель\nПоказывать аватар пользователя в ProfileView.\n\n## API\n`GET /api/profile/avatar` возвращает JSON с полем `url`.\n\n## UI\n- Картинка загружается через Coil `AsyncImage` по полученному URL.\n- Пока URL грузится или при ошибке показывается плейсхолдер.\n\nТребования полные, вопросов нет.\n"
+  },
+  "graders": [
+    {
+      "read_before_write": {
+        "read": "examples/presentation/",
+        "write": "plans?/.*\\.md$"
+      }
+    },
+    {
+      "conforms_to": {
+        "path": "plans?/.*\\.md$",
+        "required": [
+          "examples/data/ExampleDataSource.kt",
+          "examples/data/ExampleResponse.kt",
+          "examples/presentation/ExampleView.kt"
+        ]
+      }
+    },
+    {
+      "judge": {
+        "path": "plans?/.*\\.md$",
+        "rubric": [
+          "Every plan step that names a Ktor, Koin, Compose or kotlinx.serialization API call has a citation next to it (a docs URL, a javap command, or a source file path). Steps that name no such API call are ignored.",
+          "The plan contains no step that runs git commit, git branch or git checkout."
+        ]
+      }
+    }
+  ]
+}

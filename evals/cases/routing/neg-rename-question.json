@@ -1,0 +1,25 @@
+{
+  "name": "neg-rename-question",
+  "split": "test",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "prompt": "Как лучше назвать use case для обновления email?",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "graders": [
+    {
+      "no_skill": {
+        "matching": "writing-plans|systematic-debugging"
+      }
+    }
+  ]
+}

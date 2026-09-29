@@ -1,0 +1,28 @@
+{
+  "name": "route-feature-screen",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "prompt": "Добавь экран настроек уведомлений в профиль",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "graders": [
+    {
+      "first_skill": {
+        "any_of": [
+          "gor-mobile-brainstorming",
+          "gor-mobile-writing-plans"
+        ]
+      }
+    }
+  ]
+}
