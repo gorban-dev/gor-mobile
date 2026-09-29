@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { judgeText } from "./judge.mjs";
 
 const bare = (n) => String(n ?? "").replace(/^.*:/, "");
+const ROUTER = new Set(["gor-mobile-using-superpowers", "using-superpowers"]);
+const isSkill = (e) => e.kind === "skill" && !ROUTER.has(bare(e.name));
 const re = (s, f = "") => new RegExp(s, f);
 const touches = (e, r) =>
   (e.kind === "read" && r.test(e.path ?? "")) || ((e.kind === "bash" || e.kind === "tool") && r.test(e.command ?? ""));
@@ -25,15 +27,15 @@ export function changedFiles(workdir) {
 
 const GRADERS = {
   first_skill: ({ events }, { any_of }) => {
-    const s = events.find((e) => e.kind === "skill");
+    const s = events.find(isSkill);
     return { pass: !!s && any_of.includes(bare(s.name)), detail: s ? bare(s.name) : "no skill" };
   },
   no_skill: ({ events }, { matching }) => {
-    const hit = events.find((e) => e.kind === "skill" && re(matching).test(bare(e.name)));
+    const hit = events.find((e) => isSkill(e) && re(matching).test(bare(e.name)));
     return { pass: !hit, detail: hit ? bare(hit.name) : "none" };
   },
   skill_before_write: ({ events }, { skill, write }) => {
-    const s = events.findIndex((e) => e.kind === "skill" && bare(e.name) === skill);
+    const s = events.findIndex((e) => isSkill(e) && bare(e.name) === skill);
     const w = events.findIndex((e) => writes(e, re(write)));
     return { pass: s !== -1 && (w === -1 || s < w), detail: `skill@${s} write@${w}` };
   },

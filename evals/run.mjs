@@ -51,8 +51,10 @@ async function runOnce(variant, kase, harness, n, resultsDir) {
   const timeoutMs = (kase.timeout_s ?? 900) * 1000;
   let res;
   if (harness === "claude") {
+    const tools = kase.allowed_tools ?? DEFAULT_TOOLS;
+    const bareTools = [...new Set(tools.map((t) => t.replace(/\(.*$/, "")))];
     const args = ["-p", kase.prompt, "--output-format", "stream-json", "--verbose", "--max-turns", String(kase.max_turns),
-      "--no-session-persistence", "--allowedTools", ...(kase.allowed_tools ?? DEFAULT_TOOLS)];
+      "--no-session-persistence", "--tools", bareTools.join(","), "--allowedTools", ...tools];
     if (values["claude-model"]) args.push("--model", values["claude-model"]);
     res = await exec("claude", args, { cwd: run.workdir, env: variant.env, timeoutMs });
   } else {

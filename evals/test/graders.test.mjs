@@ -113,3 +113,14 @@ test("no_skill / skill_before_write negatives", async () => {
   ];
   assert.equal((await grade({ skill_before_write: { skill: "gor-mobile-writing-plans", write: "plans/" } }, ctx({ events: writeFirstEvents }))).pass, false);
 });
+
+test("router skill is ignored by skill graders", async () => {
+  const ev = [
+    { kind: "skill", name: "gor-mobile-using-superpowers" },
+    { kind: "skill", name: "gor-mobile-systematic-debugging" }
+  ];
+  assert.equal((await grade({ first_skill: { any_of: ["gor-mobile-systematic-debugging"] } }, ctx({ events: ev }))).pass, true);
+  const only = [{ kind: "skill", name: "gor-mobile-using-superpowers" }];
+  assert.equal((await grade({ no_skill: { matching: "using" } }, ctx({ events: only }))).pass, true);
+  assert.equal((await grade({ first_skill: { any_of: ["gor-mobile-using-superpowers"] } }, ctx({ events: only }))).pass, false);
+});
