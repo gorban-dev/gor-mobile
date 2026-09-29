@@ -18,6 +18,15 @@ export function removeProjectKeys(paths, claudeJson = join(homedir(), ".claude.j
   renameSync(tmp, claudeJson);
 }
 
+// Hours until the Codex access token expires, or null when it cannot be decoded.
+export function codexTokenHoursLeft(auth, now = Date.now()) {
+  try {
+    const payload = String(auth?.tokens?.access_token ?? "").split(".")[1];
+    const exp = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).exp;
+    return typeof exp === "number" ? (exp * 1000 - now) / 3600_000 : null;
+  } catch { return null; }
+}
+
 export function acquireLock(path) {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {

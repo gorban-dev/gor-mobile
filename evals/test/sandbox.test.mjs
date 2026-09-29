@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, writeFileSync, readFileSync, statSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { acquireLock, cleanupStale, releaseLock, removeProjectKeys } from "../lib/sandbox.mjs";
+import { acquireLock, cleanupStale, codexTokenHoursLeft, releaseLock, removeProjectKeys } from "../lib/sandbox.mjs";
 
 test("stale registry cleanup", () => {
   const d = mkdtempSync(join(tmpdir(), "reg-"));
@@ -44,4 +44,15 @@ test("lock: live pid blocks, stale pid is replaced", () => {
   acquireLock(lock);
   assert.equal(readFileSync(lock, "utf8"), String(process.pid));
   releaseLock(lock);
+});
+
+test("codexTokenHoursLeft decodes JWT exp", () => {
+  const now = Date.UTC(2026, 0, 1);
+  const jwt = (payload) => `h.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.s`;
+  const auth = (exp) => ({ tokens: { access_token: jwt({ exp }) } });
+  assert.equal(codexTokenHoursLeft(auth(now / 1000 + 3 * 3600), now), 3);
+  assert.equal(codexTokenHoursLeft(auth(now / 1000 - 3600), now), -1);
+  assert.equal(codexTokenHoursLeft({ tokens: { access_token: "garbage" } }, now), null);
+  assert.equal(codexTokenHoursLeft({}, now), null);
+  assert.equal(codexTokenHoursLeft({ tokens: { access_token: jwt({}) } }, now), null);
 });

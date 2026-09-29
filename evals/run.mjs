@@ -9,7 +9,7 @@ import { parseArgs } from "node:util";
 import { parseClaude } from "./lib/adapters/claude.mjs";
 import { parseCodex } from "./lib/adapters/codex.mjs";
 import { grade, changedFiles } from "./lib/graders.mjs";
-import { acquireLock, cleanupStale, dropVariant, prepareRun, prepareVariant, releaseLock, teardownRun } from "./lib/sandbox.mjs";
+import { acquireLock, cleanupStale, codexTokenHoursLeft, dropVariant, prepareRun, prepareVariant, releaseLock, teardownRun } from "./lib/sandbox.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
 const { values } = parseArgs({
@@ -141,8 +141,11 @@ try {
   if (harnesses.includes("codex")) {
     const auth = join(homedir(), ".codex", "auth.json");
     if (!existsSync(auth)) throw new Error(`codex harness requested but ${auth} is missing (run codex login)`);
-    const refreshed = Date.parse(JSON.parse(readFileSync(auth, "utf8")).last_refresh ?? "");
-    if (!values["allow-stale-codex-auth"] && !(Date.now() - refreshed < 7 * 86400_000)) throw new Error("codex login is stale: run `codex` once to refresh its login, then retry");
+    const hours = codexTokenHoursLeft(JSON.parse(readFileSync(auth, "utf8")));
+    if (hours === null) console.warn("warning: cannot decode the codex access token, skipping the expiry check");
+    else if (hours < 6 && !values["allow-stale-codex-auth"]) {
+      throw new Error(`Codex access token expires in ${Math.max(hours, 0).toFixed(1)}h; run \`codex\` once to refresh its login, then retry`);
+    }
   }
   const cases = loadCases();
   for (const [name, spec] of specs) variants.push(prepareVariant(name, spec, { repo: REPO, root: ROOT, harnesses }));
