@@ -456,7 +456,7 @@ Different skill types need different test approaches:
 
 Skills that enforce discipline (like verification-before-completion) need to resist rationalization. Agents are smart and will find loopholes when under pressure.
 
-**Psychology note:** Understanding WHY persuasion techniques work helps you apply them systematically. See persuasion-principles.md for research foundation (Cialdini, 2021; Meincke et al., 2025) on authority, commitment, scarcity, social proof, and unity principles.
+**Wording note:** Close loopholes with reasons and structure, not volume. Current models over-apply "YOU MUST"-style emphasis; see persuasion-principles.md for when stronger wording is justified and how to scope it.
 
 ### Close Every Loophole Explicitly
 

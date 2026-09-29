@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+Run `gor-mobile repair` — the `brainstorming` skill description and three
+`writing-skills` files changed.
+
+- **`writing-skills` no longer teaches pressure wording.**
+  `persuasion-principles.md` recommended "YOU MUST", "No exceptions" and
+  urgency framing, citing a study about persuading models to comply with
+  objectionable requests. It now describes instruction strength for current
+  models: a reason per rule, one place per rule, gates in structure where
+  possible, and stronger wording only where a measured skip justifies it,
+  scoped to the harness that skipped. The two references to it in
+  `SKILL.md` and `testing-skills-with-subagents.md` follow suit. File name
+  unchanged, so no uninstall migration.
+- **`brainstorming` description drops "You MUST".** It reads "Use before
+  creative work - …". Anthropic's guidance for Claude 5 models is that
+  "CRITICAL / MUST" in triggers causes over-triggering.
+
 ## 0.5.2 — 2026-09-14
 
 Run `gor-mobile repair` — every phase skill body, six overlays, both hook

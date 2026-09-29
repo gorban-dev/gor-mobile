@@ -1,187 +1,41 @@
-# Persuasion Principles for Skill Design
+# Instruction Strength for Current Models
 
 ## Overview
 
-LLMs respond to the same persuasion principles as humans. Understanding this psychology helps you design more effective skills - not to manipulate, but to ensure critical practices are followed even under pressure.
+Earlier model generations skipped steps unless a skill pushed hard: "YOU MUST", "No exceptions", bright-line threats. Current Claude models (Claude 5 generation) and current Codex models follow plain instructions and read the whole skill. On them, pressure language backfires: it makes a skill fire where it does not apply, and it makes a rule win against the user's request or another rule it was never meant to override.
 
-**Research foundation:** Meincke et al. (2025) tested 7 persuasion principles with N=28,000 AI conversations. Persuasion techniques more than doubled compliance rates (33% → 72%, p < .001).
+Anthropic cut over 80% of Claude Code's system prompt for Claude 5 models with no measured loss, and its prompting guide says to replace "CRITICAL: You MUST use this tool when…" with "Use this tool when…". Write skills the same way.
 
-## The Seven Principles
+## What to write instead
 
-### 1. Authority
-**What it is:** Deference to expertise, credentials, or official sources.
+| Old habit | Write instead |
+|-----------|---------------|
+| "YOU MUST do X. No exceptions." | "Do X — <one-line reason>." The reason lets the model apply the rule to cases you did not list. |
+| The same rule in the description, the body and a hook | One authoritative place. The description says *when* the skill applies; the body says *how*. |
+| A long table of forbidden rationalizations | The two or three failures you actually observed, each tied to the rule it breaks. |
+| "IMMEDIATELY", "Every time", "= failure" | Order the steps. Sequence carries urgency without shouting. |
+| Long lists of examples | A precise rule, or a structured artifact the model fills in (a checklist line, a required plan header). Examples narrow what the model will try. |
+| A gate that exists only as prose | Put it in structure where you can: a required artifact the next step reads, a hook that denies the call, a reviewer check. |
 
-**How it works in skills:**
-- Imperative language: "YOU MUST", "Never", "Always"
-- Non-negotiable framing: "No exceptions"
-- Eliminates decision fatigue and rationalization
+## When stronger wording is justified
 
-**When to use:**
-- Discipline-enforcing skills (verification requirements, review gates)
-- Safety-critical practices
-- Established best practices
+Only with evidence. Raise the pressure on one step when a transcript or an eval shows that step being skipped under realistic load. Then:
 
-**Example:**
-```markdown
-✅ Write code before test? Delete it. Start over. No exceptions.
-❌ Consider writing tests first when feasible.
-```
+- Scope it to the harness that skipped it (an `On Codex` branch, for example), not to every agent.
+- Keep the reason next to the rule.
+- Measure again after the change, and remove the pressure if it does not move the result.
 
-### 2. Commitment
-**What it is:** Consistency with prior actions, statements, or public declarations.
+Pressure added "just in case" is the default failure: it costs tokens in every session and pulls the model toward the skill when the task does not need it.
 
-**How it works in skills:**
-- Require announcements: "Announce skill usage"
-- Force explicit choices: "Choose A, B, or C"
-- Use tracking: TodoWrite for checklists
+## Where this came from
 
-**When to use:**
-- Ensuring skills are actually followed
-- Multi-step processes
-- Accountability mechanisms
+The earlier version of this file cited Meincke et al. (2025), "Call Me A Jerk: Persuading AI to Comply with Objectionable Requests". That study measured whether persuasion gets models to do things they would otherwise refuse. It says nothing about whether a skill's steps get followed, and it is not a basis for skill wording.
 
-**Example:**
-```markdown
-✅ When you find a skill, you MUST announce: "I'm using [Skill Name]"
-❌ Consider letting your partner know which skill you're using.
-```
+Sources: Anthropic, "The new rules of context engineering for Claude 5 generation models" (claude.dev, 2026); Claude Platform docs, "Prompting best practices" and "Prompting Claude Opus 5".
 
-### 3. Scarcity
-**What it is:** Urgency from time limits or limited availability.
+## Quick check before shipping a skill
 
-**How it works in skills:**
-- Time-bound requirements: "Before proceeding"
-- Sequential dependencies: "Immediately after X"
-- Prevents procrastination
-
-**When to use:**
-- Immediate verification requirements
-- Time-sensitive workflows
-- Preventing "I'll do it later"
-
-**Example:**
-```markdown
-✅ After completing a task, IMMEDIATELY request code review before proceeding.
-❌ You can review code when convenient.
-```
-
-### 4. Social Proof
-**What it is:** Conformity to what others do or what's considered normal.
-
-**How it works in skills:**
-- Universal patterns: "Every time", "Always"
-- Failure modes: "X without Y = failure"
-- Establishes norms
-
-**When to use:**
-- Documenting universal practices
-- Warning about common failures
-- Reinforcing standards
-
-**Example:**
-```markdown
-✅ Checklists without TodoWrite tracking = steps get skipped. Every time.
-❌ Some people find TodoWrite helpful for checklists.
-```
-
-### 5. Unity
-**What it is:** Shared identity, "we-ness", in-group belonging.
-
-**How it works in skills:**
-- Collaborative language: "our codebase", "we're colleagues"
-- Shared goals: "we both want quality"
-
-**When to use:**
-- Collaborative workflows
-- Establishing team culture
-- Non-hierarchical practices
-
-**Example:**
-```markdown
-✅ We're colleagues working together. I need your honest technical judgment.
-❌ You should probably tell me if I'm wrong.
-```
-
-### 6. Reciprocity
-**What it is:** Obligation to return benefits received.
-
-**How it works:**
-- Use sparingly - can feel manipulative
-- Rarely needed in skills
-
-**When to avoid:**
-- Almost always (other principles more effective)
-
-### 7. Liking
-**What it is:** Preference for cooperating with those we like.
-
-**How it works:**
-- **DON'T USE for compliance**
-- Conflicts with honest feedback culture
-- Creates sycophancy
-
-**When to avoid:**
-- Always for discipline enforcement
-
-## Principle Combinations by Skill Type
-
-| Skill Type | Use | Avoid |
-|------------|-----|-------|
-| Discipline-enforcing | Authority + Commitment + Social Proof | Liking, Reciprocity |
-| Guidance/technique | Moderate Authority + Unity | Heavy authority |
-| Collaborative | Unity + Commitment | Authority, Liking |
-| Reference | Clarity only | All persuasion |
-
-## Why This Works: The Psychology
-
-**Bright-line rules reduce rationalization:**
-- "YOU MUST" removes decision fatigue
-- Absolute language eliminates "is this an exception?" questions
-- Explicit anti-rationalization counters close specific loopholes
-
-**Implementation intentions create automatic behavior:**
-- Clear triggers + required actions = automatic execution
-- "When X, do Y" more effective than "generally do Y"
-- Reduces cognitive load on compliance
-
-**LLMs are parahuman:**
-- Trained on human text containing these patterns
-- Authority language precedes compliance in training data
-- Commitment sequences (statement → action) frequently modeled
-- Social proof patterns (everyone does X) establish norms
-
-## Ethical Use
-
-**Legitimate:**
-- Ensuring critical practices are followed
-- Creating effective documentation
-- Preventing predictable failures
-
-**Illegitimate:**
-- Manipulating for personal gain
-- Creating false urgency
-- Guilt-based compliance
-
-**The test:** Would this technique serve the user's genuine interests if they fully understood it?
-
-## Research Citations
-
-**Cialdini, R. B. (2021).** *Influence: The Psychology of Persuasion (New and Expanded).* Harper Business.
-- Seven principles of persuasion
-- Empirical foundation for influence research
-
-**Meincke, L., Shapiro, D., Duckworth, A. L., Mollick, E., Mollick, L., & Cialdini, R. (2025).** Call Me A Jerk: Persuading AI to Comply with Objectionable Requests. University of Pennsylvania.
-- Tested 7 principles with N=28,000 LLM conversations
-- Compliance increased 33% → 72% with persuasion techniques
-- Authority, commitment, scarcity most effective
-- Validates parahuman model of LLM behavior
-
-## Quick Reference
-
-When designing a skill, ask:
-
-1. **What type is it?** (Discipline vs. guidance vs. reference)
-2. **What behavior am I trying to change?**
-3. **Which principle(s) apply?** (Usually authority + commitment for discipline)
-4. **Am I combining too many?** (Don't use all seven)
-5. **Is this ethical?** (Serves user's genuine interests?)
+1. Does every "must/never" carry a reason?
+2. Is each rule stated in exactly one place?
+3. Is there an observed failure behind every piece of emphasis?
+4. Could a gate live in structure instead of prose?
