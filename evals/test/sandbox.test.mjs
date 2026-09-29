@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, writeFileSync, readFileSync, statSync, readdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync, statSync, readdirSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { acquireLock, cleanupStale, codexTokenHoursLeft, releaseLock, removeProjectKeys } from "../lib/sandbox.mjs";
+import { execFileSync } from "node:child_process";
+import { acquireLock, dropVariant, cleanupStale, codexTokenHoursLeft, releaseLock, removeProjectKeys } from "../lib/sandbox.mjs";
 
 test("stale registry cleanup", () => {
   const d = mkdtempSync(join(tmpdir(), "reg-"));
@@ -55,4 +56,23 @@ test("codexTokenHoursLeft decodes JWT exp", () => {
   assert.equal(codexTokenHoursLeft({ tokens: { access_token: "garbage" } }, now), null);
   assert.equal(codexTokenHoursLeft({}, now), null);
   assert.equal(codexTokenHoursLeft({ tokens: { access_token: jwt({}) } }, now), null);
+});
+
+test("dropVariant removes the node_modules symlink, not its target", () => {
+  const d = mkdtempSync(join(tmpdir(), "dv-"));
+  const repo = join(d, "repo");
+  mkdirSync(join(repo, "node_modules", "dep"), { recursive: true });
+  writeFileSync(join(repo, "node_modules", "dep", "index.js"), "x");
+  writeFileSync(join(repo, "f"), "1");
+  const git = (...a) => execFileSync("git", ["-c", "user.email=e@e", "-c", "user.name=e", ...a], { cwd: repo });
+  git("init", "-q");
+  git("add", "f");
+  git("commit", "-qm", "base");
+  const base = join(d, "variant");
+  const src = join(base, "src");
+  git("worktree", "add", "--detach", src, "HEAD");
+  symlinkSync(join(repo, "node_modules"), join(src, "node_modules"), "dir");
+  dropVariant({ spec: "HEAD", src, base }, repo);
+  assert.equal(existsSync(base), false);
+  assert.equal(readFileSync(join(repo, "node_modules", "dep", "index.js"), "utf8"), "x");
 });

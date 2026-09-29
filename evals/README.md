@@ -12,3 +12,5 @@ Protocol (spec: docs/specs/2026-09-29-eval-harness-design.md): run A/A first to 
 Runs cost real money: Claude reports `total_cost_usd`, pass `--max-cost-usd` to cap it. Codex usage is logged as tokens.
 
 The gor-mobile CLI calls (setup, init, uninstall) run under a fake HOME (plus JAVA_TOOL_OPTIONS=-Duser.home, since the `android` binary ignores $HOME) inside the variant dir so that `android init` cannot touch the real `~/.claude/skills`; `claude -p` and `codex exec` keep the real HOME for auth. As a result the Developer Knowledge MCP registration and the android-cli stock skill may be absent in eval sessions (same for both variants).
+
+Ref variants (`name=<git-ref>`) are checked out into a temp worktree that symlinks the working tree's `node_modules`; if dependencies differ between refs, run `npm install` first.

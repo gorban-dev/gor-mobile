@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, closeSync, cpSync, existsSync, statSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, cpSync, existsSync, statSync, symlinkSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -76,6 +76,8 @@ export function prepareVariant(name, spec, { repo, root, harnesses = ["claude", 
       src = join(base, "src");
       sh("git", ["worktree", "add", "--detach", src, spec], { cwd: repo });
       added = true;
+      // The worktree lives outside the repo, so dist/cli.js cannot resolve deps from a parent node_modules.
+      symlinkSync(join(repo, "node_modules"), join(src, "node_modules"), "dir");
     }
     // gor-mobile CLI calls (setup/init/uninstall) get a fake home: `android init` writes the stock
     // skill into the real ~/.claude/skills and init deletes it again. claude/codex keep the real HOME (auth).
