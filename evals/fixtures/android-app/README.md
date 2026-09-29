@@ -1,0 +1,1 @@
+Eval fixture: one Profile feature laid out per the default rules pack. Not buildable on purpose — graders never run Gradle.
