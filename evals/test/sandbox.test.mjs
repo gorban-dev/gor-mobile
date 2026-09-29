@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, readFileSync, statSync, readdirSync } from "node:fs";
+import { chmodSync, mkdtempSync, writeFileSync, readFileSync, statSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { acquireLock, cleanupStale, releaseLock, removeProjectKeys } from "../lib/sandbox.mjs";
@@ -22,7 +22,9 @@ test("removeProjectKeys deletes only listed keys and skips write when nothing ch
   const d = mkdtempSync(join(tmpdir(), "rpk-"));
   const claudeJson = join(d, "claude.json");
   writeFileSync(claudeJson, JSON.stringify({ projects: { "/a": {}, "/b": { k: 1 } } }));
+  chmodSync(claudeJson, 0o600);
   removeProjectKeys(["/a", "/missing"], claudeJson);
+  assert.equal(statSync(claudeJson).mode & 0o777, 0o600);
   const raw = readFileSync(claudeJson, "utf8");
   assert.deepEqual(JSON.parse(raw), { projects: { "/b": { k: 1 } } });
   assert.ok(raw.includes('\n  "projects"'));

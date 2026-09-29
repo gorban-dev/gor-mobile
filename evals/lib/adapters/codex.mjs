@@ -2,7 +2,7 @@ import { ev, GUARD_MARK } from "../events.mjs";
 
 // Codex has no Skill tool: it reads skills/<name>/SKILL.md with whatever
 // command it picks (cat, sed -n, nl, rg), so match the path, not the utility.
-const SKILL_RE = /skills\/(gor-mobile-[a-z0-9-]+)\/SKILL\.md/g;
+const SKILL_RE = /skills\/([a-z0-9-]+)\/SKILL\.md/g;
 
 export function unwrapShell(cmd) {
   const m = /^\S*sh -lc '([\s\S]*)'$/.exec(cmd);
@@ -19,6 +19,9 @@ export function parseCodex(lines) {
     if (m.type === "turn.completed") {
       for (const k of ["input_tokens", "cached_input_tokens", "output_tokens"]) meta[k] += m.usage?.[k] ?? 0;
     }
+    if (m.type === "turn.completed") meta.completed = true;
+    if (m.type === "turn.failed") meta.error_message = m.error?.message ?? "turn.failed";
+    if (m.type === "error") meta.error_message ??= m.message ?? "error";
     if (m.type !== "item.completed") continue;
     const it = m.item ?? {};
     if (it.type === "agent_message") {

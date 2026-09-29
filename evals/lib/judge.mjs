@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -25,10 +25,14 @@ export function parseJudge(out, n) {
 // Empty cwd: no gor-mobile marker, so the project hooks stay silent.
 export async function judgeText(text, rubric, model = "haiku") {
   const cwd = mkdtempSync(join(tmpdir(), "judge-"));
-  const { stdout } = await run("claude", [
-    "-p", buildJudgePrompt(text, rubric), "--model", model, "--tools", "",
-    "--max-turns", "1", "--output-format", "json", "--no-session-persistence"
-  ], { cwd, maxBuffer: 16 << 20, timeout: 180_000 });
-  const result = JSON.parse(stdout).result ?? "";
-  return parseJudge(result, rubric.length);
+  try {
+    const { stdout } = await run("claude", [
+      "-p", buildJudgePrompt(text, rubric), "--model", model, "--tools", "",
+      "--max-turns", "1", "--output-format", "json", "--no-session-persistence"
+    ], { cwd, maxBuffer: 16 << 20, timeout: 180_000 });
+    const result = JSON.parse(stdout).result ?? "";
+    return parseJudge(result, rubric.length);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
 }

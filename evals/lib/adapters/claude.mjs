@@ -29,7 +29,7 @@ export function parseClaude(lines) {
       }
     }
     if (m.type === "result") {
-      Object.assign(meta, { cost_usd: m.total_cost_usd, turns: m.num_turns, outcome: m.subtype, final_text: m.result });
+      Object.assign(meta, { has_result: true, is_error: !!m.is_error, cost_usd: m.total_cost_usd, turns: m.num_turns, outcome: m.subtype, final_text: m.result });
     }
   }
   return { events, meta };

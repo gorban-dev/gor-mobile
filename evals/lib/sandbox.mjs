@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { closeSync, cpSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, cpSync, existsSync, statSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -14,6 +14,7 @@ export function removeProjectKeys(paths, claudeJson = join(homedir(), ".claude.j
   if (!dirty) return;
   const tmp = `${claudeJson}.evals-tmp-${process.pid}`;
   writeFileSync(tmp, JSON.stringify(j, null, 2));
+  chmodSync(tmp, statSync(claudeJson).mode & 0o777);
   renameSync(tmp, claudeJson);
 }
 
@@ -75,7 +76,7 @@ export function prepareVariant(name, spec, { repo, root, harnesses = ["claude", 
       setup.push("--target", "codex");
     }
     sh("node", [join(src, "bin", "gor-mobile.mjs"), ...setup], { env });
-    return { name, spec, src, env };
+    return { name, spec, src, env, base };
   } catch (e) {
     if (added) try { sh("git", ["worktree", "remove", "--force", src], { cwd: repo }); } catch { /* best effort */ }
     throw e;
@@ -107,6 +108,7 @@ export function prepareRun(variant, kase, { repo, root, registry }) {
     cpSync(variant.env.CODEX_HOME, codexHome, { recursive: true });
     return { runDir, workdir, codexHome };
   } catch (e) {
+    try { sh("ast-index", ["clear"], { cwd: workdir }); } catch { /* index may not exist */ }
     removeProjectKeys([workdir]);
     register(registry, workdir, false);
     sh("rm", ["-rf", runDir]);
@@ -118,6 +120,7 @@ export function teardownRun({ runDir, workdir }, variant, registry) {
   try {
     sh("node", [join(variant.src, "bin", "gor-mobile.mjs"), "uninstall", "--project", "--yes"], { cwd: workdir, env: variant.env });
   } catch { /* cleanupStale on the next start covers it */ }
+  try { sh("ast-index", ["clear"], { cwd: workdir }); } catch { /* index may not exist */ }
   removeProjectKeys([workdir]);
   register(registry, workdir, false);
   sh("rm", ["-rf", runDir]);
@@ -125,4 +128,5 @@ export function teardownRun({ runDir, workdir }, variant, registry) {
 
 export function dropVariant(variant, repo) {
   if (variant.spec !== ".") sh("git", ["worktree", "remove", "--force", variant.src], { cwd: repo });
+  sh("rm", ["-rf", variant.base]);
 }
