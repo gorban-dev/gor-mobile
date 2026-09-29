@@ -32,6 +32,7 @@ watched_dirs=(
     "$HOME/.claude/agents"
     "$HOME/.codex/skills"
     "$HOME/.codex/agents"
+    "$HOME/.hermes/skills"
     "$HOME/.gor-mobile/templates"
     "$HOME/.gor-mobile/rules"
 )
@@ -47,15 +48,18 @@ snap() {
             echo "absent $d"
         fi
     done
-    # ~/.claude.json: every key except projects["$TMP/..."] entries
+    # ~/.claude.json: gor-mobile only writes projects[<path>].mcpServers; live sessions rewrite the rest
     node -e '
         const fs = require("fs");
         const p = process.env.HOME + "/.claude.json";
         if (!fs.existsSync(p)) { console.log("absent claude.json"); process.exit(0); }
         const j = JSON.parse(fs.readFileSync(p, "utf8"));
-        for (const k of Object.keys(j.projects ?? {})) if (k.startsWith(process.argv[1])) delete j.projects[k];
-        delete j.numStartups; delete j.lastReleaseNotesSeen; delete j.cachedChangelog;
-        console.log(require("crypto").createHash("sha1").update(JSON.stringify(j)).digest("hex"), "claude.json");
+        const keys = Object.keys(j.projects ?? {}).filter((k) => !k.startsWith(process.argv[1])).sort();
+        const fp = keys.map((k) => {
+            const m = j.projects[k].mcpServers ?? {};
+            return [k, JSON.stringify(Object.keys(m).sort().map((n) => [n, m[n]]))];
+        });
+        console.log(require("crypto").createHash("sha1").update(JSON.stringify(fp)).digest("hex"), "claude.json");
     ' "$TMP"
 }
 
