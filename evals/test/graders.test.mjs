@@ -77,3 +77,39 @@ test("judge parsing", () => {
   assert.deepEqual(parseJudge("garbage", 2), [false, false]);
   assert.match(buildJudgePrompt("T", ["a", "b"]), /1\. a\n2\. b/);
 });
+
+test("deleted file not in changedFiles, file_matches does not throw", async () => {
+  const d = repo({ "a/X.kt": "class X" });
+  const changed = changedFiles(d);
+  assert.equal(changed.length, 1);
+  // Delete the file
+  execFileSync("rm", ["-f", join(d, "a/X.kt")], { cwd: d });
+  const changedAfter = changedFiles(d);
+  assert.deepEqual(changedAfter, []); // Deleted files excluded
+  // file_matches should not throw even if changed is stale
+  const result = await grade({ file_matches: { path: "\\.kt$", content: "X" } }, ctx({ workdir: d, changed: [] }));
+  assert.equal(result.pass, false); // No matching files
+  assert.equal(result.detail, "0 files"); // No crash
+});
+
+test("committed file after base still in changedFiles", async () => {
+  const d = repo({});
+  // Simulate agent committing a file
+  mkdirSync(join(d, "docs"), { recursive: true });
+  writeFileSync(join(d, "docs/plan.md"), "Plan here\n");
+  execFileSync("git", ["add", "docs/plan.md"], { cwd: d });
+  execFileSync("git", ["-c", "user.email=e@e", "-c", "user.name=e", "commit", "-qm", "task"], { cwd: d });
+  const changed = changedFiles(d);
+  assert.deepEqual(changed, ["docs/plan.md"]);
+});
+
+test("no_skill / skill_before_write negatives", async () => {
+  // no_skill fails when matching skill exists
+  assert.equal((await grade({ no_skill: { matching: "writing-plans" } }, ctx())).pass, false);
+  // skill_before_write fails when write comes before skill
+  const writeFirstEvents = [
+    { kind: "write", path: "/w/docs/plans/p.md" },
+    { kind: "skill", name: "gor-mobile-writing-plans" }
+  ];
+  assert.equal((await grade({ skill_before_write: { skill: "gor-mobile-writing-plans", write: "plans/" } }, ctx({ events: writeFirstEvents }))).pass, false);
+});

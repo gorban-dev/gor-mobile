@@ -11,10 +11,16 @@ const writes = (e, r) => e.kind === "write" && r.test(e.path ?? "");
 const read = (dir, f) => readFileSync(join(dir, f), "utf8");
 
 export function changedFiles(workdir) {
-  const out = execFileSync("git", ["status", "--porcelain", "-uall"], { cwd: workdir, encoding: "utf8" });
-  // init's own footprint (.claude/, marker, hook state) is not the agent's work.
-  return out.split("\n").filter(Boolean).map((l) => l.slice(3).replace(/^.* -> /, ""))
-    .filter((p) => !p.startsWith(".claude/") && !p.startsWith(".gor-mobile/marker") && !p.startsWith(".gor-mobile/state/"));
+  // Get base commit (first commit)
+  const base = execFileSync("git", ["rev-list", "--max-parents=0", "HEAD"], { cwd: workdir, encoding: "utf8" }).trim();
+  // Tracked files: changes from base to working tree, no deletions
+  const tracked = execFileSync("git", ["diff", "--name-only", "-z", "--diff-filter=d", base], { cwd: workdir, encoding: "utf8" });
+  // Untracked files
+  const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], { cwd: workdir, encoding: "utf8" });
+  // Union, split on \0, filter init footprint, sort
+  return (tracked + untracked).split("\0").filter(Boolean)
+    .filter((p) => !p.startsWith(".claude/") && !p.startsWith(".gor-mobile/marker") && !p.startsWith(".gor-mobile/state/"))
+    .sort();
 }
 
 const GRADERS = {
@@ -58,8 +64,13 @@ const GRADERS = {
   judge: async ({ workdir, changed, meta }, { path, rubric }) => {
     const text = path ? changed.filter((f) => re(path).test(f)).map((f) => read(workdir, f)).join("\n\n") : meta.final_text ?? "";
     if (!text) return { pass: false, detail: "nothing to judge" };
-    const yes = await judgeText(text, rubric);
-    return { pass: yes.every(Boolean), detail: yes.map((y) => (y ? "Y" : "N")).join("") };
+    try {
+      const yes = await judgeText(text, rubric);
+      return { pass: yes.every(Boolean), detail: yes.map((y) => (y ? "Y" : "N")).join("") };
+    } catch (err) {
+      const msg = String(err?.message ?? err).slice(0, 200);
+      return { pass: false, detail: `judge error: ${msg}` };
+    }
   }
 };
 
