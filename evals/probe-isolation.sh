@@ -5,7 +5,19 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(cd "$(mktemp -d)" && pwd -P)"
-trap 'rm -rf "$TMP"' EXIT
+cleanup() {
+    node -e '
+        const fs = require("fs");
+        const p = process.env.HOME + "/.claude.json";
+        if (!fs.existsSync(p)) process.exit(0);
+        const j = JSON.parse(fs.readFileSync(p, "utf8"));
+        let n = 0;
+        for (const k of Object.keys(j.projects ?? {})) if (k.startsWith(process.argv[1] + "/")) { delete j.projects[k]; n++; }
+        if (n) fs.writeFileSync(p, JSON.stringify(j, null, 2));
+    ' "$TMP" || true
+    rm -rf "$TMP"
+}
+trap cleanup EXIT
 
 watched=(
     "$HOME/.claude/settings.json"
@@ -15,9 +27,25 @@ watched=(
     "$HOME/.gor-mobile/config.json"
 )
 
+watched_dirs=(
+    "$HOME/.claude/skills"
+    "$HOME/.claude/agents"
+    "$HOME/.codex/skills"
+    "$HOME/.codex/agents"
+    "$HOME/.gor-mobile/templates"
+    "$HOME/.gor-mobile/rules"
+)
+
 snap() {
     for f in "${watched[@]}"; do
         if [[ -f "$f" ]]; then shasum "$f"; else echo "absent $f"; fi
+    done
+    for d in "${watched_dirs[@]}"; do
+        if [[ -d "$d" ]]; then
+            echo "$(find "$d" -type f -not -name .DS_Store | sort | xargs shasum 2>/dev/null | shasum | cut -d' ' -f1) $d"
+        else
+            echo "absent $d"
+        fi
     done
     # ~/.claude.json: every key except projects["$TMP/..."] entries
     node -e '
@@ -34,13 +62,27 @@ snap() {
 before="$(snap)"
 
 export GOR_MOBILE_HOME="$TMP/gm" CODEX_HOME="$TMP/cx"
+if [[ ! -f "$HOME/.codex/auth.json" ]]; then
+    echo "missing $HOME/.codex/auth.json: needed to seed the throwaway CODEX_HOME" >&2
+    exit 1
+fi
 mkdir -p "$CODEX_HOME"
 cp "$HOME/.codex/auth.json" "$CODEX_HOME/"
-node "$REPO/bin/gor-mobile.mjs" setup --yes --no-tui --skip-android-update --target codex >"$TMP/setup.log" 2>&1
+
+step() {
+    local name="$1"; shift
+    if ! node "$REPO/bin/gor-mobile.mjs" "$@" >"$TMP/$name.log" 2>&1; then
+        echo "$name failed; last 30 lines of its log:" >&2
+        tail -n 30 "$TMP/$name.log" >&2
+        exit 1
+    fi
+}
+
+step setup setup --yes --no-tui --skip-android-update --target codex
 
 mkdir -p "$TMP/app" && cd "$TMP/app" && git init -q
-node "$REPO/bin/gor-mobile.mjs" init --yes --no-tui --platform android >"$TMP/init.log" 2>&1
-node "$REPO/bin/gor-mobile.mjs" uninstall --project --yes >"$TMP/uninstall.log" 2>&1
+step init init --yes --no-tui --platform android
+step uninstall uninstall --project --yes
 cd "$REPO"
 
 after="$(snap)"
