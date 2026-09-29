@@ -1,0 +1,25 @@
+{
+  "name": "neg-kotlin-version",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "prompt": "Какая версия Kotlin в проекте?",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "graders": [
+    {
+      "no_skill": {
+        "matching": "brainstorming|writing-plans|systematic-debugging|requesting-code-review"
+      }
+    }
+  ]
+}

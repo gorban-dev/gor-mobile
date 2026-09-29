@@ -1,0 +1,25 @@
+{
+  "name": "neg-thanks",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "empty",
+  "prompt": "спасибо, всё понятно",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "graders": [
+    {
+      "no_skill": {
+        "matching": "gor-mobile-"
+      }
+    }
+  ]
+}

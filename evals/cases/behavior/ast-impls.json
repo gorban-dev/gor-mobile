@@ -1,0 +1,37 @@
+{
+  "name": "ast-impls",
+  "split": "test",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "runs": 3,
+  "prompt": "Какие классы реализуют IProfileRepository?",
+  "max_turns": 8,
+  "allowed_tools": [
+    "Read",
+    "Glob",
+    "Grep",
+    "Bash(ast-index:*)",
+    "Bash(grep:*)",
+    "Bash(rg:*)"
+  ],
+  "graders": [
+    {
+      "bash_uses": {
+        "regex": "ast-index (implementations|hierarchy|usages|symbol)"
+      }
+    },
+    {
+      "max_denies": {
+        "n": 1
+      }
+    },
+    {
+      "final_text_matches": {
+        "regex": "ProfileRepository"
+      }
+    }
+  ]
+}

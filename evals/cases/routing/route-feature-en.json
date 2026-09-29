@@ -1,0 +1,28 @@
+{
+  "name": "route-feature-en",
+  "split": "test",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "prompt": "Implement pull-to-refresh on the profile screen",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "graders": [
+    {
+      "first_skill": {
+        "any_of": [
+          "gor-mobile-brainstorming",
+          "gor-mobile-writing-plans"
+        ]
+      }
+    }
+  ]
+}

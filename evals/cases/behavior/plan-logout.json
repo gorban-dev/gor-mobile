@@ -1,0 +1,43 @@
+{
+  "name": "plan-logout",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "runs": 3,
+  "prompt": "Напиши план реализации по docs/specs/logout.md. Spec утверждён, вопросов нет — сразу план.",
+  "max_turns": 60,
+  "timeout_s": 1800,
+  "files": {
+    "docs/specs/logout.md": "# Выход из аккаунта\n\n## Цель\nКнопка выхода в профиле: завершает сессию и возвращает на экран логина.\n\n## API\n`POST /api/logout`, тело пустое, ответ 204.\n\n## UI\n- Кнопка «Выйти» в ProfileView.\n- После успеха сессия очищается, происходит переход на экран логина.\n- При ошибке сети показывается сообщение, сессия остаётся.\n\nТребования полные, вопросов нет.\n"
+  },
+  "graders": [
+    {
+      "read_before_write": {
+        "read": "examples/presentation/",
+        "write": "plans?/.*\\.md$"
+      }
+    },
+    {
+      "conforms_to": {
+        "path": "plans?/.*\\.md$",
+        "required": [
+          "examples/presentation/ExampleViewModel.kt",
+          "examples/presentation/ExampleViewAction.kt",
+          "examples/usecase/ExampleUseCase.kt"
+        ]
+      }
+    },
+    {
+      "judge": {
+        "path": "plans?/.*\\.md$",
+        "rubric": [
+          "Every plan step that names a Ktor, Koin, Compose or kotlinx.serialization API call has a citation next to it (a docs URL, a javap command, or a source file path). Steps that name no such API call are ignored.",
+          "The plan contains no step that runs git commit, git branch or git checkout."
+        ]
+      }
+    }
+  ]
+}

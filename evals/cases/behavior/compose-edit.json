@@ -1,0 +1,26 @@
+{
+  "name": "compose-edit",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "runs": 3,
+  "prompt": "Замени в ProfileView Button на OutlinedButton. Больше ничего не меняй.",
+  "max_turns": 20,
+  "graders": [
+    {
+      "skill_before_write": {
+        "skill": "gor-mobile-compose-internals",
+        "write": "ProfileView\\.kt$"
+      }
+    },
+    {
+      "file_matches": {
+        "path": "ProfileView\\.kt$",
+        "content": "OutlinedButton"
+      }
+    }
+  ]
+}

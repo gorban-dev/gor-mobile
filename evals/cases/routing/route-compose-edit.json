@@ -1,0 +1,29 @@
+{
+  "name": "route-compose-edit",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "prompt": "Поменяй в ProfileView кнопку Edit на OutlinedButton",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "graders": [
+    {
+      "first_skill": {
+        "any_of": [
+          "gor-mobile-compose-internals",
+          "gor-mobile-brainstorming",
+          "gor-mobile-writing-plans"
+        ]
+      }
+    }
+  ]
+}

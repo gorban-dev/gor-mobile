@@ -1,0 +1,4 @@
+[
+  "Every plan step that names a Ktor, Koin, Compose or kotlinx.serialization API call has a citation next to it (a docs URL, a javap command, or a source file path). Steps that name no such API call are ignored.",
+  "The plan contains no step that runs git commit, git branch or git checkout."
+]

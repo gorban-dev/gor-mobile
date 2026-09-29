@@ -1,0 +1,28 @@
+{
+  "name": "route-feature-tracker",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "prompt": "ARU-1234: сделай кнопку выхода из аккаунта в профиле",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "graders": [
+    {
+      "first_skill": {
+        "any_of": [
+          "gor-mobile-brainstorming",
+          "gor-mobile-writing-plans"
+        ]
+      }
+    }
+  ]
+}

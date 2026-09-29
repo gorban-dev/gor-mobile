@@ -1,0 +1,27 @@
+{
+  "name": "route-bug-en",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "prompt": "The loading spinner never disappears on the profile screen",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "graders": [
+    {
+      "first_skill": {
+        "any_of": [
+          "gor-mobile-systematic-debugging"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "route-exec-ep",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "prompt": "Выполни план docs/plans/edit-profile.md",
+  "max_turns": 4,
+  "runs": 3,
+  "allowed_tools": [
+    "Skill",
+    "Read",
+    "Glob",
+    "Grep"
+  ],
+  "files": {
+    "docs/plans/edit-profile.md": "# Edit profile — implementation plan\n\n**Execution mode:** executing-plans — tasks share ProfileViewState and chain on each other. Tasks: 3, files touched: 5, dependency chain: yes.\n\n### Task 1: add EditProfileViewEvent\n\n### Task 2: wire NavigateToEdit\n\n### Task 3: EditProfileScreen\n"
+  },
+  "graders": [
+    {
+      "first_skill": {
+        "any_of": [
+          "gor-mobile-executing-plans"
+        ]
+      }
+    }
+  ]
+}
