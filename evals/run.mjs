@@ -76,11 +76,11 @@ async function runOnce(variant, kase, harness, n, resultsDir) {
       const args = ["-p", kase.prompt, "--output-format", "stream-json", "--verbose", "--max-turns", String(kase.max_turns),
         "--no-session-persistence", "--tools", bareTools.join(","), "--allowedTools", ...tools];
       if (values["claude-model"]) args.push("--model", values["claude-model"]);
-      res = await exec("claude", args, { cwd: run.workdir, env: variant.env, timeoutMs });
+      res = await exec("claude", args, { cwd: run.workdir, env: variant.runEnv, timeoutMs });
     } else {
       const args = ["exec", "--json", "--skip-git-repo-check", "--ephemeral", "-s", "workspace-write", "-C", run.workdir, kase.prompt];
       if (values["codex-model"]) args.splice(1, 0, "-m", values["codex-model"]);
-      res = await exec("codex", args, { cwd: run.workdir, env: { ...variant.env, CODEX_HOME: run.codexHome }, timeoutMs });
+      res = await exec("codex", args, { cwd: run.workdir, env: { ...variant.runEnv, CODEX_HOME: run.codexHome }, timeoutMs });
     }
     const rawDir = join(resultsDir, variant.name, harness, kase.name);
     mkdirSync(rawDir, { recursive: true });

@@ -77,7 +77,14 @@ export function prepareVariant(name, spec, { repo, root, harnesses = ["claude", 
       sh("git", ["worktree", "add", "--detach", src, spec], { cwd: repo });
       added = true;
     }
-    const env = { ...process.env, GOR_MOBILE_HOME: join(base, "gm"), CODEX_HOME: join(base, "cx") };
+    // gor-mobile CLI calls (setup/init/uninstall) get a fake home: `android init` writes the stock
+    // skill into the real ~/.claude/skills and init deletes it again. claude/codex keep the real HOME (auth).
+    const fakeHome = join(base, "home");
+    mkdirSync(fakeHome, { recursive: true });
+    const shared = { GOR_MOBILE_HOME: join(base, "gm"), CODEX_HOME: join(base, "cx") };
+    // The android binary resolves the home dir via the JVM, not $HOME, hence user.home.
+    const env = { ...process.env, ...shared, HOME: fakeHome, JAVA_TOOL_OPTIONS: `-Duser.home=${fakeHome}` };
+    const runEnv = { ...process.env, ...shared };
     mkdirSync(env.CODEX_HOME, { recursive: true });
     const setup = ["setup", "--yes", "--no-tui", "--skip-android-update"];
     if (wantCodex) {
@@ -85,7 +92,7 @@ export function prepareVariant(name, spec, { repo, root, harnesses = ["claude", 
       setup.push("--target", "codex");
     }
     sh("node", [join(src, "bin", "gor-mobile.mjs"), ...setup], { env });
-    return { name, spec, src, env, base };
+    return { name, spec, src, env, runEnv, base };
   } catch (e) {
     if (added) try { sh("git", ["worktree", "remove", "--force", src], { cwd: repo }); } catch { /* best effort */ }
     throw e;

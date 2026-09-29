@@ -61,6 +61,7 @@ snap() {
 
 before="$(snap)"
 
+mkdir -p "$TMP/home"
 export GOR_MOBILE_HOME="$TMP/gm" CODEX_HOME="$TMP/cx"
 if [[ ! -f "$HOME/.codex/auth.json" ]]; then
     echo "missing $HOME/.codex/auth.json: needed to seed the throwaway CODEX_HOME" >&2
@@ -71,7 +72,7 @@ cp "$HOME/.codex/auth.json" "$CODEX_HOME/"
 
 step() {
     local name="$1"; shift
-    if ! node "$REPO/bin/gor-mobile.mjs" "$@" >"$TMP/$name.log" 2>&1; then
+    if ! HOME="$TMP/home" JAVA_TOOL_OPTIONS="-Duser.home=$TMP/home" node "$REPO/bin/gor-mobile.mjs" "$@" >"$TMP/$name.log" 2>&1; then
         echo "$name failed; last 30 lines of its log:" >&2
         tail -n 30 "$TMP/$name.log" >&2
         exit 1
