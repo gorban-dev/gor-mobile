@@ -85,7 +85,8 @@ merely because the plan listed one, and never fabricate a new seam to test.
   the log, no composite build commands, isolation run via `sdd-isolate`).
   Paste it into each Sonnet delegation prompt with the script path and
   BASE_SHA filled in.
-- **Final report** lists `Unverified:` and `Needs manual verification:
+- **Final report** lists `Unverified:`, `Skipped:` (what you deliberately
+  left out, `<what> — add when <trigger>`) and `Needs manual verification:
   yes|no`; when yes, tell the user which commands to run themselves.
 
 ### What NOT to delegate

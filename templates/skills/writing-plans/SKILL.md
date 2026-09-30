@@ -54,6 +54,8 @@ This structure informs the task decomposition. Each task should produce self-con
 
 **Execution mode:** [executing-plans | subagent-driven-development] — [one line: which Execution Mode row fired, or "user's choice"]. Tasks: [N], files touched: [M], dependency chain: [yes | no].
 
+**Not built:** [What the plan deliberately does not build — the Build-less ladder's rung-1 cuts — one per line as `<X> — add when <Y>`. Omit the line when nothing was cut.]
+
 **Spec:** [path to the spec/design doc this plan implements — the plan
 argues from the spec, so the spec travels with it; executors read both]
 

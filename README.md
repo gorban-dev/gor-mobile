@@ -263,14 +263,14 @@ which skills carry an Android-rules / Task(model=...) appendix.
 | Skill (name: `gor-mobile-<id>`) | Source | Overlay |
 |-|-|-|
 | `brainstorming` | superpowers | rules-pack pointer |
-| `writing-plans` | superpowers | — |
+| `writing-plans` | superpowers | no test steps by default + docs-first / examples-first / Compose gates + Build-less ladder (`Ladder:` per candidate unit, `Not built:` header) + executed Self-Review + clear-context handoff |
 | `subagent-driven-development` | superpowers | rules + implementer → Sonnet + execution gates (baseline pass, unusable-gate breaker, process notes, no-op guard, tooling contract) |
 | `executing-plans` | superpowers | task-loop classification (self-contained → Sonnet / dependent → session model / fork on user request) + review before dependents build on a layer task + baseline pass + unusable-gate rule |
 | `dispatching-parallel-agents` | superpowers | — |
 | `requesting-code-review` | superpowers | one reviewer agent: `model="sonnet"` by default, session model + extra-scrutiny paragraph on escalation and for the final plan review; optional Codex second opinion when `codex@openai-codex` is installed |
 | `receiving-code-review` | superpowers | — |
 | `verification-before-completion` | superpowers | — |
-| `systematic-debugging` | superpowers | rules + Phase 2 evidence → Sonnet (read-only) |
+| `systematic-debugging` | superpowers | rules + Phase 2 evidence → Sonnet (read-only) + fix where every caller routes through |
 | `using-superpowers` | superpowers | — |
 | `using-android-cli` | gor-mobile (new) | thin orchestrator: delegates to `android` CLI via contract-validated commands; authoritative for Android device ops |
 | `ast-index` | upstream `defendend/Claude-ast-index-search` v3.29.1 | Android-only scope, slash-command pointer (`/ast-index:initialize-android`), brew install hint |

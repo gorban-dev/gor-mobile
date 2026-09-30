@@ -23,7 +23,8 @@ Load `core` + `debug-*` sections from `$HOME/.gor-mobile/rules/` via
           prompt        = <evidence-gathering-prompt>
         )
 
-  Instruct the subagent to use only Grep / Read / Glob and to return a
+  Instruct the subagent to use only Grep / Read / Glob, plus Bash for
+  read-only `ast-index` queries, and to return a
   structured report (findings + cited file:line references). No Edit,
   no Write.
 - **Phase 3 — hypothesis formation.** Main orchestrator (session model).
@@ -87,6 +88,33 @@ queries over `Grep` when distilling stack traces or chasing call chains:
 
 Pass these instructions to the Sonnet evidence-gathering subagent so it
 uses `ast-index` (read-only) instead of `Grep` whenever applicable.
+
+### Fix where every caller routes through (Phase 4)
+
+The `debug-root-cause` rules trace the chain back to where the bad value
+starts; this looks sideways, at who else calls the function you are about to
+change. A bug report names one symptom on one path, and the sibling callers of
+the same function usually carry the same defect.
+
+1. Once the function to change is known, list its callers:
+   `ast-index callers "<function>" --limit 1000` (the default limit clips the
+   headline count, see `[[gor-mobile-ast-index]]`). `callers` matches by
+   name, so for an `invoke` / operator function (a UseCase) it returns every
+   UseCase's call sites — use `ast-index usages "<UseCaseClass>"` instead.
+2. Siblings that already route through the same faulty function → fix it
+   once, there. One guard there is a smaller diff than one per caller, and
+   patching only the path the ticket names leaves the others broken. Never
+   extract a new shared function to create one (the Phase 4 rule against
+   fresh seams): siblings that merely duplicate the logic go in the fix
+   report for the user to decide.
+3. A fix that must stay caller-specific (the callers legitimately need
+   different behavior) gets one line in the fix report: why it is not in the
+   shared function.
+4. Verification covers every caller path the fix changes, not only the
+   ticket's.
+
+The Phase 2 evidence-gathering subagent returns the callers of each suspect
+function with its findings.
 
 ### A failing command is diagnosed before it is "fixed" (isolation first)
 

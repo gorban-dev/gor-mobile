@@ -38,7 +38,8 @@ Self-Review gate below verifies this and flags unsourced API signatures.
 
 "Full code" written from memory of the API is the defect: a signature whose
 source for the pinned version you cannot cite is unverified — resolve it via
-the ladder before writing the step.
+the Docs-first ground-truth ladder in `[[gor-mobile-using-android-cli]]`
+before writing the step.
 
 ### Examples-first gate (plan phase) — every layer task carries its shape reference
 
@@ -130,6 +131,58 @@ A `@Composable` step authored from memory of Compose patterns is unverified:
 the digest and the cited reference files are the ground truth — read them
 before writing the step's code, and cite what you read.
 
+### Build-less ladder (plan phase) — every new code unit carries its rung
+
+The gates above own what a task's code looks like; this one owns whether the
+task writes that code at all. Before authoring a task that needs a code unit
+it does not have yet, climb the ladder and stop at the first rung that holds. Climb it
+after reading the code the task touches, not instead of it: the smallest
+change in the wrong place is a second bug.
+
+1. **Not needed.** The need is speculative → the unit is not built (no task
+   when it was the task's whole purpose). Record it in the plan header's
+   `**Not built:**` line.
+2. **Already in this repo.** A helper, extension, util or component that does
+   it → reuse it. Look with `ast-index search` / `ast-index symbol` (see
+   `[[gor-mobile-ast-index]]`); re-implementing what sits a few files over is
+   the most common waste.
+3. **Kotlin stdlib / kotlinx already on the project** (`buildList`,
+   `coerceIn`, `runCatching`, `Flow.debounce`).
+4. **The platform.** The Android SDK and the Jetpack / Compose artifacts
+   already on the classpath (`Patterns.EMAIL_ADDRESS`, `DateUtils`,
+   `rememberSaveable`, a Material3 component).
+5. **An installed dependency.** Check `gradle/libs.versions.toml` and the
+   module's build file.
+6. **The minimum code that works** — one expression when one expression does
+   it.
+
+A new dependency is not a rung. It stays under the anti-slop rule of
+`[[gor-mobile-verification-before-completion]]`: added only with the user's
+approval, recorded as `Ladder: new dependency — approved by user`.
+
+**What counts as a candidate unit:** a class, a top-level function or
+extension, a file, or a dependency that the task needs, does not already
+have, and whose need its `Conforms to:` / `Conforms to (project precedent):`
+/ `Shape per user:` line does not already answer. Whatever the current pack's
+conventions and cited references require (in the default pack: a repository
+with its interface, a UseCase per action, a DI module, ViewState / Event /
+Action) is never questioned by the ladder, even with a single implementation;
+the ladder applies to everything a task adds beyond it (the Precedence rule
+above, applied to size). Members added inside existing or pack-shaped files
+carry no line; the reviewer's over-engineering tags police them.
+
+Every task with a candidate unit carries one artifact line per candidate,
+whichever rung stopped the climb (rungs 2-5 mean the task adds no code for
+it):
+
+    Ladder: <rung> — <evidence>
+
+Evidence per rung: rung 2 — the path of the reused symbol; rungs 3-5 — the
+API's name; rung 6 — the query that ruled out rung 2 (`ast-index search
+Debounce → none`). A task that only edits existing code carries no line. The
+line is the evidence that the ladder ran: without it the reviewer cannot tell
+a rung-6 helper from a duplicate of one that already exists.
+
 ### Self-Review gate — the plan's own claims are executed, not asserted (MANDATORY)
 
 The body's Self-Review (steps 1-6) is the only reviewer this plan gets: there
@@ -159,6 +212,11 @@ are where an Android/KMM plan actually fails:
   prompt, a beggar whose trigger is a server-side condition, a real invite
   send — is marked `Manual (user):`. An unlabeled one becomes an agent's
   "verified" checkbox over something it never ran.
+- **Every candidate unit carries its rung.** A task with a candidate unit
+  has a `Ladder:` line per candidate (Build-less ladder above), every rung-2
+  path resolves on disk, and every rung-6 line names the query that ruled out
+  rung 2. A candidate with no line is a plan defect, like a layer task with
+  no `Conforms to:`.
 
 A verification command written from memory of the toolchain, or copied from
 an older plan without running it here, is not a verification step: every
