@@ -27,7 +27,7 @@ const { values } = parseArgs({
   }
 });
 
-const DEFAULT_TOOLS = ["Skill", "Read", "Glob", "Grep", "Write", "Edit", "Bash(ast-index:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(git status:*)", "Bash(git diff:*)"];
+const DEFAULT_TOOLS = ["Skill", "Agent","Read", "Glob", "Grep", "Write", "Edit", "Bash(ast-index:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(git status:*)", "Bash(git diff:*)"];
 
 function loadCases() {
   const dir = join(REPO, "evals", "cases");

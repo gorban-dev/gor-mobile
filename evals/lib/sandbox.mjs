@@ -107,6 +107,11 @@ export function prepareRun(variant, kase, { repo, root, registry }) {
   try {
     if (kase.fixture === "empty") mkdirSync(workdir);
     else cpSync(join(repo, "evals", "fixtures", kase.fixture), workdir, { recursive: true });
+    // base_files are pre-existing code (committed, indexed); files are the uncommitted change under test.
+    for (const [rel, text] of Object.entries(kase.base_files ?? {})) {
+      mkdirSync(dirname(join(workdir, rel)), { recursive: true });
+      writeFileSync(join(workdir, rel), text);
+    }
     const git = (...a) => sh("git", ["-c", "user.email=eval@local", "-c", "user.name=eval", ...a], { cwd: workdir });
     git("init", "-q");
     git("add", "-A");

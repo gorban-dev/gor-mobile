@@ -1,0 +1,30 @@
+{
+  "name": "review-pack-shape",
+  "split": "test",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "runs": 3,
+  "prompt": "Проверь мои незакоммиченные изменения в feature/settings.",
+  "max_turns": 30,
+  "timeout_s": 1800,
+  "files": {
+    "app/src/main/java/com/company/app/feature/settings/data/datasource/SettingsResponse.kt": "package com.company.app.feature.settings.data.datasource\n\nimport kotlinx.serialization.Serializable\n\n@Serializable\ndata class SettingsResponse(\n    val pushEnabled: Boolean\n)\n",
+    "app/src/main/java/com/company/app/feature/settings/data/datasource/SettingsRemoteDataSource.kt": "package com.company.app.feature.settings.data.datasource\n\nimport io.ktor.client.HttpClient\nimport io.ktor.client.call.body\nimport io.ktor.client.request.get\n\nclass SettingsRemoteDataSource(\n    private val httpClient: HttpClient\n) {\n\n    suspend fun fetchSettings(): SettingsResponse {\n        return httpClient.get(\"/api/settings\").body()\n    }\n}\n",
+    "app/src/main/java/com/company/app/feature/settings/domain/usecase/SettingsData.kt": "package com.company.app.feature.settings.domain.usecase\n\ndata class SettingsData(\n    val pushEnabled: Boolean\n)\n",
+    "app/src/main/java/com/company/app/feature/settings/domain/repository/ISettingsRepository.kt": "package com.company.app.feature.settings.domain.repository\n\nimport com.company.app.feature.settings.domain.usecase.SettingsData\n\ninterface ISettingsRepository {\n    suspend fun getSettings(): SettingsData\n}\n",
+    "app/src/main/java/com/company/app/feature/settings/data/repository/SettingsRepository.kt": "package com.company.app.feature.settings.data.repository\n\nimport com.company.app.feature.settings.data.datasource.SettingsRemoteDataSource\nimport com.company.app.feature.settings.domain.repository.ISettingsRepository\nimport com.company.app.feature.settings.domain.usecase.SettingsData\n\nclass SettingsRepository(\n    private val remoteDataSource: SettingsRemoteDataSource\n) : ISettingsRepository {\n\n    override suspend fun getSettings(): SettingsData {\n        val response = remoteDataSource.fetchSettings()\n        return SettingsData(pushEnabled = response.pushEnabled)\n    }\n}\n",
+    "app/src/main/java/com/company/app/feature/settings/domain/usecase/GetSettingsUseCase.kt": "package com.company.app.feature.settings.domain.usecase\n\nimport com.company.app.common.domain.UseCase\nimport com.company.app.feature.settings.domain.repository.ISettingsRepository\n\nclass GetSettingsUseCase(\n    private val repository: ISettingsRepository\n) : UseCase<Unit, Result<SettingsData>> {\n\n    override suspend fun execute(params: Unit): Result<SettingsData> {\n        return try {\n            Result.success(repository.getSettings())\n        } catch (e: Exception) {\n            Result.failure(e)\n        }\n    }\n}\n"
+  },
+  "graders": [
+    {
+      "judge": {
+        "rubric": [
+          "Nowhere does the review say that ISettingsRepository should be removed, inlined into SettingsRepository, or is unnecessary. A review that does not discuss the interface at all satisfies this."
+        ]
+      }
+    }
+  ]
+}

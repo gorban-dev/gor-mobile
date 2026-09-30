@@ -16,7 +16,7 @@
   "graders": [
     {
       "read_before_write": {
-        "read": "examples/presentation/",
+        "read": "examples/presentation/|presentation/Example\\w+\\.kt|examples.*\\.kt",
         "write": "plans?/.*\\.md$"
       }
     },

@@ -1,0 +1,34 @@
+{
+  "name": "review-reuse",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "runs": 3,
+  "prompt": "Проверь мои незакоммиченные изменения в ProfileView.",
+  "max_turns": 30,
+  "timeout_s": 1800,
+  "base_files": {
+    "app/src/main/java/com/company/app/common/util/TimeFormat.kt": "package com.company.app.common.util\n\nimport java.util.concurrent.TimeUnit\n\nfun Long.toRelativeTime(now: Long = System.currentTimeMillis()): String {\n    val minutes = TimeUnit.MILLISECONDS.toMinutes((now - this).coerceAtLeast(0))\n    return when {\n        minutes < 1 -> \"только что\"\n        minutes < 60 -> \"$minutes мин назад\"\n        minutes < 24 * 60 -> \"${minutes / 60} ч назад\"\n        else -> \"${minutes / (24 * 60)} дн назад\"\n    }\n}\n"
+  },
+  "files": {
+    "app/src/main/java/com/company/app/feature/profile/data/datasource/ProfileResponse.kt": "package com.company.app.feature.profile.data.datasource\n\nimport kotlinx.serialization.Serializable\n\n@Serializable\ndata class ProfileResponse(\n    val name: String,\n    val email: String,\n    val lastLoginAt: Long? = null\n)",
+    "app/src/main/java/com/company/app/feature/profile/domain/usecase/ProfileData.kt": "package com.company.app.feature.profile.domain.usecase\n\ndata class ProfileData(\n    val name: String,\n    val email: String,\n    val lastLoginAt: Long?\n)",
+    "app/src/main/java/com/company/app/feature/profile/data/repository/ProfileRepository.kt": "package com.company.app.feature.profile.data.repository\n\nimport com.company.app.feature.profile.data.datasource.ProfileRemoteDataSource\nimport com.company.app.feature.profile.domain.repository.IProfileRepository\nimport com.company.app.feature.profile.domain.usecase.ProfileData\n\nclass ProfileRepository(\n    private val remoteDataSource: ProfileRemoteDataSource\n) : IProfileRepository {\n\n    override suspend fun getProfile(): ProfileData {\n        val response = remoteDataSource.fetchProfile()\n        return ProfileData(name = response.name, email = response.email, lastLoginAt = response.lastLoginAt)\n    }\n}",
+    "app/src/main/java/com/company/app/feature/profile/presentation/viewmodel/ProfileViewModel.kt": "package com.company.app.feature.profile.presentation.viewmodel\n\nimport androidx.lifecycle.viewModelScope\nimport com.company.app.common.base.BaseSharedViewModel\nimport com.company.app.feature.profile.domain.usecase.GetProfileUseCase\nimport kotlinx.coroutines.launch\n\nclass ProfileViewModel(\n    private val getProfileUseCase: GetProfileUseCase\n) : BaseSharedViewModel<ProfileViewState, ProfileViewAction, ProfileViewEvent>(\n    initialState = ProfileViewState()\n) {\n\n    override fun handleEvent(event: ProfileViewEvent) {\n        when (event) {\n            is ProfileViewEvent.LoadProfile -> loadProfile()\n            is ProfileViewEvent.OnEditClicked -> sendAction(ProfileViewAction.NavigateToEdit)\n        }\n    }\n\n    private fun loadProfile() {\n        viewModelScope.launch {\n            updateState { it.copy(isLoading = true, error = null) }\n            getProfileUseCase.execute(Unit).fold(\n                onSuccess = { data -> updateState { it.copy(isLoading = false, name = data.name, email = data.email, lastLoginAt = data.lastLoginAt) } },\n                onFailure = { error -> updateState { it.copy(isLoading = false, error = error.message) } }\n            )\n        }\n    }\n}",
+    "app/src/main/java/com/company/app/feature/profile/presentation/viewmodel/ProfileViewState.kt": "package com.company.app.feature.profile.presentation.viewmodel\n\ndata class ProfileViewState(\n    val isLoading: Boolean = false,\n    val error: String? = null,\n    val name: String = \"\",\n    val email: String = \"\",\n    val lastLoginAt: Long? = null\n)",
+    "app/src/main/java/com/company/app/feature/profile/presentation/view/ProfileView.kt": "package com.company.app.feature.profile.presentation.view\n\nimport androidx.compose.foundation.layout.Box\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.fillMaxSize\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.material3.Button\nimport androidx.compose.material3.CircularProgressIndicator\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.ui.Alignment\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.tooling.preview.Preview\nimport androidx.compose.ui.unit.dp\nimport com.company.app.feature.profile.presentation.viewmodel.ProfileViewEvent\nimport com.company.app.feature.profile.presentation.viewmodel.ProfileViewState\n\n@Composable\nfun ProfileView(\n    viewState: ProfileViewState,\n    eventHandler: (ProfileViewEvent) -> Unit\n) {\n    Box(modifier = Modifier.fillMaxSize()) {\n        when {\n            viewState.isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))\n            viewState.error != null -> Text(\n                text = viewState.error,\n                modifier = Modifier.align(Alignment.Center).padding(16.dp)\n            )\n            else -> Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {\n                Text(text = viewState.name)\n                Text(text = viewState.email)\n                viewState.lastLoginAt?.let { Text(text = \"Последний вход: ${formatAgo(it)}\") }\n                Button(onClick = { eventHandler(ProfileViewEvent.OnEditClicked) }) {\n                    Text(text = \"Edit\")\n                }\n            }\n        }\n    }\n}\n\nprivate fun formatAgo(timestamp: Long): String {\n    val diff = System.currentTimeMillis() - timestamp\n    val minutes = diff / 60_000\n    val hours = minutes / 60\n    val days = hours / 24\n    return when {\n        minutes < 1 -> \"только что\"\n        minutes < 60 -> \"$minutes мин назад\"\n        hours < 24 -> \"$hours ч назад\"\n        else -> \"$days дн назад\"\n    }\n}\n\n@Preview(showBackground = true)\n@Composable\nprivate fun ProfileViewPreview() {\n    ProfileView(\n        viewState = ProfileViewState(name = \"Ann\", email = \"ann@example.com\"),\n        eventHandler = {}\n    )\n}"
+  },
+  "graders": [
+    {
+      "judge": {
+        "rubric": [
+          "The review points out that formatAgo duplicates the existing toRelativeTime function (common/util/TimeFormat.kt) and suggests using it instead.",
+          "The review reports no Critical findings."
+        ]
+      }
+    }
+  ]
+}

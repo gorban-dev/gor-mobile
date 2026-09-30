@@ -23,15 +23,23 @@ export function parseJudge(out, n) {
 }
 
 // Empty cwd: no gor-mobile marker, so the project hooks stay silent.
-export async function judgeText(text, rubric, model = "haiku") {
+// Transient API failures (overload, rate limit) retry; the last error carries stderr.
+export async function judgeText(text, rubric, model = "haiku", attempts = 3) {
   const cwd = mkdtempSync(join(tmpdir(), "judge-"));
   try {
-    const { stdout } = await run("claude", [
-      "-p", buildJudgePrompt(text, rubric), "--model", model, "--tools", "",
-      "--max-turns", "1", "--output-format", "json", "--no-session-persistence"
-    ], { cwd, maxBuffer: 16 << 20, timeout: 180_000 });
-    const result = JSON.parse(stdout).result ?? "";
-    return parseJudge(result, rubric.length);
+    for (let i = 1; ; i++) {
+      try {
+        const { stdout } = await run("claude", [
+          "-p", buildJudgePrompt(text, rubric), "--model", model, "--tools", "",
+          "--max-turns", "1", "--output-format", "json", "--no-session-persistence"
+        ], { cwd, maxBuffer: 16 << 20, timeout: 180_000 });
+        const result = JSON.parse(stdout).result ?? "";
+        return parseJudge(result, rubric.length);
+      } catch (err) {
+        if (i >= attempts) throw new Error(`exit ${err.code ?? err.signal}: ${String(err.stderr || err.stdout || "").trim().slice(0, 300)}`);
+        await new Promise((r) => setTimeout(r, 15_000 * i));
+      }
+    }
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
