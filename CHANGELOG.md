@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.3 — 2026-10-01
 
 Run `gor-mobile repair` — the `brainstorming` skill description, three
 `writing-skills` files, the `writing-plans` body, four overlays
