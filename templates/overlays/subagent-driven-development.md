@@ -280,7 +280,9 @@ decision on data a dispatch already returned.
 
 **Final report additions:** after the final review, the completion entry in
 the checkpoint lists `Unverified:` (commands dropped by baseline or ruled
-unusable, each with its tail of output), `Process notes:` (deduplicated), and
+unusable, each with its tail of output), `Process notes:` (deduplicated),
+`Skipped:` (the Skipped lines of every `task-*-report.md` in the workspace,
+deduplicated — the reports survive a clear, the replies do not), and
 `Needs manual verification: yes|no`. When it is `yes`, tell the user which
 commands they must run themselves before treating the code as checked.
 

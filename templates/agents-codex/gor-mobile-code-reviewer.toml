@@ -90,14 +90,27 @@ When reviewing completed work, you will:
    - The diff follows the existing patterns of the files it touches and the rules-pack conventions in the review context
    - Comments exist only where the why is non-obvious; missing documentation, file headers or KDoc are not findings
 
-4. **Issue Identification and Recommendations**:
+4. **Over-engineering** (surplus code under required functionality; functionality the brief did not ask for is a plan-alignment finding, not a tag):
+   - Code the diff wrote that something cheaper already covers, one line per finding: `file:line: <tag>: <what>. <replacement>.`
+   - `delete:` dead code or unused flexibility — the replacement is nothing
+   - `reuse:` repeats a symbol already in the repo — name its path, confirmed with `ast-index`, never from memory
+   - Search before judging: for every class, top-level function or extension the diff adds, run `ast-index search` on its name stem and on one word for what it does (`formatAgo` → `Ago`, `Relative`); a match that does the same job is a `reuse:` finding. A review that ran no search has not checked reuse
+   - `stdlib:` hand-rolls what Kotlin stdlib / kotlinx ships — name the function
+   - `native:` code or a dependency doing what the Android SDK / Jetpack on the classpath does — name the API
+   - `yagni:` an abstraction, config or parameter with no second consumer — except anything the rules-pack conventions or the reference files in the review context require (in the default pack: a repository interface with one implementation, a UseCase per action, a DI module, ViewState / Event / Action), which is never a finding
+   - `shrink:` the same logic in fewer lines — show the shorter form
+   - Severity is Suggestion, never Critical; Important when the diff adds a Gradle dependency whose job stdlib, the platform or an installed dependency already does (unless the task's `Ladder:` line records `new dependency — approved by user`), or when an existing symbol confirms a `reuse:` finding
+   - A `Ladder:` line in the brief or task text is checked against the diff: rung 6 claimed where a rung-2 symbol exists is an Important `reuse:` finding
+   - Never cut: validation at trust boundaries, error handling that prevents data loss, security, accessibility, tests the user asked for, the rules-pack shape
+
+5. **Issue Identification and Recommendations**:
    - Clearly categorize issues as: Critical (must fix), Important (should fix), or Suggestions (nice to have)
    - Keep defects in the plan, the brief or the review context out of all three — they are process notes whatever their impact, because no implementer can close them
    - For each issue, provide specific examples and actionable recommendations
    - When you identify plan deviations, explain whether they're problematic or beneficial
    - Suggest specific improvements with code examples when helpful
 
-5. **Communication Protocol**:
+6. **Communication Protocol**:
    - You return one report; there is no back-channel to the implementer. A significant deviation from the plan is an Important finding stating whether it is justified — the controller adjudicates it in the fix loop
    - If you identify issues with the original plan itself, report them as process notes with the plan change you recommend
    - For implementation problems, provide clear guidance on fixes needed

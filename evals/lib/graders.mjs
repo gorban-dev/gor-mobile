@@ -19,8 +19,10 @@ export function changedFiles(workdir) {
   const tracked = execFileSync("git", ["diff", "--name-only", "-z", "--diff-filter=d", base], { cwd: workdir, encoding: "utf8" });
   // Untracked files
   const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], { cwd: workdir, encoding: "utf8" });
+  // init gitignores .gor-mobile/, where the skills write specs and plans
+  const artefacts = execFileSync("git", ["ls-files", "--others", "-z", "--", ".gor-mobile/specs", ".gor-mobile/plans"], { cwd: workdir, encoding: "utf8" });
   // Union, split on \0, filter init footprint, sort
-  return (tracked + untracked).split("\0").filter(Boolean)
+  return [...new Set((tracked + untracked + artefacts).split("\0"))].filter(Boolean)
     .filter((p) => !p.startsWith(".claude/") && !p.startsWith(".gor-mobile/marker") && !p.startsWith(".gor-mobile/state/"))
     .sort();
 }
@@ -47,6 +49,10 @@ const GRADERS = {
   file_matches: ({ workdir, changed }, { path, content, min = 1 }) => {
     const n = changed.filter((f) => re(path).test(f) && re(content, "m").test(read(workdir, f))).length;
     return { pass: n >= min, detail: `${n} files` };
+  },
+  unchanged: ({ changed }, { path }) => {
+    const hit = changed.filter((f) => re(path).test(f));
+    return { pass: hit.length === 0, detail: hit.join(", ") || "none" };
   },
   conforms_to: ({ workdir, changed }, { path, required }) => {
     const files = changed.filter((f) => re(path).test(f));

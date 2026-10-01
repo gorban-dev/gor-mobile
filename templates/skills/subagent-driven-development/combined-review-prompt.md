@@ -79,6 +79,12 @@ Agent (gor-mobile-code-reviewer):
       `gor-mobile-compose-internals` rules digest and the reference files
       named in the brief's `Compose rules:` line; verify unfamiliar Compose
       signatures against KDoc / androidx sources, never from memory.
+    - Over-engineering: tag findings per your agent definition (`delete:` /
+      `reuse:` / `stdlib:` / `native:` / `yagni:` / `shrink:`). Its
+      Suggestion reports as Minor here, its Important stays Important.
+      Check each `Ladder:` line of the brief against the diff.
+      Functionality beyond the brief stays a Section 1 Extra; the tags
+      cover surplus code under required functionality.
     - Tests, only if the brief asked for them: do they assert behavior
       rather than mocks?
 

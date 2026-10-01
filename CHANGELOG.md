@@ -2,8 +2,11 @@
 
 ## Unreleased
 
-Run `gor-mobile repair` — the `brainstorming` skill description and three
-`writing-skills` files changed.
+Run `gor-mobile repair` — the `brainstorming` skill description, three
+`writing-skills` files, the `writing-plans` body, four overlays
+(`writing-plans`, `systematic-debugging`, `subagent-driven-development`,
+`executing-plans`), the implementer and per-task review prompts and the
+reviewer agent changed.
 
 - **`writing-skills` no longer teaches pressure wording.**
   `persuasion-principles.md` recommended "YOU MUST", "No exceptions" and
@@ -17,6 +20,36 @@ Run `gor-mobile repair` — the `brainstorming` skill description and three
 - **`brainstorming` description drops "You MUST".** It reads "Use before
   creative work - …". Anthropic's guidance for Claude 5 models is that
   "CRITICAL / MUST" in triggers causes over-triggering.
+- **Build-less ladder in plans.** Before a task adds a code unit it does not
+  have yet, `writing-plans` climbs six rungs — not needed, already in the repo,
+  stdlib/kotlinx, the platform, an installed dependency, the minimum code —
+  and records the rung as `Ladder: <rung> — <evidence>`; Self-Review checks
+  it. Rules-pack shape (repository interface, UseCase per action) is exempt.
+  Rung-1 cuts go to a new `**Not built:**` plan header line. Idea from
+  ponytail (github.com/dietrichgebert/ponytail), wording ours.
+- **Over-engineering tags in review.** The reviewer tags `delete:` /
+  `reuse:` / `stdlib:` / `native:` / `yagni:` / `shrink:` findings,
+  Suggestion by default (Minor in the per-task review, so no fix round),
+  Important for a new dependency the stack already covers or a confirmed
+  `reuse:`. Codex TOML carries the same text. Before judging reuse the
+  reviewer runs `ast-index search` on each new function or class name and on
+  one word for what it does: on the eval case with a duplicated time
+  formatter it found the existing helper in 2 of 3 runs, against 1 of 3
+  without the search step and 0 of 3 before this release.
+- **Docs-first in plans asks for a precedent or a source per call.** A call
+  the repo or the pack examples already use cites that file (`as in
+  ProfileView.kt:31`); a call new to the project — including everyday
+  Compose / Material3 / Koin ones like `Row`, `Modifier.weight`,
+  `koinViewModel()` — carries its verified signature and source. Before, the
+  rule asked for a source on every SDK call in every step and plans ignored
+  it: 15 of 17 eval plans left calls with neither. Self-Review now has an
+  explicit check for it.
+- **Debugging fixes the shared function.** `systematic-debugging` lists a
+  function's callers before editing it and fixes the path all siblings route
+  through, not only the one the ticket names.
+- **`Skipped:` lines.** Implementers report what they deliberately left out
+  as `<what> — add when <trigger>`; the final report of both execution modes
+  collects them.
 
 ## 0.5.2 — 2026-09-14
 

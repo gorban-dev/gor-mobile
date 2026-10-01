@@ -1,0 +1,33 @@
+{
+  "name": "plan-stdlib-email",
+  "split": "test",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "runs": 3,
+  "prompt": "Напиши план реализации по docs/specs/edit-email.md. Spec утверждён, вопросов нет — сразу план.",
+  "max_turns": 60,
+  "timeout_s": 1800,
+  "files": {
+    "docs/specs/edit-email.md": "# Смена email в профиле\n\n## Цель\nПользователь меняет email прямо в профиле.\n\n## API\n`PUT /api/profile/email`, тело `{\"email\": \"...\"}`, ответ 204.\n\n## UI\n- Поле ввода email и кнопка «Сохранить» в ProfileView.\n- Кнопка активна только когда введён корректный email.\n- После успеха новый email показывается в профиле; при ошибке сети — сообщение, старый email остаётся.\n\nТребования полные, вопросов нет.\n"
+  },
+  "graders": [
+    {
+      "read_before_write": {
+        "read": "examples/presentation/|presentation/Example\\w+\\.kt|examples.*\\.kt",
+        "write": "plans?/.*\\.md$"
+      }
+    },
+    {
+      "judge": {
+        "path": "plans?/.*\\.md$",
+        "rubric": [
+          "The plan checks email validity with android.util.Patterns.EMAIL_ADDRESS or another existing platform facility, not with a regular expression written out in the plan.",
+          "The plan adds no new Gradle dependency."
+        ]
+      }
+    }
+  ]
+}

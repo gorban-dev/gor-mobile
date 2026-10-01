@@ -1,0 +1,42 @@
+{
+  "name": "plan-reuse-time",
+  "split": "train",
+  "harness": [
+    "claude",
+    "codex"
+  ],
+  "fixture": "android-app",
+  "runs": 3,
+  "prompt": "Напиши план реализации по docs/specs/last-login.md. Spec утверждён, вопросов нет — сразу план.",
+  "max_turns": 60,
+  "timeout_s": 1800,
+  "base_files": {
+    "app/src/main/java/com/company/app/common/util/TimeFormat.kt": "package com.company.app.common.util\n\nimport java.util.concurrent.TimeUnit\n\nfun Long.toRelativeTime(now: Long = System.currentTimeMillis()): String {\n    val minutes = TimeUnit.MILLISECONDS.toMinutes((now - this).coerceAtLeast(0))\n    return when {\n        minutes < 1 -> \"только что\"\n        minutes < 60 -> \"$minutes мин назад\"\n        minutes < 24 * 60 -> \"${minutes / 60} ч назад\"\n        else -> \"${minutes / (24 * 60)} дн назад\"\n    }\n}\n"
+  },
+  "files": {
+    "docs/specs/last-login.md": "# Время последнего входа в профиле\n\n## Цель\nВ профиле под email показывается, когда пользователь последний раз входил: «5 мин назад», «3 ч назад», «2 дн назад».\n\n## API\n`GET /api/profile` дополнительно возвращает `lastLoginAt` — epoch millis (Long), может отсутствовать.\n\n## UI\n- Строка «Последний вход: <время>» под email в ProfileView.\n- Если `lastLoginAt` нет, строка не показывается.\n\nТребования полные, вопросов нет.\n"
+  },
+  "graders": [
+    {
+      "read_before_write": {
+        "read": "examples/presentation/|presentation/Example\\w+\\.kt|examples.*\\.kt",
+        "write": "plans?/.*\\.md$"
+      }
+    },
+    {
+      "judge": {
+        "path": "plans?/.*\\.md$",
+        "rubric": [
+          "The plan formats lastLoginAt by calling the existing toRelativeTime extension from common/util/TimeFormat.kt.",
+          "The plan does not add any new function, class or file whose job is to turn a timestamp into relative-time text."
+        ]
+      }
+    },
+    {
+      "file_matches": {
+        "path": "plans?/.*\\.md$",
+        "content": "^\\s*(\\*\\*)?Ladder:"
+      }
+    }
+  ]
+}

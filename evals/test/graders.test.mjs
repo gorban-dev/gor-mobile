@@ -42,11 +42,22 @@ test("order graders", async () => {
   assert.equal((await grade({ read_before_write: { read: "examples/usecase/", write: "plans/" } }, ctx())).pass, false);
 });
 
+test("unchanged", async () => {
+  const c = ctx({ changed: ["app/NameFormat.kt"] });
+  assert.equal((await grade({ unchanged: { path: "ProfileView\\.kt$" } }, c)).pass, true);
+  assert.equal((await grade({ unchanged: { path: "NameFormat\\.kt$" } }, c)).pass, false);
+});
+
 test("bash_uses / max_denies / final_text_matches", async () => {
   assert.equal((await grade({ bash_uses: { regex: "^ast-index usages" } }, ctx())).pass, true);
   assert.equal((await grade({ max_denies: { n: 0 } }, ctx())).pass, false);
   assert.equal((await grade({ max_denies: { n: 1 } }, ctx())).pass, true);
   assert.equal((await grade({ final_text_matches: { regex: "Critical" } }, ctx())).pass, true);
+});
+
+test("changedFiles sees plans under a gitignored .gor-mobile", () => {
+  const d = repo({ ".gitignore": ".gor-mobile/\n", ".gor-mobile/plans/p.md": "plan\n", ".gor-mobile/cache/x": "x\n" });
+  assert.deepEqual(changedFiles(d), [".gitignore", ".gor-mobile/plans/p.md"]);
 });
 
 test("conforms_to ignores pre-existing files", async () => {

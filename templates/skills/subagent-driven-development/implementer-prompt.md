@@ -128,7 +128,9 @@ Task tool (general-purpose):
     - Every requirement in the brief is implemented, with the brief's exact
       values (numbers, strings, signatures) — not paraphrased.
     - Every edit is inside the allowed paths, and nothing was built beyond
-      the brief (YAGNI).
+      the brief (YAGNI). Anything you deliberately left out that the brief
+      allowed or the code invited goes in the report as Skipped, not dropped
+      silently.
     - New code follows the reference files and the existing patterns of the
       files it touches.
     - The verification command ran and its result is in the report.
@@ -145,12 +147,13 @@ Task tool (general-purpose):
 
     The full report contains: what you implemented (or attempted, if
     blocked), what you tested and the results (commands + output summary),
-    files changed, self-review findings, issues or concerns.
+    files changed, self-review findings, issues or concerns, Skipped lines.
 
     Then reply with ONLY:
     - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
     - One line on what you did
     - Concerns, one line each (if any)
+    - Skipped, one line each (if any): `<what> — add when <trigger>`
     - Unfixable (fix rounds only): `<n> — <verbatim finding title> — <why>`,
       one per line, for findings whose action item lies outside your allowed
       paths

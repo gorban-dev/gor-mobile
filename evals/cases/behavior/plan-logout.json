@@ -16,7 +16,7 @@
   "graders": [
     {
       "read_before_write": {
-        "read": "examples/presentation/",
+        "read": "examples/presentation/|presentation/Example\\w+\\.kt|examples.*\\.kt",
         "write": "plans?/.*\\.md$"
       }
     },
@@ -34,7 +34,7 @@
       "judge": {
         "path": "plans?/.*\\.md$",
         "rubric": [
-          "Every plan step that names a Ktor, Koin, Compose or kotlinx.serialization API call has a citation next to it (a docs URL, a javap command, or a source file path). Steps that name no such API call are ignored.",
+          "Every Ktor, Koin, Compose, Material3 or kotlinx.serialization call in the plan code either has a source (a docs URL, a javap command, or a library source path) next to it or in a verified-API section of the plan, or cites an existing project file or rules-pack example that already uses the same call (for example \"as in ProfileView.kt:31\"). A call with neither fails this claim.",
           "The plan contains no step that runs git commit, git branch or git checkout."
         ]
       }
