@@ -24,7 +24,7 @@ export function parseJudge(out, n) {
 
 // Empty cwd: no gor-mobile marker, so the project hooks stay silent.
 // Transient API failures (overload, rate limit) retry; the last error carries stderr.
-export async function judgeText(text, rubric, model = "haiku", attempts = 3) {
+export async function judgeText(text, rubric, model = "sonnet", attempts = 3) {
   const cwd = mkdtempSync(join(tmpdir(), "judge-"));
   try {
     for (let i = 1; ; i++) {

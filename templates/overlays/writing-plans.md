@@ -24,17 +24,30 @@ flag, an extracted helper) is invented to make something unit-testable — plan
 the minimal change and verify it, on-device where the effect is only
 observable there.
 
-### Docs-first gate (plan phase) — cite the API source in every step
+### Docs-first gate (plan phase) — every SDK call in a step has a source
 
 The upstream body tells you to put "full code in each step". That is fine —
-**but every step that writes code against an SDK / library / vendor API must
-carry the verified signature *and* its source**, taken from the spec's
-docs research or a fresh check per the **Docs-first ground-truth contract** in
-`[[gor-mobile-using-android-cli]]` (official docs → resolved artifact →
-source for behavior). A step that pastes an API signature with no cited source
-(docs reference, `javap` output, or source link) is a plan defect: it invites
-the implementer to code a remembered, possibly-drifted signature. The
-Self-Review gate below verifies this and flags unsourced API signatures.
+**but every SDK / library / vendor call in a step's code needs a source**,
+and which source depends on where the call comes from:
+
+- **Already used in this repo or in the pack's examples** → cite the
+  precedent: `as in ProfileView.kt:31`, `as in examples/di/ExampleDiModuleKoin.kt`.
+  The project already compiles that exact call; the precedent is its proof.
+- **New to the project** → the verified signature *and* its source, taken from
+  the spec's docs research or a fresh check per the **Docs-first ground-truth
+  contract** in `[[gor-mobile-using-android-cli]]` (official docs → resolved
+  artifact → source for behavior). This includes the everyday Compose /
+  Material3 / Koin calls a task adds for the first time — `Row`,
+  `Modifier.weight`, `CircleShape`, `Button(enabled = …)`,
+  `MaterialTheme.colorScheme.error`, `koinViewModel()` — because those are
+  the signatures that drift between versions and that a planner writes from
+  memory without noticing.
+
+One source per call per plan is enough: a "Verified APIs" block at the top
+that each step refers to satisfies the gate. A call with neither a precedent
+nor a source is a plan defect: it invites the implementer to code a
+remembered, possibly-drifted signature. The Self-Review gate below verifies
+this.
 
 "Full code" written from memory of the API is the defect: a signature whose
 source for the pinned version you cannot cite is unverified — resolve it via
@@ -212,6 +225,11 @@ are where an Android/KMM plan actually fails:
   prompt, a beggar whose trigger is a server-side condition, a real invite
   send — is marked `Manual (user):`. An unlabeled one becomes an agent's
   "verified" checkbox over something it never ran.
+- **Every SDK call has a precedent or a source.** List the library calls in
+  the plan's code (Ktor, Koin, Compose, Material3, kotlinx.serialization, …);
+  each one either cites the repo file / pack example that already uses it or
+  appears with a source in the step or in the plan's verified-API block. A
+  call new to the project with neither is a plan defect.
 - **Every candidate unit carries its rung.** A task with a candidate unit
   has a `Ladder:` line per candidate (Build-less ladder above), every rung-2
   path resolves on disk, and every rung-6 line names the query that ruled out

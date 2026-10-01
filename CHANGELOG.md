@@ -31,7 +31,19 @@ reviewer agent changed.
   `reuse:` / `stdlib:` / `native:` / `yagni:` / `shrink:` findings,
   Suggestion by default (Minor in the per-task review, so no fix round),
   Important for a new dependency the stack already covers or a confirmed
-  `reuse:`. Codex TOML carries the same text.
+  `reuse:`. Codex TOML carries the same text. Before judging reuse the
+  reviewer runs `ast-index search` on each new function or class name and on
+  one word for what it does: on the eval case with a duplicated time
+  formatter it found the existing helper in 2 of 3 runs, against 1 of 3
+  without the search step and 0 of 3 before this release.
+- **Docs-first in plans asks for a precedent or a source per call.** A call
+  the repo or the pack examples already use cites that file (`as in
+  ProfileView.kt:31`); a call new to the project — including everyday
+  Compose / Material3 / Koin ones like `Row`, `Modifier.weight`,
+  `koinViewModel()` — carries its verified signature and source. Before, the
+  rule asked for a source on every SDK call in every step and plans ignored
+  it: 15 of 17 eval plans left calls with neither. Self-Review now has an
+  explicit check for it.
 - **Debugging fixes the shared function.** `systematic-debugging` lists a
   function's callers before editing it and fixes the path all siblings route
   through, not only the one the ticket names.
